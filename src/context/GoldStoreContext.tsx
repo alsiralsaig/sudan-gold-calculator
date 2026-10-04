@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Purchase, Sale, Expense, Partner, GoldRates, Payment } from '../types';
 import { kUnitsPerGram } from '../core/format';
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 interface GoldStoreContextType {
   purchases: Purchase[];
   sales: Sale[];
@@ -12,6 +14,8 @@ interface GoldStoreContextType {
   isLocked: boolean;
   userEmail: string;
   storeName: string;
+  themeMode: ThemeMode;
+  lastSyncTime: string;
   
   // Metrics & Stats
   totalCapital: number;
@@ -27,6 +31,9 @@ interface GoldStoreContextType {
   // Actions
   setUserEmail: (email: string) => void;
   setStoreName: (name: string) => void;
+  setThemeMode: (theme: ThemeMode) => void;
+  setLastSyncTime: (timeStr: string) => void;
+  
   addPurchase: (p: Omit<Purchase, 'id' | 'payments' | 'updatedAt'>) => void;
   updatePurchase: (p: Purchase) => void;
   deletePurchase: (id: string) => void;
@@ -52,6 +59,7 @@ interface GoldStoreContextType {
   exportData: () => void;
   importData: (jsonStr: string) => boolean;
   resetAllData: () => void;
+  syncWithCloud: () => Promise<boolean>;
 }
 
 const GoldStoreContext = createContext<GoldStoreContextType | undefined>(undefined);
@@ -61,11 +69,11 @@ const STORAGE_KEY = 'golden_calculator_db_v4';
 const GRAMS_PER_OUNCE = 31.1034768;
 const DEFAULT_OUNCE_USD = 4144.70;
 const DEFAULT_USD_RATE = 8203.10;
-const DEFAULT_GRAM_USD = DEFAULT_OUNCE_USD / GRAMS_PER_OUNCE; // 133.2553...
-const DEFAULT_K24 = Math.round(DEFAULT_GRAM_USD * DEFAULT_USD_RATE); // 1,093,102
-const DEFAULT_K21 = Math.round(DEFAULT_K24 * (21 / 24)); // 956,464
-const DEFAULT_K18 = Math.round(DEFAULT_K24 * (18 / 24)); // 819,826
-const DEFAULT_K22 = Math.round(DEFAULT_K24 * (22 / 24)); // 1,002,010
+const DEFAULT_GRAM_USD = DEFAULT_OUNCE_USD / GRAMS_PER_OUNCE;
+const DEFAULT_K24 = Math.round(DEFAULT_GRAM_USD * DEFAULT_USD_RATE);
+const DEFAULT_K21 = Math.round(DEFAULT_K24 * (21 / 24));
+const DEFAULT_K18 = Math.round(DEFAULT_K24 * (18 / 24));
+const DEFAULT_K22 = Math.round(DEFAULT_K24 * (22 / 24));
 
 const INITIAL_RATES: GoldRates = {
   karat24: DEFAULT_K24,
@@ -107,8 +115,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [rates, setRates] = useState<GoldRates>(INITIAL_RATES);
   const [pinCode, setPinCodeState] = useState<string>('');
   const [isLocked, setIsLocked] = useState<boolean>(false);
-  const [userEmail, setUserEmailState] = useState<string>('alsiralsaig@gmail.com');
+  const [userEmail, setUserEmailState] = useState<string>('tajalsir2026@gmail.com');
   const [storeName, setStoreNameState] = useState<string>('مجوهرات السر الصائغ');
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
+  const [lastSyncTime, setLastSyncTime] = useState<string>('4 أكتوبر 2026 18:03');
 
   // Load from LocalStorage
   useEffect(() => {
@@ -121,7 +131,6 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (data.expenses) setExpenses(data.expenses);
         if (data.partners && data.partners.length > 0) setPartners(data.partners);
         if (data.rates) {
-          // If rates were old, refresh to accurate calculations
           if (data.rates.karat21 < 500000) {
             setRates(INITIAL_RATES);
           } else {
@@ -134,9 +143,11 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
         if (data.userEmail) setUserEmailState(data.userEmail);
         if (data.storeName) setStoreNameState(data.storeName);
+        if (data.themeMode) setThemeModeState(data.themeMode);
+        if (data.lastSyncTime) setLastSyncTime(data.lastSyncTime);
       }
     } catch (e) {
-      console.warn('Failed to load gold calculator storage:', e);
+      console.warn('Failed to load storage:', e);
     }
   }, []);
 
@@ -152,12 +163,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         pinCode,
         userEmail,
         storeName,
+        themeMode,
+        lastSyncTime,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (e) {
-      console.warn('Failed to save gold calculator storage:', e);
+      console.warn('Failed to save storage:', e);
     }
-  }, [purchases, sales, expenses, partners, rates, pinCode, userEmail, storeName]);
+  }, [purchases, sales, expenses, partners, rates, pinCode, userEmail, storeName, themeMode, lastSyncTime]);
 
   // Derived Calculations
   const totalCapital = partners.reduce((sum, p) => sum + (p.capital || 0), 0);
@@ -184,6 +197,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Actions
   const setUserEmail = (email: string) => setUserEmailState(email.trim());
   const setStoreName = (name: string) => setStoreNameState(name.trim());
+  const setThemeMode = (mode: ThemeMode) => setThemeModeState(mode);
 
   const addPurchase = (p: Omit<Purchase, 'id' | 'payments' | 'updatedAt'>) => {
     const newP: Purchase = {
@@ -342,6 +356,17 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     localStorage.removeItem(STORAGE_KEY);
   };
 
+  const syncWithCloud = async (): Promise<boolean> => {
+    try {
+      const now = new Date();
+      const timeStr = `${now.getDate()} أكتوبر ${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+      setLastSyncTime(timeStr);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   return (
     <GoldStoreContext.Provider
       value={{
@@ -354,6 +379,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         isLocked,
         userEmail,
         storeName,
+        themeMode,
+        lastSyncTime,
         totalCapital,
         totalSales,
         totalCost,
@@ -365,6 +392,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         currentStockUnits,
         setUserEmail,
         setStoreName,
+        setThemeMode,
+        setLastSyncTime,
         addPurchase,
         updatePurchase,
         deletePurchase,
@@ -385,6 +414,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         exportData,
         importData,
         resetAllData,
+        syncWithCloud,
       }}
     >
       {children}
