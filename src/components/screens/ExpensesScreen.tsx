@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TrendingDown, Plus, Trash2, Tag, Layers, UserCheck } from 'lucide-react';
+import { TrendingDown, Plus, Trash2, Tag, Layers, UserCheck, Filter, Users, Building2 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtMoney, fmtNum, kCurrency } from '../../core/format';
 import { Expense } from '../../types';
@@ -8,7 +8,7 @@ export const ExpensesScreen: React.FC = () => {
   const { expenses, partners, generalExpenses, privateExpenses, addExpense, deleteExpense } = useGoldStore();
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [filterTarget, setFilterTarget] = useState<string>('all');
+  const [filterType, setFilterType] = useState<'all' | 'general' | 'private' | string>('all');
 
   // Form State
   const [name, setName] = useState('');
@@ -43,9 +43,11 @@ export const ExpensesScreen: React.FC = () => {
   };
 
   const filteredExpenses = expenses.filter((item) => {
-    if (filterTarget === 'all') return true;
-    if (filterTarget === 'عام') return item.target === 'عام' || !item.target;
-    return item.target === filterTarget;
+    if (filterType === 'all') return true;
+    if (filterType === 'general') return item.target === 'عام' || !item.target;
+    if (filterType === 'private') return item.target !== 'عام' && !!item.target;
+    // Specific partner name filter
+    return item.target === filterType;
   });
 
   return (
@@ -53,56 +55,116 @@ export const ExpensesScreen: React.FC = () => {
       
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-gradient-to-br from-amber-500/20 via-slate-900 to-slate-950 p-4 rounded-3xl border-2 border-amber-500/40 shadow-lg space-y-1">
-          <span className="text-xs text-amber-300 font-bold block">منصرفات عامة (مشتركة)</span>
-          <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono">
+        <div
+          onClick={() => setFilterType('general')}
+          className={`cursor-pointer bg-gradient-to-br from-amber-500/20 via-slate-900 to-slate-950 p-4 rounded-3xl border-2 transition-all ${
+            filterType === 'general' ? 'border-amber-400 shadow-amber-500/20 shadow-lg' : 'border-amber-500/40'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-amber-300 font-bold block">منصرفات عامة (مشتركة)</span>
+            <Building2 className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono mt-1">
             {fmtMoney(generalExpenses)}
           </div>
-          <span className="text-[10px] text-slate-400 block">تُخصم من الأرباح العامة</span>
+          <span className="text-[10px] text-slate-400 block mt-0.5">تُخصم من الأرباح العامة</span>
         </div>
 
-        <div className="bg-gradient-to-br from-cyan-500/20 via-slate-900 to-slate-950 p-4 rounded-3xl border-2 border-cyan-500/40 shadow-lg space-y-1">
-          <span className="text-xs text-cyan-300 font-bold block">منصرفات الشركاء الخاصة</span>
-          <div className="text-xl sm:text-2xl font-black text-cyan-400 font-mono">
+        <div
+          onClick={() => setFilterType('private')}
+          className={`cursor-pointer bg-gradient-to-br from-cyan-500/20 via-slate-900 to-slate-950 p-4 rounded-3xl border-2 transition-all ${
+            filterType === 'private' ? 'border-cyan-400 shadow-cyan-500/20 shadow-lg' : 'border-cyan-500/40'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-cyan-300 font-bold block">منصرفات خاصة (للشركاء)</span>
+            <Users className="w-4 h-4 text-cyan-400" />
+          </div>
+          <div className="text-xl sm:text-2xl font-black text-cyan-400 font-mono mt-1">
             {fmtMoney(privateExpenses)}
           </div>
-          <span className="text-[10px] text-slate-400 block">تُخصم من مستحق الشريك فقط</span>
+          <span className="text-[10px] text-slate-400 block mt-0.5">تُخصم من مستحق الشريك</span>
         </div>
       </div>
 
-      {/* Action Header & Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Quick Filter Tabs Row (الكل | عامة | خاصة بكل الشركاء) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
+        <button
+          onClick={() => setFilterType('all')}
+          className={`px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            filterType === 'all'
+              ? 'bg-rose-500 text-white shadow-md'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          كل المنصرفات ({expenses.length})
+        </button>
+
+        <button
+          onClick={() => setFilterType('general')}
+          className={`px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            filterType === 'general'
+              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          عامة فقط ({expenses.filter(e => e.target === 'عام' || !e.target).length})
+        </button>
+
+        <button
+          onClick={() => setFilterType('private')}
+          className={`px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            filterType === 'private'
+              ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          خاصة فقط ({expenses.filter(e => e.target !== 'عام' && e.target).length})
+        </button>
+
+        {partners.map((p) => {
+          const partnerCount = expenses.filter(e => e.target === p.name).length;
+          return (
+            <button
+              key={p.id}
+              onClick={() => setFilterType(p.name)}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                filterType === p.name
+                  ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              خاص: {p.name} ({partnerCount})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Action Header */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/40">
             <TrendingDown className="w-5 h-5" />
           </div>
-          <h3 className="font-extrabold text-base text-white">سجل المصروفات والنثريات</h3>
+          <div>
+            <h3 className="font-extrabold text-base text-white">سجل المصروفات</h3>
+            <p className="text-[11px] text-slate-400">
+              {filterType === 'all' && 'عرض كافة المصروفات المسجلة'}
+              {filterType === 'general' && 'عرض المصروفات العامة للمحل فقط'}
+              {filterType === 'private' && 'عرض المصروفات والمسحوبات الخاصة بكل الشركاء'}
+              {filterType !== 'all' && filterType !== 'general' && filterType !== 'private' && `عرض المصروفات الخاصة بـ: ${filterType}`}
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Target Filter */}
-          <select
-            value={filterTarget}
-            onChange={(e) => setFilterTarget(e.target.value)}
-            className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-          >
-            <option value="all">كل المنصرفات</option>
-            <option value="عام">عامة فقط</option>
-            {partners.map((p) => (
-              <option key={p.id} value={p.name}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-
-          <button
-            onClick={handleOpenAdd}
-            className="px-4 py-2 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-transform active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تسجيل مصروف</span>
-          </button>
-        </div>
+        <button
+          onClick={handleOpenAdd}
+          className="px-4 py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 text-white font-black text-xs rounded-2xl shadow-lg flex items-center gap-1.5 transition-transform active:scale-95"
+        >
+          <Plus className="w-4 h-4" />
+          <span>تسجيل مصروف</span>
+        </button>
       </div>
 
       {/* Expenses List */}
@@ -110,7 +172,15 @@ export const ExpensesScreen: React.FC = () => {
         {filteredExpenses.length === 0 ? (
           <div className="text-center py-12 bg-slate-900/50 rounded-3xl border border-dashed border-slate-800 space-y-2">
             <TrendingDown className="w-10 h-10 text-slate-600 mx-auto" />
-            <p className="text-xs text-slate-400 font-bold">لا توجد منصرفات مسجلة في هذا القسم</p>
+            <p className="text-xs text-slate-400 font-bold">لا توجد منصرفات في هذا القسم المحدد</p>
+            {filterType !== 'all' && (
+              <button
+                onClick={() => setFilterType('all')}
+                className="text-xs text-rose-400 hover:underline font-bold"
+              >
+                العودة لعرض كل المنصرفات
+              </button>
+            )}
           </div>
         ) : (
           filteredExpenses.map((exp) => {
@@ -131,7 +201,7 @@ export const ExpensesScreen: React.FC = () => {
                           : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
                       }`}
                     >
-                      {isGeneral ? 'عام' : `خاص: ${exp.target}`}
+                      {isGeneral ? 'عام (المحل)' : `خاص: ${exp.target}`}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-slate-400">
@@ -144,6 +214,12 @@ export const ExpensesScreen: React.FC = () => {
                         day: 'numeric',
                       })}
                     </span>
+                    {exp.notes && (
+                      <>
+                        <span>•</span>
+                        <span className="text-slate-500">{exp.notes}</span>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -194,7 +270,7 @@ export const ExpensesScreen: React.FC = () => {
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="مثال: إيجار المحل، عمالة، كهرباء..."
+                  placeholder="مثال: إيجار المحل، عمالة، كهرباء، مسحوبات..."
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-rose-400"
                 />
               </div>
@@ -220,7 +296,7 @@ export const ExpensesScreen: React.FC = () => {
                     onChange={(e) => setTarget(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-rose-400"
                   >
-                    <option value="عام">عام (يُخصم من المحل)</option>
+                    <option value="عام">عام (يُخصم من أرباح المحل)</option>
                     {partners.map((p) => (
                       <option key={p.id} value={p.name}>
                         خاص بالشريك: {p.name}
