@@ -10,7 +10,6 @@ import {
   Sparkles,
   MoreVertical,
   Check,
-  ExternalLink,
   Info
 } from 'lucide-react';
 
@@ -24,6 +23,7 @@ export const PwaInstallPrompt: React.FC<PwaInstallPromptProps> = ({ isOpen, onCl
   const [activeTab, setActiveTab] = useState<'android' | 'ios'>('android');
   const [isStandalone, setIsStandalone] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
+  const [showManualGuideMsg, setShowManualGuideMsg] = useState(false);
 
   useEffect(() => {
     // Detect OS
@@ -65,8 +65,8 @@ export const PwaInstallPrompt: React.FC<PwaInstallPromptProps> = ({ isOpen, onCl
         console.error('Install error:', err);
       }
     } else {
-      // If deferredPrompt is not available (e.g. Chrome already shown or in Samsung Internet)
-      alert('لتثبيت التطبيق على جهازك: اضغط على زر القائمة (⋮) أعلى المتصفح ثم اختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية"');
+      setShowManualGuideMsg(true);
+      setTimeout(() => setShowManualGuideMsg(false), 5000);
     }
   };
 
@@ -93,10 +93,10 @@ export const PwaInstallPrompt: React.FC<PwaInstallPromptProps> = ({ isOpen, onCl
             </div>
           </div>
           <h3 className="font-black text-lg text-amber-400">
-            تثبيت حاسبة الذهب على جهازك
+            تثبيت حاسبة الذهب على هاتفك
           </h3>
           <p className="text-xs text-slate-300 leading-relaxed">
-            يعمل التطبيق بدون متجر وبدون الحاجة لإنترنت دائم مع كامل بياناتك
+            تطبيق سريع ومستقل يعمل بدون متجر وبدون إنترنت دائم
           </p>
         </div>
 
@@ -135,8 +135,14 @@ export const PwaInstallPrompt: React.FC<PwaInstallPromptProps> = ({ isOpen, onCl
               className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm rounded-2xl shadow-xl shadow-amber-500/20 flex items-center justify-center gap-2 transition-transform active:scale-95 animate-pulse"
             >
               <Download className="w-5 h-5 text-slate-950" />
-              <span>{deferredPrompt ? 'تثبيت التطبيق بنقرة واحدة الآن' : 'بدء تثبيت التطبيق على أندرويد'}</span>
+              <span>{deferredPrompt ? 'تثبيت التطبيق بنقرة واحدة الآن' : 'تثبيت التطبيق على أندرويد'}</span>
             </button>
+
+            {showManualGuideMsg && (
+              <div className="p-3 bg-amber-500/20 border border-amber-500/50 rounded-2xl text-amber-300 text-xs font-bold text-center animate-in fade-in">
+                اتبع الخطوات الموضحة أدناه لتثبيت التطبيق من قائمة المتصفح 👇
+              </div>
+            )}
 
             {/* Step-by-Step Android Guide */}
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2.5 text-xs text-slate-300">
@@ -155,7 +161,7 @@ export const PwaInstallPrompt: React.FC<PwaInstallPromptProps> = ({ isOpen, onCl
                     <span className="p-1 bg-slate-800 rounded text-amber-400 font-bold inline-flex items-center gap-0.5">
                       <MoreVertical className="w-3.5 h-3.5" /> (الثلاث نقاط ⋮)
                     </span>
-                    <span>في أعلى يمين أو يسار المتصفح.</span>
+                    <span>في أعلى زاوية المتصفح.</span>
                   </div>
                 </div>
 
@@ -168,10 +174,7 @@ export const PwaInstallPrompt: React.FC<PwaInstallPromptProps> = ({ isOpen, onCl
                     <span className="p-1 bg-amber-500/20 text-amber-300 font-bold rounded inline-flex items-center gap-0.5">
                       <Download className="w-3 h-3" /> «تثبيت التطبيق»
                     </span>
-                    <span>أو</span>
-                    <span className="p-1 bg-slate-800 text-slate-200 font-bold rounded">
-                      «إضافة إلى الشاشة الرئيسية»
-                    </span>
+                    <span>(Install app).</span>
                   </div>
                 </div>
 
@@ -180,7 +183,7 @@ export const PwaInstallPrompt: React.FC<PwaInstallPromptProps> = ({ isOpen, onCl
                     3
                   </span>
                   <p>
-                    اضغط على <b className="text-white">تثبيت (Install)</b> وسيظهر التطبيق فوراً بأيقونة الذهب في قائمة تطبيقات هاتفك!
+                    اضغط على <b className="text-white">تثبيت (Install)</b> وسيظهر التطبيق فوراً كبرنامج مستقل بأيقونة الذهب في قائمة تطبيقات هاتفك!
                   </p>
                 </div>
               </div>

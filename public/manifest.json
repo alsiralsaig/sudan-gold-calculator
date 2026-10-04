@@ -1,20 +1,31 @@
 {
+  "id": "/",
   "name": "حاسبة الذهب والشركاء",
   "short_name": "حاسبة الذهب",
   "description": "تطبيق متكامل لحسابات الذهب والشركاء والكسر والسبائك والأسعار المباشرة بالسودان",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#020617",
-  "theme_color": "#020617",
+  "theme_color": "#f59e0b",
+  "categories": ["finance", "business", "utilities"],
   "icons": [
     {
       "src": "/pwa-192x192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/pwa-512x512.png",
       "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
       "type": "image/png"
     }
   ]

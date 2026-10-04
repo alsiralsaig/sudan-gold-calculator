@@ -94,24 +94,8 @@ const INITIAL_RATES: GoldRates = {
   lastUpdated: new Date().toISOString(),
 };
 
-const INITIAL_PARTNERS: Partner[] = [
-  {
-    id: 'pt_1',
-    name: 'السر الصائغ (الشريك الأول)',
-    capital: 50000000,
-    profitPercent: 50,
-    phone: '+249913009060',
-    notes: 'الشريك المؤسس والمدير التنفيذي',
-  },
-  {
-    id: 'pt_2',
-    name: 'محمد أحمد (الشريك الثاني)',
-    capital: 50000000,
-    profitPercent: 50,
-    phone: '+249900000000',
-    notes: 'شريك ممول',
-  },
-];
+// Completely empty initial partners so new users/merchants start clean with zero exposure
+const INITIAL_PARTNERS: Partner[] = [];
 
 export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -121,11 +105,11 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [rates, setRates] = useState<GoldRates>(INITIAL_RATES);
   const [pinCode, setPinCodeState] = useState<string>('');
   const [isLocked, setIsLocked] = useState<boolean>(false);
-  const [userEmail, setUserEmailState] = useState<string>('tajalsir2026@gmail.com');
-  const [storeName, setStoreNameState] = useState<string>('مجوهرات السر الصائغ');
+  const [userEmail, setUserEmailState] = useState<string>('');
+  const [storeName, setStoreNameState] = useState<string>('مجوهرات الذهب');
   const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
-  const [lastSyncTime, setLastSyncTime] = useState<string>('4 أكتوبر 2026 18:30');
-  const [isCloudSignedIn, setIsCloudSignedIn] = useState<boolean>(true);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
+  const [isCloudSignedIn, setIsCloudSignedIn] = useState<boolean>(false);
 
   // Load from LocalStorage
   useEffect(() => {
@@ -136,7 +120,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (data.purchases) setPurchases(data.purchases);
         if (data.sales) setSales(data.sales);
         if (data.expenses) setExpenses(data.expenses);
-        if (data.partners && data.partners.length > 0) setPartners(data.partners);
+        if (data.partners) setPartners(data.partners);
         if (data.rates) {
           if (data.rates.karat21 < 500000) {
             setRates(INITIAL_RATES);
@@ -452,7 +436,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setPurchases([]);
     setSales([]);
     setExpenses([]);
-    setPartners(INITIAL_PARTNERS);
+    setPartners([]);
+    setUserEmailState('');
+    setIsCloudSignedIn(false);
     setRates(INITIAL_RATES);
     localStorage.removeItem(STORAGE_KEY);
   };

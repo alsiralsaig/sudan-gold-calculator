@@ -39,6 +39,19 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap"
           rel="stylesheet"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                    console.log('SW reg error: ', err);
+                  });
+                });
+              }
+            `,
+          }}
+        />
       </head>
       <body className="bg-slate-950 text-slate-100 antialiased select-none selection:bg-amber-500 selection:text-slate-950 min-h-screen">
         {children}
