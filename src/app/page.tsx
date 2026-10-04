@@ -19,6 +19,7 @@ function MainAppContent() {
   const { isLocked } = useGoldStore();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showInstallModal, setShowInstallModal] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   if (isLocked) {
     return <LockScreen />;
@@ -27,11 +28,13 @@ function MainAppContent() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Cairo',sans-serif] selection:bg-amber-500 selection:text-slate-950">
       
-      {/* Top Header Navbar */}
+      {/* Top Header Navbar with Dropdown Menu Drawer */}
       <Navbar
         activeTab={activeTab}
         onNavigate={setActiveTab}
         onOpenInstallModal={() => setShowInstallModal(true)}
+        isMenuOpen={isMenuOpen}
+        setIsMenuOpen={setIsMenuOpen}
       />
 
       {/* Main Content Area */}
@@ -46,8 +49,12 @@ function MainAppContent() {
         {activeTab === 'settings' && <SettingsScreen onOpenInstallModal={() => setShowInstallModal(true)} />}
       </main>
 
-      {/* Bottom Navigation Tab Bar */}
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+      {/* Clean 4-Tab Bottom Navigation + Menu Drawer Button */}
+      <BottomNav
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onOpenMenu={() => setIsMenuOpen(true)}
+      />
 
       {/* PWA iOS/Android Install Modal */}
       <PwaInstallPrompt
