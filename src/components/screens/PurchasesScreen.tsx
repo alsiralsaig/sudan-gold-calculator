@@ -101,7 +101,13 @@ export const PurchasesScreen: React.FC = () => {
     const j = parseFloat(juz) || 0;
     const totalUnits = weightToUnits(g, h, j);
     const totalCost = parseFloat(amount) || 0;
-    const initialPaid = parseFloat(paidAmount) || totalCost;
+
+    if (totalUnits <= 0 && totalCost <= 0) {
+      alert('يرجى إدخال الوزن (جرام أو حبة أو جزء) أو المبلغ');
+      return;
+    }
+
+    const initialPaid = paidAmount !== '' ? (parseFloat(paidAmount) || 0) : totalCost;
     const pending = Math.max(0, totalCost - initialPaid);
     const karatNum = customKarat === '-' ? 0 : parseFloat(customKarat) || 0;
 
@@ -321,7 +327,7 @@ export const PurchasesScreen: React.FC = () => {
             {/* Weight Inputs: [جرام] [حبة] [جزء] */}
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                الوزن (نظام الجرام والحبة والجزء):
+                الوزن (جرام أو حبات أو أجزاء):
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <div>
@@ -329,7 +335,6 @@ export const PurchasesScreen: React.FC = () => {
                   <input
                     type="number"
                     step="any"
-                    required
                     value={grams}
                     onChange={(e) => {
                       setGrams(e.target.value);
