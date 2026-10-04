@@ -10,6 +10,8 @@ interface GoldStoreContextType {
   rates: GoldRates;
   pinCode: string;
   isLocked: boolean;
+  userEmail: string;
+  storeName: string;
   
   // Metrics & Stats
   totalCapital: number;
@@ -23,6 +25,8 @@ interface GoldStoreContextType {
   currentStockUnits: number;
 
   // Actions
+  setUserEmail: (email: string) => void;
+  setStoreName: (name: string) => void;
   addPurchase: (p: Omit<Purchase, 'id' | 'payments' | 'updatedAt'>) => void;
   updatePurchase: (p: Purchase) => void;
   deletePurchase: (id: string) => void;
@@ -94,6 +98,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [rates, setRates] = useState<GoldRates>(INITIAL_RATES);
   const [pinCode, setPinCodeState] = useState<string>('');
   const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [userEmail, setUserEmailState] = useState<string>('alsiralsaig@gmail.com');
+  const [storeName, setStoreNameState] = useState<string>('مجوهرات السر الصائغ');
 
   // Load from LocalStorage
   useEffect(() => {
@@ -110,6 +116,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           setPinCodeState(data.pinCode);
           setIsLocked(true);
         }
+        if (data.userEmail) setUserEmailState(data.userEmail);
+        if (data.storeName) setStoreNameState(data.storeName);
       }
     } catch (e) {
       console.warn('Failed to load gold calculator storage:', e);
@@ -126,12 +134,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         partners,
         rates,
         pinCode,
+        userEmail,
+        storeName,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (e) {
       console.warn('Failed to save gold calculator storage:', e);
     }
-  }, [purchases, sales, expenses, partners, rates, pinCode]);
+  }, [purchases, sales, expenses, partners, rates, pinCode, userEmail, storeName]);
 
   // Derived Calculations
   const totalCapital = partners.reduce((sum, p) => sum + (p.capital || 0), 0);
@@ -156,6 +166,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const currentStockUnits = Math.max(0, purchasedUnits - soldUnits);
 
   // Actions
+  const setUserEmail = (email: string) => setUserEmailState(email.trim());
+  const setStoreName = (name: string) => setStoreNameState(name.trim());
+
   const addPurchase = (p: Omit<Purchase, 'id' | 'payments' | 'updatedAt'>) => {
     const newP: Purchase = {
       ...p,
@@ -270,6 +283,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const exportData = () => {
     const db = {
+      storeName,
+      userEmail,
       purchases,
       sales,
       expenses,
@@ -294,6 +309,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (data.expenses) setExpenses(data.expenses);
       if (data.partners) setPartners(data.partners);
       if (data.rates) setRates(data.rates);
+      if (data.userEmail) setUserEmailState(data.userEmail);
+      if (data.storeName) setStoreNameState(data.storeName);
       return true;
     } catch {
       return false;
@@ -319,6 +336,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         rates,
         pinCode,
         isLocked,
+        userEmail,
+        storeName,
         totalCapital,
         totalSales,
         totalCost,
@@ -328,6 +347,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         netProfit,
         totalProfitPercent,
         currentStockUnits,
+        setUserEmail,
+        setStoreName,
         addPurchase,
         updatePurchase,
         deletePurchase,
