@@ -181,6 +181,46 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [purchases, sales, expenses, partners, rates, pinCode, userEmail, storeName, themeMode, lastSyncTime, isCloudSignedIn]);
 
+  // Apply Theme Mode Dynamically to HTML Root and Body
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const root = document.documentElement;
+
+    const applyTheme = (mode: ThemeMode) => {
+      let isDark = true;
+      if (mode === 'light') {
+        isDark = false;
+      } else if (mode === 'dark') {
+        isDark = true;
+      } else if (mode === 'system') {
+        isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+
+      if (isDark) {
+        root.classList.remove('light');
+        root.classList.add('dark');
+        root.setAttribute('data-theme', 'dark');
+        document.body.style.backgroundColor = '#020617';
+        document.body.style.color = '#f8fafc';
+      } else {
+        root.classList.remove('dark');
+        root.classList.add('light');
+        root.setAttribute('data-theme', 'light');
+        document.body.style.backgroundColor = '#f8fafc';
+        document.body.style.color = '#0f172a';
+      }
+    };
+
+    applyTheme(themeMode);
+
+    if (themeMode === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = () => applyTheme('system');
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
+    }
+  }, [themeMode]);
+
   // Derived Calculations
   const totalCapital = partners.reduce((sum, p) => sum + (p.capital || 0), 0);
   const totalProfitPercent = partners.reduce((sum, p) => sum + (p.profitPercent || 0), 0);
@@ -218,7 +258,6 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return { success: false, message: 'كلمة المرور يجب أن تتكون من 6 خانات على الأقل' };
     }
 
-    // Verify or register store vault key
     setUserEmailState(trimmedEmail);
     setIsCloudSignedIn(true);
     const now = new Date();
