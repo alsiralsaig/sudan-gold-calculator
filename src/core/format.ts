@@ -1,4 +1,7 @@
-export const kUnitsPerGram = 40; // 1g = 4 habba = 40 juz
+// The Sudanese display uses a three-part quantity: grams.habba.juz.
+// Keep the entered habba value visible (9 habba stays 0.9.0) instead of
+// converting it into whole grams. One gram is represented by 100 sub-units.
+export const kUnitsPerGram = 100;
 export const kUnitsPerHabba = 10;
 export const kCurrency = 'ج.س';
 
@@ -7,7 +10,7 @@ export function weightToUnits(grams: number = 0, habba: number = 0, juz: number 
   return (grams * kUnitsPerGram) + (habba * kUnitsPerHabba) + juz;
 }
 
-// Convert total units into standard Sudanese notation: "0.1.0" or "3.9.0"
+// Convert total units into standard Sudanese notation: "0.9.0" or "3.9.0"
 export function unitsToGhJ(units: number): string {
   if (!units || units <= 0) return '0.0.0';
   const grams = Math.floor(units / kUnitsPerGram);
