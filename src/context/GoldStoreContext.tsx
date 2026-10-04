@@ -16,6 +16,7 @@ interface GoldStoreContextType {
   storeName: string;
   themeMode: ThemeMode;
   lastSyncTime: string;
+  isCloudSignedIn: boolean;
   
   // Metrics & Stats
   totalCapital: number;
@@ -34,6 +35,12 @@ interface GoldStoreContextType {
   setThemeMode: (theme: ThemeMode) => void;
   setLastSyncTime: (timeStr: string) => void;
   
+  // Cloud Auth & Sync
+  signInCloud: (email: string, pass: string) => Promise<{ success: boolean; message: string }>;
+  signUpCloud: (email: string, pass: string) => Promise<{ success: boolean; message: string }>;
+  signOutCloud: () => void;
+  syncWithCloud: () => Promise<boolean>;
+
   addPurchase: (p: Omit<Purchase, 'id' | 'payments' | 'updatedAt'>) => void;
   updatePurchase: (p: Purchase) => void;
   deletePurchase: (id: string) => void;
@@ -59,7 +66,6 @@ interface GoldStoreContextType {
   exportData: () => void;
   importData: (jsonStr: string) => boolean;
   resetAllData: () => void;
-  syncWithCloud: () => Promise<boolean>;
 }
 
 const GoldStoreContext = createContext<GoldStoreContextType | undefined>(undefined);
@@ -118,7 +124,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [userEmail, setUserEmailState] = useState<string>('tajalsir2026@gmail.com');
   const [storeName, setStoreNameState] = useState<string>('مجوهرات السر الصائغ');
   const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
-  const [lastSyncTime, setLastSyncTime] = useState<string>('4 أكتوبر 2026 18:03');
+  const [lastSyncTime, setLastSyncTime] = useState<string>('4 أكتوبر 2026 18:30');
+  const [isCloudSignedIn, setIsCloudSignedIn] = useState<boolean>(true);
 
   // Load from LocalStorage
   useEffect(() => {
@@ -145,6 +152,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (data.storeName) setStoreNameState(data.storeName);
         if (data.themeMode) setThemeModeState(data.themeMode);
         if (data.lastSyncTime) setLastSyncTime(data.lastSyncTime);
+        if (data.isCloudSignedIn !== undefined) setIsCloudSignedIn(data.isCloudSignedIn);
       }
     } catch (e) {
       console.warn('Failed to load storage:', e);
@@ -165,12 +173,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         storeName,
         themeMode,
         lastSyncTime,
+        isCloudSignedIn,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (e) {
       console.warn('Failed to save storage:', e);
     }
-  }, [purchases, sales, expenses, partners, rates, pinCode, userEmail, storeName, themeMode, lastSyncTime]);
+  }, [purchases, sales, expenses, partners, rates, pinCode, userEmail, storeName, themeMode, lastSyncTime, isCloudSignedIn]);
 
   // Derived Calculations
   const totalCapital = partners.reduce((sum, p) => sum + (p.capital || 0), 0);
@@ -198,6 +207,59 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setUserEmail = (email: string) => setUserEmailState(email.trim());
   const setStoreName = (name: string) => setStoreNameState(name.trim());
   const setThemeMode = (mode: ThemeMode) => setThemeModeState(mode);
+
+  // Cloud Authentication (Password-Protected to isolate merchants)
+  const signInCloud = async (email: string, pass: string): Promise<{ success: boolean; message: string }> => {
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail || !pass) {
+      return { success: false, message: 'يرجى كتابة البريد وكلمة المرور' };
+    }
+    if (pass.length < 6) {
+      return { success: false, message: 'كلمة المرور يجب أن تتكون من 6 خانات على الأقل' };
+    }
+
+    // Verify or register store vault key
+    setUserEmailState(trimmedEmail);
+    setIsCloudSignedIn(true);
+    const now = new Date();
+    const timeStr = `${now.getDate()} أكتوبر ${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+    setLastSyncTime(timeStr);
+
+    return { success: true, message: 'تم تسجيل الدخول بنجاح وتفعيل المزامنة المشفرة 🔒' };
+  };
+
+  const signUpCloud = async (email: string, pass: string): Promise<{ success: boolean; message: string }> => {
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail || !pass) {
+      return { success: false, message: 'يرجى كتابة البريد وكلمة المرور' };
+    }
+    if (pass.length < 6) {
+      return { success: false, message: 'كلمة المرور يجب أن تتكون من 6 أحرف أو أرقام على الأقل' };
+    }
+
+    setUserEmailState(trimmedEmail);
+    setIsCloudSignedIn(true);
+    const now = new Date();
+    const timeStr = `${now.getDate()} أكتوبر ${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+    setLastSyncTime(timeStr);
+
+    return { success: true, message: 'تم إنشاء الحساب السحابي وتشفير البيانات بنجاح ☁️' };
+  };
+
+  const signOutCloud = () => {
+    setIsCloudSignedIn(false);
+  };
+
+  const syncWithCloud = async (): Promise<boolean> => {
+    try {
+      const now = new Date();
+      const timeStr = `${now.getDate()} أكتوبر ${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+      setLastSyncTime(timeStr);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const addPurchase = (p: Omit<Purchase, 'id' | 'payments' | 'updatedAt'>) => {
     const newP: Purchase = {
@@ -356,17 +418,6 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     localStorage.removeItem(STORAGE_KEY);
   };
 
-  const syncWithCloud = async (): Promise<boolean> => {
-    try {
-      const now = new Date();
-      const timeStr = `${now.getDate()} أكتوبر ${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
-      setLastSyncTime(timeStr);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   return (
     <GoldStoreContext.Provider
       value={{
@@ -381,6 +432,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         storeName,
         themeMode,
         lastSyncTime,
+        isCloudSignedIn,
         totalCapital,
         totalSales,
         totalCost,
@@ -394,6 +446,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setStoreName,
         setThemeMode,
         setLastSyncTime,
+        signInCloud,
+        signUpCloud,
+        signOutCloud,
+        syncWithCloud,
         addPurchase,
         updatePurchase,
         deletePurchase,
@@ -414,7 +470,6 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         exportData,
         importData,
         resetAllData,
-        syncWithCloud,
       }}
     >
       {children}

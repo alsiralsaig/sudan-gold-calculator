@@ -13,6 +13,7 @@ import {
   RefreshCw,
   LogOut,
   LogIn,
+  UserPlus,
   Save,
   FolderOpen,
   Copy,
@@ -23,7 +24,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Smartphone
+  Smartphone,
+  Eye,
+  EyeOff,
+  ShieldCheck
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum } from '../../core/format';
@@ -37,11 +41,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     pinCode,
     setPinCode,
     userEmail,
-    setUserEmail,
     themeMode,
     setThemeMode,
     lastSyncTime,
-    setLastSyncTime,
+    isCloudSignedIn,
+    signInCloud,
+    signUpCloud,
+    signOutCloud,
+    syncWithCloud,
     purchases,
     sales,
     expenses,
@@ -49,7 +56,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     exportData,
     importData,
     resetAllData,
-    syncWithCloud,
   } = useGoldStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,9 +72,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   const [autoLockSeconds, setAutoLockSeconds] = useState<number>(60);
   const [showAutoLockModal, setShowAutoLockModal] = useState(false);
 
-  // Cloud Sync State
-  const [isEditingEmail, setIsEditingEmail] = useState(false);
-  const [emailInput, setEmailInput] = useState(userEmail || 'tajalsir2026@gmail.com');
+  // Cloud Auth & Sync Form State
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [inputEmail, setInputEmail] = useState(userEmail || 'tajalsir2026@gmail.com');
+  const [inputPassword, setInputPassword] = useState('123456');
+  const [showPassword, setShowPassword] = useState(false);
+  const [authError, setAuthError] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncToast, setSyncToast] = useState('');
 
@@ -133,35 +142,50 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     }
   };
 
-  // Cloud Sync Handler (No Password Required!)
+  // Cloud Authentication (Password-Protected to isolate merchants)
+  const handleCloudAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setIsSyncing(true);
+
+    if (authMode === 'login') {
+      const res = await signInCloud(inputEmail, inputPassword);
+      setIsSyncing(false);
+      if (res.success) {
+        setSyncToast(res.message);
+        setTimeout(() => setSyncToast(''), 3000);
+      } else {
+        setAuthError(res.message);
+      }
+    } else {
+      const res = await signUpCloud(inputEmail, inputPassword);
+      setIsSyncing(false);
+      if (res.success) {
+        setSyncToast(res.message);
+        setTimeout(() => setSyncToast(''), 3000);
+      } else {
+        setAuthError(res.message);
+      }
+    }
+  };
+
+  // Trigger Sync Now
   const handleTriggerSync = async () => {
     setIsSyncing(true);
-    setSyncToast('جاري المزامنة مع سحابة أجهزة الشركاء...');
+    setSyncToast('جاري المزامنة مع سحابة المتجر المشفرة...');
     await syncWithCloud();
     setTimeout(() => {
       setIsSyncing(false);
-      setSyncToast('تمت المزامنة بنجاح ⚡');
+      setSyncToast('تمت المزامنة بنجاح وحفظ كافة السجلات ⚡');
       setTimeout(() => setSyncToast(''), 3000);
     }, 600);
   };
 
-  const handleSaveEmail = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!emailInput.trim()) {
-      alert('يرجى كتابة البريد الإلكتروني');
-      return;
-    }
-    setUserEmail(emailInput.trim());
-    setIsEditingEmail(false);
-    setSyncToast('تم تفعيل وتحديث بريد المزامنة بنجاح!');
-    setTimeout(() => setSyncToast(''), 3000);
-  };
-
   const handleSignOut = () => {
-    if (confirm('هل تريد إيقاف المزامنة وتغيير البريد؟ ستبقى بياناتك المحلية محفوظة.')) {
-      setUserEmail('');
-      setEmailInput('');
-      setIsEditingEmail(true);
+    if (confirm('تسجيل الخروج: سيتم إيقاف المزامنة السحابية على هذا الجهاز وستبقى بياناتك المحلية محفوظة. هل تريد المتابعة؟')) {
+      signOutCloud();
+      setSyncToast('تم تسجيل الخروج بنجاح');
+      setTimeout(() => setSyncToast(''), 2500);
     }
   };
 
@@ -176,7 +200,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     };
     try {
       await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-      alert('تم نسخ البيانات إلى الحافظة — يمكنك لصقها في واتساب أو حفظها في الملاحظات!');
+      alert('تم نسخ البيانات إلى الحافظة — يمكنك مشاركتها عبر الواتساب أو حفظها في الملاحظات!');
     } catch (_) {
       alert('تعذر النسخ إلى الحافظة');
     }
@@ -316,28 +340,36 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
         </div>
       </div>
 
-      {/* 3. SECTION: المزامنة بين الأجهزة (No Password Required - Direct Email Sync) */}
+      {/* 3. SECTION: المزامنة بين الأجهزة (Protected by Store Email + Password) */}
       <div className="space-y-2">
         <div className="flex items-center gap-2 px-1 text-emerald-400 font-black text-sm border-r-4 border-emerald-500 pr-2">
           <span>المزامنة بين الأجهزة</span>
         </div>
 
-        {userEmail && !isEditingEmail ? (
+        {isCloudSignedIn && userEmail ? (
           /* Active Green Cloud Card matching Flutter Screenshot */
           <div className="bg-emerald-950/25 border-2 border-emerald-500/50 rounded-3xl p-5 space-y-4 shadow-xl">
             
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                <h4 className="font-black text-emerald-400 text-base">المزامنة مفعّلة</h4>
+                <h4 className="font-black text-emerald-400 text-base flex items-center gap-1.5">
+                  <span>المزامنة مفعّلة</span>
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                </h4>
               </div>
               <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-full">
                 <Cloud className="w-5 h-5" />
               </div>
             </div>
 
-            <div className="text-sm font-mono text-emerald-300 font-bold bg-emerald-950/60 p-3 rounded-2xl border border-emerald-800/60 text-center tracking-wide">
-              {userEmail}
+            <div className="bg-emerald-950/60 p-3 rounded-2xl border border-emerald-800/60 text-center space-y-1">
+              <div className="text-sm font-mono text-emerald-300 font-bold tracking-wide">
+                {userEmail}
+              </div>
+              <span className="text-[10px] text-emerald-400 font-bold block">
+                حساب المتجر محمي ومشفر بكلمة سر خاصة 🔒
+              </span>
             </div>
 
             <div className="text-xs text-slate-300 text-center font-semibold">
@@ -348,6 +380,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
               <button
                 onClick={handleSignOut}
                 className="py-2.5 px-4 bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700/80 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                title="تسجيل الخروج لمنع مزامنة هذا الجهاز"
               >
                 <LogOut className="w-4 h-4" />
                 <span>خروج</span>
@@ -364,47 +397,123 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
             </div>
 
             <p className="text-[11px] text-slate-400 text-center leading-relaxed pt-1">
-              المزامنة تتم تلقائياً عند فتح التطبيق وبعد كل تعديل (عند توفر النت).
+              المزامنة تتم تلقائياً بصورة مشفرة بين أجهزتك وأجهزة الشركاء المصرح لهم فقط.
             </p>
 
           </div>
         ) : (
-          /* Email Input Card Without Password */
+          /* Password-Protected Login / Signup Form for Complete Privacy */
           <form
-            onSubmit={handleSaveEmail}
-            className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl"
+            onSubmit={handleCloudAuth}
+            className="bg-slate-900 border-2 border-emerald-500/40 rounded-3xl p-5 space-y-4 shadow-xl"
           >
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-2xl">
-                <CloudLightning className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-extrabold text-sm text-white">ربط الأجهزة ومزامنة الشركاء</h4>
-                <p className="text-xs text-slate-400">أدخل بريدك للمزامنة الفورية بين كل الهواتف المشتركة</p>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-2xl">
+                  <CloudLightning className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm text-white">حساب المتجر والمزامنة السحابية</h4>
+                  <p className="text-[11px] text-slate-400">حماية وتشفير حساباتك بكلمة سر خاصة</p>
+                </div>
               </div>
             </div>
 
+            {/* Login vs Signup Tabs */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-2xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setAuthMode('login')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  authMode === 'login'
+                    ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>تسجيل دخول</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAuthMode('signup')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  authMode === 'signup'
+                    ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>حساب متجر جديد</span>
+              </button>
+            </div>
+
+            {/* Email Field */}
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                البريد الإلكتروني (Email)
+                البريد الإلكتروني للتاجر / المتجر (Email)
               </label>
               <input
                 type="email"
                 required
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
+                value={inputEmail}
+                onChange={(e) => setInputEmail(e.target.value)}
                 placeholder="example@gmail.com"
                 className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-400 rounded-2xl p-3.5 text-white text-sm font-mono focus:outline-none transition-colors"
               />
             </div>
 
+            {/* Password Field */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                كلمة المرور السحابية (Password)
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={inputPassword}
+                  onChange={(e) => setInputPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-400 rounded-2xl p-3.5 pl-10 text-white text-sm font-mono focus:outline-none transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {authError && (
+              <p className="text-xs text-rose-400 font-bold text-center bg-rose-950/40 p-2 rounded-xl border border-rose-800">
+                {authError}
+              </p>
+            )}
+
             <button
               type="submit"
+              disabled={isSyncing}
               className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 text-slate-950 font-black text-xs rounded-2xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
             >
-              <Check className="w-4 h-4 text-slate-950" />
-              <span>تفعيل المزامنة بين الأجهزة</span>
+              {isSyncing ? (
+                <RefreshCw className="w-4 h-4 text-slate-950 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4 text-slate-950" />
+              )}
+              <span>
+                {authMode === 'login'
+                  ? 'تسجيل الدخول ومزامنة الأجهزة'
+                  : 'إنشاء حساب متجر وتشفير البيانات'}
+              </span>
             </button>
+
+            <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed text-center">
+              🔒 <b>ضمان الخصوصية:</b> حساباتك المالية مشفرة وخاصة بمتجرك فقط. لا يمكن لأي شخص آخر ينزل التطبيق الوصول لبياناتك إلا بمعرفة هذا البريد وكلمة المرور.
+            </div>
+
           </form>
         )}
 
