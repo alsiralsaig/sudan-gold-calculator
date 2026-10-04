@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Coins, Lock, Smartphone, RotateCw, Sparkles, Check } from 'lucide-react';
+import { Settings, Lock, Smartphone, RotateCw, Sparkles, Check } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtMoney, fmtNum } from '../../core/format';
 
 interface NavbarProps {
   onOpenInstallModal: () => void;
   activeTab: string;
+  onNavigate: (tab: string) => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenInstallModal, activeTab }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onOpenInstallModal, activeTab, onNavigate }) => {
   const { pinCode, lockApp, rates, updateRates } = useGoldStore();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -30,7 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenInstallModal, activeTab })
       case 'gold_price':
         return 'السعر العالمي للذهب';
       case 'settings':
-        return 'الإعدادات والقفل';
+        return 'الإعدادات والمزامنة';
       default:
         return 'حاسبة الذهب';
     }
@@ -77,43 +78,57 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenInstallModal, activeTab })
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">
-      <div className="max-w-4xl mx-auto flex items-center justify-between">
+    <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-3 sm:px-4 py-2.5 sm:py-3">
+      <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
         
-        {/* Reload / Refresh Arrow Button on Top Left / Right as in screenshot */}
-        <div className="flex items-center gap-2">
+        {/* Right side in RTL: Refresh button + Title */}
+        <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={handleGlobalRefresh}
             disabled={isRefreshing}
-            className="p-2.5 bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/30 text-amber-400 rounded-2xl border border-amber-500/40 transition-all active:scale-90 flex items-center justify-center shadow-md shadow-amber-500/10"
+            className="p-2 sm:p-2.5 bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/30 text-amber-400 rounded-2xl border border-amber-500/40 transition-all active:scale-90 flex items-center justify-center shadow-md shadow-amber-500/10 shrink-0"
             title="إعادة التشغيل وتحديث الأسعار"
           >
-            <RotateCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RotateCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
 
-          <div>
-            <h1 className="font-black text-sm sm:text-base text-white flex items-center gap-1.5">
-              <span>{getTitle()}</span>
-              <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md font-bold">
+          <div className="min-w-0">
+            <h1 className="font-black text-xs sm:text-base text-white flex items-center gap-1.5 truncate">
+              <span className="truncate">{getTitle()}</span>
+              <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md font-bold shrink-0">
                 السودان
               </span>
             </h1>
-            <p className="text-[10px] text-slate-400 font-mono">
+            <p className="text-[9px] sm:text-[10px] text-slate-400 font-mono truncate">
               21k: {fmtNum(rates.karat21)} ج.س • $ {fmtNum(rates.usdRate)}
             </p>
           </div>
         </div>
 
-        {/* Action buttons on the opposite side */}
-        <div className="flex items-center gap-2">
+        {/* Left side in RTL: Settings (⚙️), Install (📱), Lock (🔒) Action buttons */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           
-          {/* iOS Install Prompt Button */}
+          {/* Settings Icon Button */}
+          <button
+            onClick={() => onNavigate('settings')}
+            className={`p-2 sm:p-2.5 rounded-2xl border transition-all flex items-center gap-1 text-xs font-bold ${
+              activeTab === 'settings'
+                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20'
+                : 'bg-slate-900 hover:bg-slate-800 text-amber-400 border-slate-700/80 hover:border-amber-500/50'
+            }`}
+            title="الإعدادات والمزامنة السحابية"
+          >
+            <Settings className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${activeTab === 'settings' ? 'animate-spin-slow' : ''}`} />
+            <span className="hidden md:inline">الإعدادات</span>
+          </button>
+
+          {/* Install Prompt Button */}
           <button
             onClick={onOpenInstallModal}
-            className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-amber-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
-            title="تثبيت التطبيق على آيفون"
+            className="p-2 sm:px-2.5 sm:py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-amber-300 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+            title="تثبيت التطبيق على جهازك (أندرويد / آيفون)"
           >
-            <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+            <Smartphone className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-400" />
             <span className="hidden sm:inline">تثبيت</span>
           </button>
 
@@ -121,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenInstallModal, activeTab })
           {pinCode && (
             <button
               onClick={lockApp}
-              className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-xl transition-colors"
+              className="p-2 sm:p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-2xl transition-colors"
               title="قفل التطبيق الآن"
             >
               <Lock className="w-4 h-4" />

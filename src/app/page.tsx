@@ -30,11 +30,12 @@ function MainAppContent() {
       {/* Top Header Navbar */}
       <Navbar
         activeTab={activeTab}
+        onNavigate={setActiveTab}
         onOpenInstallModal={() => setShowInstallModal(true)}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6">
+      <main className="flex-1 max-w-4xl w-full mx-auto p-3 sm:p-6 pb-24">
         {activeTab === 'dashboard' && <DashboardScreen onNavigate={setActiveTab} />}
         {activeTab === 'calculator' && <CalculatorScreen />}
         {activeTab === 'partners' && <PartnersScreen />}

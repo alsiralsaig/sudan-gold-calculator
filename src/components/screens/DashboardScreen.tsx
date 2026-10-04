@@ -11,7 +11,9 @@ import {
   ArrowDownLeft,
   Coins,
   ShieldCheck,
-  ChevronLeft
+  ChevronLeft,
+  Settings,
+  Cloud
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtMoney, fmtNum, unitsToWeight, unitsToGramsDecimal, kCurrency } from '../../core/format';
@@ -208,6 +210,30 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
             <p className="text-[11px] text-slate-400 mt-0.5">السوق الموازي والدولار</p>
           </div>
         </button>
+      </div>
+
+      {/* Settings & Cloud Sync Quick Card */}
+      <div
+        onClick={() => onNavigate('settings')}
+        className="bg-gradient-to-r from-slate-900 via-slate-900 to-amber-950/40 border border-slate-800 hover:border-amber-500/50 p-4 rounded-3xl flex items-center justify-between cursor-pointer transition-all group"
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-amber-500/15 text-amber-400 rounded-2xl group-hover:scale-110 transition-transform border border-amber-500/30">
+            <Settings className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="font-extrabold text-sm text-white flex items-center gap-2">
+              <span>الإعدادات والمزامنة السحابية</span>
+              <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full font-bold">
+                نسخ احتياطي + PIN
+              </span>
+            </h4>
+            <p className="text-xs text-slate-400 mt-0.5">
+              مزامنة السحابة، رمز القفل، إدارة النسخ الاحتياطي والمظهر
+            </p>
+          </div>
+        </div>
+        <ChevronLeft className="w-5 h-5 text-amber-400 group-hover:-translate-x-1 transition-transform" />
       </div>
 
       {/* Live Market Price Widget */}
