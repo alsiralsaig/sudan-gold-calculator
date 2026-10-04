@@ -68,11 +68,14 @@ export const CalculatorScreen: React.FC = () => {
       setIsEvaluated(false);
       return;
     }
-    if (stdDisplay === '0' && digit !== '.') {
+    // After an operator, the display is reset to zero but the equation must
+    // remain intact (for example: 875 ÷ 5). Do not overwrite the left side.
+    const isAfterOperator = /[+\-×÷]\s*$/.test(stdEquation);
+    if (stdDisplay === '0' && digit !== '.' && !isAfterOperator) {
       setStdDisplay(digit);
       setStdEquation(digit);
     } else {
-      setStdDisplay((prev) => prev + digit);
+      setStdDisplay((prev) => (prev === '0' && digit !== '.' ? digit : prev + digit));
       setStdEquation((prev) => prev + digit);
     }
   };
