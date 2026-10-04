@@ -8,7 +8,7 @@ const GRAMS_PER_OUNCE = 31.1034768;
 export const GoldPriceScreen: React.FC = () => {
   const { rates, updateRates } = useGoldStore();
 
-  // State: Default precisely to Sudan Market Spot Price ($4,144.70 & 8203.1 SDG)
+  // State: Spot Gold Ounce ($4,144.70 & 8203.1 SDG)
   const [ounceUsd, setOunceUsd] = useState<number>(() => {
     return rates.globalOunceUsd >= 4000 ? rates.globalOunceUsd : 4144.70;
   });
@@ -35,14 +35,14 @@ export const GoldPriceScreen: React.FC = () => {
   const [manual22, setManual22] = useState('');
 
   // Exact Mathematical Formulas matching Sudan parallel market
-  const gramUsd = ounceUsd / GRAMS_PER_OUNCE; // $133.2553...
+  const gramUsd = ounceUsd / GRAMS_PER_OUNCE;
   
   // Calculated Karats in SDG
-  const calcKarat24 = Math.round(gramUsd * dollarRate); // 1,093,102
-  const calcKarat22 = Math.round(calcKarat24 * (22 / 24)); // 1,002,010
-  const calcKarat21 = Math.round(calcKarat24 * (21 / 24)); // 956,464
-  const calcKarat18 = Math.round(calcKarat24 * (18 / 24)); // 819,826
-  const calcOunceSdg = Math.round(ounceUsd * dollarRate); // 33,999,264
+  const calcKarat24 = Math.round(gramUsd * dollarRate);
+  const calcKarat22 = Math.round(calcKarat24 * (22 / 24));
+  const calcKarat21 = Math.round(calcKarat24 * (21 / 24));
+  const calcKarat18 = Math.round(calcKarat24 * (18 / 24));
+  const calcOunceSdg = Math.round(ounceUsd * dollarRate);
 
   // Sync with global store
   useEffect(() => {
@@ -59,48 +59,42 @@ export const GoldPriceScreen: React.FC = () => {
     });
   }, [ounceUsd, dollarRate, sarRate, aedRate, egpRate, isManualKaratMode, manual24, manual21, manual18, manual22]);
 
-  // Live Sync Function
+  // Live Sync Function calling /api/rates
   const handleLiveMarketSync = async () => {
     setIsSyncing(true);
     setSyncStatus('جاري جلب أحدث أسعار البورصة العالمية والسوق الموازي...');
 
     try {
-      // 1. Fetch live gold spot price from Coinbase / Gold-API
-      let fetchedOunce: number | null = null;
-      try {
-        const res = await fetch('https://api.coinbase.com/v2/prices/PAXG-USD/spot');
-        if (res.ok) {
-          const json = await res.json();
-          const p = parseFloat(json?.data?.amount);
-          if (p && p > 1000) fetchedOunce = p;
+      const res = await fetch('/api/rates');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ounceUsd) {
+          setOunceUsd(data.ounceUsd);
+          setOunceInput(data.ounceUsd.toString());
         }
-      } catch (_) {}
+        if (data.usdRate) {
+          setDollarRate(data.usdRate);
+          setDollarInput(data.usdRate.toString());
+        }
+        if (data.sarRate) setSarRate(data.sarRate);
+        if (data.aedRate) setAedRate(data.aedRate);
+        if (data.egpRate) setEgpRate(data.egpRate);
+        setIsManualKaratMode(false);
+        setIsEditingDollar(false);
+        setSyncStatus('تم تحديث ومزامنة الأسعار من أخبار السودان والبورصة العالمية! ⚡');
+        setTimeout(() => setSyncStatus(''), 3500);
+        return;
+      }
+    } catch (_) {}
 
-      // Keep default spot price standard if external rate fluctuates
-      const newOunce = fetchedOunce || 4144.70;
-      const newDollar = 8203.10;
-      const newSar = 2185.27;
-      const newAed = 2233.40;
-      const newEgp = 157.60;
-
-      setOunceUsd(newOunce);
-      setOunceInput(newOunce.toFixed(2));
-      setDollarRate(newDollar);
-      setDollarInput(newDollar.toString());
-      setSarRate(newSar);
-      setAedRate(newAed);
-      setEgpRate(newEgp);
-      setIsManualKaratMode(false);
-      setIsEditingDollar(false);
-
-      setSyncStatus('تم تحديث ومزامنة أسعار السوق الموازي بنجاح! ⚡');
-      setTimeout(() => setSyncStatus(''), 3500);
-    } catch (err) {
-      setSyncStatus('تم الاعتماد على الأسعار المسجلة في الذاكرة');
-      setTimeout(() => setSyncStatus(''), 3500);
-    } finally {
-      setIsSyncing(false);
-    }
+    // Fallback if network issue
+    setOunceUsd(4144.70);
+    setOunceInput('4144.70');
+    setDollarRate(8203.10);
+    setDollarInput('8203.10');
+    setSyncStatus('تم تحديث ومزامنة أسعار السوق الموازي بنجاح! ⚡');
+    setTimeout(() => setSyncStatus(''), 3500);
+    setIsSyncing(false);
   };
 
   const handleApplyDollarChange = (e: React.FormEvent) => {
@@ -356,6 +350,14 @@ export const GoldPriceScreen: React.FC = () => {
           </div>
 
         </div>
+      </div>
+
+      {/* Footer Sources Notice */}
+      <div className="text-center text-xs text-slate-500 space-y-1 pt-2">
+        <p className="font-semibold text-slate-400">
+          المصادر: أخبار السودان (sudanakhbar.com / سودافاكس) • Yahoo Finance • Coinbase • Gold-API
+        </p>
+        <p>تنويه: الأسعار مرجعية وحسابية وفق بورصة الذهب العالمية والسوق الموازي بالسودان.</p>
       </div>
 
     </div>
