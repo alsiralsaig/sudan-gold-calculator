@@ -19,6 +19,8 @@ import {
   unitsToGhJ,
   unitsToWeight,
   unitsToGramsDecimal,
+  kUnitsPerGram,
+  kUnitsPerHabba,
   fmtMoney,
   fmtNum,
   formatInvoiceDate,
@@ -86,7 +88,7 @@ export const PurchasesScreen: React.FC = () => {
     setGrams('');
     setHabba('');
     setJuz('');
-    setPricePerGram(rates.karat21.toString());
+    setPricePerGram('');
     setCustomKarat('21');
     setAmount('');
     setPaidAmount('');
@@ -98,9 +100,9 @@ export const PurchasesScreen: React.FC = () => {
 
   const handleOpenEdit = (purchase: Purchase) => {
     setEditingPurchase(purchase);
-    setGrams(Math.floor(purchase.units / 1000).toString());
-    setHabba(Math.floor((purchase.units % 1000) / 10).toString());
-    setJuz((purchase.units % 10).toString());
+    setGrams(Math.floor(purchase.units / kUnitsPerGram).toString());
+    setHabba(Math.floor((purchase.units % kUnitsPerGram) / kUnitsPerHabba).toString());
+    setJuz((purchase.units % kUnitsPerHabba).toString());
     setPricePerGram('');
     setCustomKarat(purchase.purity > 0 ? purchase.purity.toString() : '-');
     setAmount(purchase.amount.toString());
@@ -404,7 +406,7 @@ export const PurchasesScreen: React.FC = () => {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  سعر الجرام ({kCurrency}):
+                  سعر الجرام ({kCurrency}) (اختياري):
                 </label>
                 <input
                   type="number"
@@ -414,7 +416,7 @@ export const PurchasesScreen: React.FC = () => {
                     setPricePerGram(e.target.value);
                     handleWeightOrPriceChange(grams, habba, juz, e.target.value);
                   }}
-                  placeholder="956,529"
+                  placeholder="اتركه فارغاً وأدخل الإجمالي يدوياً"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-mono text-sm focus:border-amber-400 focus:outline-none text-right"
                 />
               </div>

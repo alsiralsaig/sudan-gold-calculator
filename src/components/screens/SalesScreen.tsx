@@ -19,6 +19,8 @@ import {
   unitsToGhJ,
   unitsToWeight,
   unitsToGramsDecimal,
+  kUnitsPerGram,
+  kUnitsPerHabba,
   fmtMoney,
   fmtNum,
   formatInvoiceDate,
@@ -97,9 +99,9 @@ export const SalesScreen: React.FC = () => {
 
   const handleOpenEdit = (sale: Sale) => {
     setEditingSale(sale);
-    setGrams(Math.floor(sale.units / 1000).toString());
-    setHabba(Math.floor((sale.units % 1000) / 10).toString());
-    setJuz((sale.units % 10).toString());
+    setGrams(Math.floor(sale.units / kUnitsPerGram).toString());
+    setHabba(Math.floor((sale.units % kUnitsPerGram) / kUnitsPerHabba).toString());
+    setJuz((sale.units % kUnitsPerHabba).toString());
     setSellPricePerGram('');
     setBuyCostPricePerGram('');
     setCustomKarat(sale.purity > 0 ? sale.purity.toString() : '-');
