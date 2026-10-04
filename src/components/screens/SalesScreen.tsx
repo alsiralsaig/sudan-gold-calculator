@@ -73,17 +73,14 @@ export const SalesScreen: React.FC = () => {
     const fineness = enteredPurity > 0 && enteredPurity <= 24
       ? (enteredPurity / 24) * 1000
       : enteredPurity;
-    const bp = sp > 0 && fineness > 0 ? sp * (fineness / 875) : 0;
+    const purityRatio = fineness > 0 ? fineness / 875 : 0;
 
     const totalU = weightToUnits(g, h, j);
     const totalG = unitsToGramsDecimal(totalU);
-    if (totalG > 0) {
-      if (sp > 0) {
-        setSellAmount(Math.round(totalG * sp).toString());
-      }
-      if (bp > 0) {
-        setBuyAmount(Math.round(totalG * bp).toString());
-      }
+    if (totalG > 0 && sp > 0 && purityRatio > 0) {
+      // Sale value is based on the entered purity, converted to 21k (875).
+      // Example: 6g at 650 purity = 6 × 956,468 × 650 / 875.
+      setSellAmount(Math.round(totalG * sp * purityRatio).toString());
     }
   };
 
@@ -240,7 +237,8 @@ export const SalesScreen: React.FC = () => {
 
       {/* 3. Table Container (Matching the Invoices Grid Design) */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
-        
+        <div className="overflow-x-auto overscroll-x-contain">
+          <div className="min-w-[780px]">
         {/* Table Column Headers (Green/Amber Themed) */}
         <div className="bg-emerald-500/15 border-b border-emerald-500/30 text-emerald-400 px-3 py-3 grid grid-cols-7 text-center text-xs font-black">
           <div>تاريخ</div>
@@ -323,6 +321,8 @@ export const SalesScreen: React.FC = () => {
             {fmtNum(totalProfitSum)}
           </div>
           <div>—</div>
+        </div>
+          </div>
         </div>
 
       </div>
@@ -448,14 +448,14 @@ export const SalesScreen: React.FC = () => {
             {/* Cost Amount (for Profit calculation) */}
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1">
-                سعر التكلفة / الشراء ({kCurrency}):
+                مبلغ الشراء ({kCurrency}) (يدوي):
               </label>
               <input
                 type="number"
                 step="any"
                 value={buyAmount}
                 onChange={(e) => setBuyAmount(e.target.value)}
-                placeholder="تكلفة الذهب لحساب الربح الفوري"
+                placeholder="أدخل مبلغ الشراء لحساب الربح"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-mono text-sm focus:border-emerald-400 focus:outline-none text-right"
               />
             </div>
