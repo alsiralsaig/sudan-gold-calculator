@@ -200,7 +200,7 @@ export const ExpensesScreen: React.FC = () => {
         
         {/* Table Column Headers (Rose/Amber Themed) */}
         <div className="bg-rose-500/15 border-b border-rose-500/30 text-rose-400 px-3 py-3 grid grid-cols-12 text-center text-xs font-black">
-          <div className="col-span-3">تاريخ</div>
+          <div className="col-span-3">التاريخ</div>
           <div className="col-span-4">بيان المصروف</div>
           <div className="col-span-2">النوع</div>
           <div className="col-span-3">المبلغ</div>
@@ -227,8 +227,11 @@ export const ExpensesScreen: React.FC = () => {
                     {formatInvoiceDate(item.date)}
                   </div>
 
-                  <div className="col-span-4 text-white font-bold text-xs truncate px-1 text-right sm:text-center">
-                    {item.name}
+                  <div className="col-span-4 min-w-0 text-white font-bold text-xs px-1 text-right sm:text-center">
+                    <div className="truncate">{item.name}</div>
+                    <div className="text-[10px] text-slate-400 font-normal truncate mt-0.5">
+                      {item.notes || item.category || '—'}
+                    </div>
                   </div>
 
                   <div className="col-span-2">

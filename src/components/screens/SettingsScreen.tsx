@@ -74,8 +74,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
 
   // Cloud Auth & Sync Form State
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-  const [inputEmail, setInputEmail] = useState(userEmail || 'tajalsir2026@gmail.com');
-  const [inputPassword, setInputPassword] = useState('123456');
+  const [inputEmail, setInputEmail] = useState(userEmail || '');
+  const [inputPassword, setInputPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);

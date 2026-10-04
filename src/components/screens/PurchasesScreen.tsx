@@ -40,6 +40,7 @@ export const PurchasesScreen: React.FC = () => {
   const [filterPeriod, setFilterPeriod] = useState<'all' | 'today' | '7days' | 'month'>('all');
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState<Purchase | null>(null);
 
@@ -80,7 +81,8 @@ export const PurchasesScreen: React.FC = () => {
     }
   };
 
-  const handleOpenAdd = () => {
+  const resetPurchaseForm = () => {
+    setEditingPurchase(null);
     setGrams('');
     setHabba('');
     setJuz('');
@@ -91,6 +93,22 @@ export const PurchasesScreen: React.FC = () => {
     setSeller('');
     setBankAccount('');
     setNotes('');
+    setShowAddModal(true);
+  };
+
+  const handleOpenEdit = (purchase: Purchase) => {
+    setEditingPurchase(purchase);
+    setGrams(Math.floor(purchase.units / 1000).toString());
+    setHabba(Math.floor((purchase.units % 1000) / 10).toString());
+    setJuz((purchase.units % 10).toString());
+    setPricePerGram('');
+    setCustomKarat(purchase.purity > 0 ? purchase.purity.toString() : '-');
+    setAmount(purchase.amount.toString());
+    setPaidAmount(Math.max(0, purchase.amount - purchase.pendingAmount).toString());
+    setSeller(purchase.seller || '');
+    setBankAccount(purchase.bankAccount || '');
+    setNotes(purchase.notes || '');
+    setSelectedPurchase(null);
     setShowAddModal(true);
   };
 
@@ -111,8 +129,8 @@ export const PurchasesScreen: React.FC = () => {
     const pending = Math.max(0, totalCost - initialPaid);
     const karatNum = customKarat === '-' ? 0 : parseFloat(customKarat) || 0;
 
-    addPurchase({
-      date: new Date().toISOString(),
+    const purchaseData = {
+      date: editingPurchase?.date || new Date().toISOString(),
       units: totalUnits,
       purity: karatNum,
       amount: totalCost,
@@ -120,8 +138,15 @@ export const PurchasesScreen: React.FC = () => {
       seller: seller.trim() || 'بائع عام',
       bankAccount: bankAccount.trim(),
       notes: notes.trim(),
-    });
+    };
 
+    if (editingPurchase) {
+      updatePurchase({ ...editingPurchase, ...purchaseData });
+    } else {
+      addPurchase(purchaseData);
+    }
+
+    setEditingPurchase(null);
     setShowAddModal(false);
   };
 
@@ -295,7 +320,7 @@ export const PurchasesScreen: React.FC = () => {
       {/* Floating Action Button: + مشترى جديد */}
       <div className="fixed bottom-20 right-4 z-30">
         <button
-          onClick={handleOpenAdd}
+          onClick={resetPurchaseForm}
           className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 text-slate-950 font-black px-5 py-3 rounded-2xl shadow-2xl shadow-amber-500/30 flex items-center gap-2 transition-transform active:scale-95"
         >
           <Plus className="w-5 h-5 text-slate-950" />
@@ -313,11 +338,11 @@ export const PurchasesScreen: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-black text-base text-amber-400 flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5" />
-                <span>إضافة فاتورة شراء جديدة</span>
+                <span>{editingPurchase ? 'تعديل فاتورة الشراء' : 'إضافة فاتورة شراء جديدة'}</span>
               </h3>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => { setShowAddModal(false); setEditingPurchase(null); }}
                 className="text-slate-400 hover:text-white"
               >
                 ✕
@@ -494,7 +519,7 @@ export const PurchasesScreen: React.FC = () => {
                 type="submit"
                 className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-md"
               >
-                حفظ المشترى
+                {editingPurchase ? 'حفظ التعديلات' : 'حفظ المشترى'}
               </button>
             </div>
           </form>
@@ -547,6 +572,13 @@ export const PurchasesScreen: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => handleOpenEdit(selectedPurchase)}
+                className="flex-1 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-black rounded-xl text-xs border border-amber-500/40 flex items-center justify-center gap-1.5"
+              >
+                <Edit2 className="w-4 h-4" />
+                تعديل
+              </button>
               {selectedPurchase.pendingAmount > 0 && (
                 <button
                   onClick={() => {

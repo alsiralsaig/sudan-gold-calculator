@@ -70,7 +70,8 @@ interface GoldStoreContextType {
 
 const GoldStoreContext = createContext<GoldStoreContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'golden_calculator_db_v4';
+const STORAGE_KEY = 'golden_calculator_db_v5';
+const LEGACY_STORAGE_KEY = 'golden_calculator_db_v4';
 
 const GRAMS_PER_OUNCE = 31.1034768;
 const DEFAULT_OUNCE_USD = 4144.70;
@@ -114,13 +115,27 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Load from LocalStorage
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      // Keep data private to this browser. Migrate old local data once, while
+      // removing the sample account that was shipped in earlier releases.
+      const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
       if (saved) {
         const data = JSON.parse(saved);
+        const legacySampleNames = new Set([
+          'السر الصائغ (الشريك الأول)',
+          'محمد أحمد (الشريك الثاني)',
+        ]);
+        const hadSampleAccount =
+          data.userEmail === 'tajalsir2026@gmail.com' ||
+          data.storeName === 'مجوهرات السر الصائغ' ||
+          (Array.isArray(data.partners) && data.partners.some((p: Partner) => legacySampleNames.has(p.name)));
+        const safePartners = Array.isArray(data.partners)
+          ? data.partners.filter((p: Partner) => !legacySampleNames.has(p.name))
+          : [];
+
         if (data.purchases) setPurchases(data.purchases);
         if (data.sales) setSales(data.sales);
         if (data.expenses) setExpenses(data.expenses);
-        if (data.partners) setPartners(data.partners);
+        if (data.partners) setPartners(safePartners);
         if (data.rates) {
           if (data.rates.karat21 < 500000) {
             setRates(INITIAL_RATES);
@@ -132,11 +147,18 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           setPinCodeState(data.pinCode);
           setIsLocked(true);
         }
-        if (data.userEmail) setUserEmailState(data.userEmail);
-        if (data.storeName) setStoreNameState(data.storeName);
+        if (data.userEmail && !hadSampleAccount) setUserEmailState(data.userEmail);
+        if (data.storeName && !hadSampleAccount) setStoreNameState(data.storeName);
+        if (hadSampleAccount) {
+          setUserEmailState('');
+          setStoreNameState('مجوهرات الذهب');
+          setIsCloudSignedIn(false);
+        }
         if (data.themeMode) setThemeModeState(data.themeMode);
         if (data.lastSyncTime) setLastSyncTime(data.lastSyncTime);
-        if (data.isCloudSignedIn !== undefined) setIsCloudSignedIn(data.isCloudSignedIn);
+        if (!hadSampleAccount && data.isCloudSignedIn !== undefined) setIsCloudSignedIn(data.isCloudSignedIn);
+        // Rewrite the migrated data under the current private schema.
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
       }
     } catch (e) {
       console.warn('Failed to load storage:', e);

@@ -3,6 +3,7 @@ import {
   DollarSign,
   Plus,
   Trash2,
+  Edit2,
   Search,
   Filter,
   CheckCircle2,
@@ -29,6 +30,7 @@ export const SalesScreen: React.FC = () => {
   const {
     sales,
     addSale,
+    updateSale,
     deleteSale,
     rates,
   } = useGoldStore();
@@ -37,6 +39,7 @@ export const SalesScreen: React.FC = () => {
   const [filterPeriod, setFilterPeriod] = useState<'all' | 'today' | '7days' | 'month'>('all');
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
 
   // Form State
@@ -78,6 +81,7 @@ export const SalesScreen: React.FC = () => {
   };
 
   const handleOpenAdd = () => {
+    setEditingSale(null);
     setGrams('');
     setHabba('');
     setJuz('');
@@ -88,6 +92,22 @@ export const SalesScreen: React.FC = () => {
     setBuyAmount('');
     setBuyer('');
     setNotes('');
+    setShowAddModal(true);
+  };
+
+  const handleOpenEdit = (sale: Sale) => {
+    setEditingSale(sale);
+    setGrams(Math.floor(sale.units / 1000).toString());
+    setHabba(Math.floor((sale.units % 1000) / 10).toString());
+    setJuz((sale.units % 10).toString());
+    setSellPricePerGram('');
+    setBuyCostPricePerGram('');
+    setCustomKarat(sale.purity > 0 ? sale.purity.toString() : '-');
+    setSellAmount(sale.sellAmount.toString());
+    setBuyAmount(sale.buyAmount.toString());
+    setBuyer(sale.buyer || '');
+    setNotes(sale.notes || '');
+    setSelectedSale(null);
     setShowAddModal(true);
   };
 
@@ -107,16 +127,23 @@ export const SalesScreen: React.FC = () => {
 
     const karatNum = customKarat === '-' ? 0 : parseFloat(customKarat) || 0;
 
-    addSale({
-      date: new Date().toISOString(),
+    const saleData = {
+      date: editingSale?.date || new Date().toISOString(),
       units: totalUnits,
       purity: karatNum,
       sellAmount: totalSell,
       buyAmount: totalBuy,
       buyer: buyer.trim() || 'زبون عام',
       notes: notes.trim(),
-    });
+    };
 
+    if (editingSale) {
+      updateSale({ ...editingSale, ...saleData });
+    } else {
+      addSale(saleData);
+    }
+
+    setEditingSale(null);
     setShowAddModal(false);
   };
 
@@ -297,11 +324,11 @@ export const SalesScreen: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-black text-base text-emerald-400 flex items-center gap-2">
                 <DollarSign className="w-5 h-5" />
-                <span>إضافة فاتورة بيع جديدة</span>
+                <span>{editingSale ? 'تعديل فاتورة البيع' : 'إضافة فاتورة بيع جديدة'}</span>
               </h3>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => { setShowAddModal(false); setEditingSale(null); }}
                 className="text-slate-400 hover:text-white"
               >
                 ✕
@@ -478,7 +505,7 @@ export const SalesScreen: React.FC = () => {
                 type="submit"
                 className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 text-slate-950 font-black rounded-xl text-xs shadow-md"
               >
-                حفظ البيع
+                {editingSale ? 'حفظ التعديلات' : 'حفظ البيع'}
               </button>
             </div>
           </form>
@@ -536,15 +563,22 @@ export const SalesScreen: React.FC = () => {
 
             <div className="flex items-center gap-2 pt-1">
               <button
+                onClick={() => handleOpenEdit(selectedSale)}
+                className="flex-1 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-black rounded-xl text-xs border border-emerald-500/40 flex items-center justify-center gap-1.5"
+              >
+                <Edit2 className="w-4 h-4" />
+                تعديل
+              </button>
+              <button
                 onClick={() => {
                   if (confirm('هل تريد حذف هذه الفاتورة؟')) {
                     deleteSale(selectedSale.id);
                     setSelectedSale(null);
                   }
                 }}
-                className="w-full py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40"
+                className="flex-1 py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40"
               >
-                حذف الفاتورة
+                <Trash2 className="w-4 h-4 mx-auto" />
               </button>
             </div>
           </div>

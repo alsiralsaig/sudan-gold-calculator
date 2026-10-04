@@ -44,7 +44,7 @@ export default function RootLayout({
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(function(err) {
                     console.log('SW reg error: ', err);
                   });
                 });
