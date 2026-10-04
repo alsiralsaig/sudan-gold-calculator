@@ -7,7 +7,17 @@ export function weightToUnits(grams: number = 0, habba: number = 0, juz: number 
   return (grams * kUnitsPerGram) + (habba * kUnitsPerHabba) + juz;
 }
 
-// Convert total units into readable string: e.g. "12.5 ج" or "10 ج و 2 ح و 4 ز"
+// Convert total units into standard Sudanese notation: "0.1.0" or "3.9.0"
+export function unitsToGhJ(units: number): string {
+  if (!units || units <= 0) return '0.0.0';
+  const grams = Math.floor(units / kUnitsPerGram);
+  const remaining = units % kUnitsPerGram;
+  const habba = Math.floor(remaining / kUnitsPerHabba);
+  const juz = Math.round(remaining % kUnitsPerHabba);
+  return `${grams}.${habba}.${juz}`;
+}
+
+// Convert total units into readable Arabic string: e.g. "12 ج و 2 ح و 4 ز"
 export function unitsToWeight(units: number): string {
   if (units <= 0) return '0.00 ج';
   const grams = Math.floor(units / kUnitsPerGram);
@@ -31,11 +41,22 @@ export function unitsToGramsDecimal(units: number): number {
 
 // Format numbers with commas
 export function fmtNum(n: number): string {
-  if (isNaN(n)) return '0';
+  if (isNaN(n) || n === undefined || n === null) return '0';
   return Math.round(n).toLocaleString('en-US');
 }
 
 // Format money
 export function fmtMoney(n: number): string {
   return `${fmtNum(n)} ${kCurrency}`;
+}
+
+// Format Date as D/M/YYYY
+export function formatInvoiceDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+  } catch (_) {
+    return dateStr;
+  }
 }
