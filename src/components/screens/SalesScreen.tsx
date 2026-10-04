@@ -62,13 +62,18 @@ export const SalesScreen: React.FC = () => {
     newH: string,
     newJ: string,
     newSellP: string,
-    newBuyP: string
+    newBuyP: string,
+    karatOverride?: string
   ) => {
     const g = parseFloat(newG) || 0;
     const h = parseFloat(newH) || 0;
     const j = parseFloat(newJ) || 0;
     const sp = parseFloat(newSellP) || 0;
-    const bp = parseFloat(newBuyP) || 0;
+    const enteredPurity = parseFloat(karatOverride ?? customKarat) || 0;
+    const fineness = enteredPurity > 0 && enteredPurity <= 24
+      ? (enteredPurity / 24) * 1000
+      : enteredPurity;
+    const bp = sp > 0 && fineness > 0 ? sp * (fineness / 875) : 0;
 
     const totalU = weightToUnits(g, h, j);
     const totalG = unitsToGramsDecimal(totalU);
@@ -80,6 +85,11 @@ export const SalesScreen: React.FC = () => {
         setBuyAmount(Math.round(totalG * bp).toString());
       }
     }
+  };
+
+  const handleKaratChange = (value: string) => {
+    setCustomKarat(value);
+    handleWeightOrPriceChange(grams, habba, juz, sellPricePerGram, buyCostPricePerGram, value);
   };
 
   const handleOpenAdd = () => {
@@ -232,12 +242,14 @@ export const SalesScreen: React.FC = () => {
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
         
         {/* Table Column Headers (Green/Amber Themed) */}
-        <div className="bg-emerald-500/15 border-b border-emerald-500/30 text-emerald-400 px-3 py-3 grid grid-cols-5 text-center text-xs font-black">
+        <div className="bg-emerald-500/15 border-b border-emerald-500/30 text-emerald-400 px-3 py-3 grid grid-cols-7 text-center text-xs font-black">
           <div>تاريخ</div>
           <div>وزن</div>
           <div>عيار</div>
-          <div>المبلغ</div>
+          <div>البيع</div>
+          <div>الشراء</div>
           <div>الربح</div>
+          <div>ملاحظات</div>
         </div>
 
         {/* Table Rows List */}
@@ -255,7 +267,7 @@ export const SalesScreen: React.FC = () => {
                 <div
                   key={sale.id}
                   onClick={() => setSelectedSale(sale)}
-                  className="px-3 py-3.5 grid grid-cols-5 items-center text-center text-xs hover:bg-slate-800/60 cursor-pointer transition-colors"
+                  className="px-3 py-3.5 grid grid-cols-7 items-center text-center text-xs hover:bg-slate-800/60 cursor-pointer transition-colors"
                 >
                   <div className="text-slate-300 font-mono text-[11px] truncate">
                     {formatInvoiceDate(sale.date)}
@@ -273,6 +285,10 @@ export const SalesScreen: React.FC = () => {
                     {fmtNum(sale.sellAmount)}
                   </div>
 
+                  <div className="text-amber-300 font-mono font-bold text-xs truncate">
+                    {fmtNum(sale.buyAmount)}
+                  </div>
+
                   <div>
                     <span
                       className={`font-mono font-bold text-xs ${
@@ -282,6 +298,10 @@ export const SalesScreen: React.FC = () => {
                       {fmtNum(profit)}
                     </span>
                   </div>
+
+                  <div className="text-slate-400 text-[10px] truncate" title={sale.notes || ''}>
+                    {sale.notes || '—'}
+                  </div>
                 </div>
               );
             })
@@ -289,11 +309,12 @@ export const SalesScreen: React.FC = () => {
         </div>
 
         {/* 4. Bottom Sticky Summary Row (الإجمالي) */}
-        <div className="bg-emerald-500/20 border-t-2 border-emerald-500/50 px-3 py-3.5 grid grid-cols-5 text-center font-black text-xs text-emerald-300">
+        <div className="bg-emerald-500/20 border-t-2 border-emerald-500/50 px-3 py-3.5 grid grid-cols-7 text-center font-black text-xs text-emerald-300">
           <div>الإجمالي</div>
           <div className="font-mono text-emerald-400 text-sm">{unitsToGhJ(totalUnitsSum)}</div>
           <div>—</div>
           <div className="font-mono text-emerald-400 text-sm truncate">{fmtNum(totalSellSum)}</div>
+          <div className="font-mono text-amber-300 text-sm truncate">{fmtNum(totalBuySum)}</div>
           <div
             className={`font-mono text-sm truncate ${
               totalProfitSum >= 0 ? 'text-emerald-400' : 'text-rose-400'
@@ -301,6 +322,7 @@ export const SalesScreen: React.FC = () => {
           >
             {fmtNum(totalProfitSum)}
           </div>
+          <div>—</div>
         </div>
 
       </div>
@@ -441,7 +463,7 @@ export const SalesScreen: React.FC = () => {
             {/* Karat Selection (Manual / Custom or Standard) */}
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                العيار (تحديد يدوي أو اختياري):
+                العيار / النقاوة (مثال: 21 أو 650):
               </label>
               
               <div className="grid grid-cols-5 gap-1.5 mb-2">
@@ -449,7 +471,7 @@ export const SalesScreen: React.FC = () => {
                   <button
                     key={k}
                     type="button"
-                    onClick={() => setCustomKarat(k)}
+                    onClick={() => handleKaratChange(k)}
                     className={`py-2 rounded-xl text-xs font-bold transition-all ${
                       customKarat === k
                         ? 'bg-emerald-500 text-slate-950 font-black'
@@ -464,8 +486,8 @@ export const SalesScreen: React.FC = () => {
               <input
                 type="text"
                 value={customKarat === '-' ? '' : customKarat}
-                onChange={(e) => setCustomKarat(e.target.value || '-')}
-                placeholder="أو اكتب عيار يدوي مخصص (مثال: 19.5 أو 21.2)"
+                onChange={(e) => handleKaratChange(e.target.value || '-')}
+                placeholder="اكتب النقاوة يدوياً (مثال: 650) أو العيار (21)"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono focus:border-emerald-400 focus:outline-none text-right"
               />
             </div>
@@ -559,6 +581,12 @@ export const SalesScreen: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-slate-400">المشتري:</span>
                   <span className="text-white">{selectedSale.buyer}</span>
+                </div>
+              )}
+              {selectedSale.notes && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400 shrink-0">ملاحظات:</span>
+                  <span className="text-slate-300 text-right">{selectedSale.notes}</span>
                 </div>
               )}
             </div>
