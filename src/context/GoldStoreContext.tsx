@@ -58,16 +58,25 @@ const GoldStoreContext = createContext<GoldStoreContextType | undefined>(undefin
 
 const STORAGE_KEY = 'golden_calculator_db_v4';
 
+const GRAMS_PER_OUNCE = 31.1034768;
+const DEFAULT_OUNCE_USD = 4144.70;
+const DEFAULT_USD_RATE = 8203.10;
+const DEFAULT_GRAM_USD = DEFAULT_OUNCE_USD / GRAMS_PER_OUNCE; // 133.2553...
+const DEFAULT_K24 = Math.round(DEFAULT_GRAM_USD * DEFAULT_USD_RATE); // 1,093,102
+const DEFAULT_K21 = Math.round(DEFAULT_K24 * (21 / 24)); // 956,464
+const DEFAULT_K18 = Math.round(DEFAULT_K24 * (18 / 24)); // 819,826
+const DEFAULT_K22 = Math.round(DEFAULT_K24 * (22 / 24)); // 1,002,010
+
 const INITIAL_RATES: GoldRates = {
-  karat24: 215000,
-  karat21: 188125,
-  karat18: 161250,
-  karat22: 197083,
-  usdRate: 8200,
-  sarRate: 2185,
-  aedRate: 2233,
-  egpRate: 157,
-  globalOunceUsd: 2650,
+  karat24: DEFAULT_K24,
+  karat21: DEFAULT_K21,
+  karat18: DEFAULT_K18,
+  karat22: DEFAULT_K22,
+  usdRate: DEFAULT_USD_RATE,
+  sarRate: 2185.27,
+  aedRate: 2233.40,
+  egpRate: 157.60,
+  globalOunceUsd: DEFAULT_OUNCE_USD,
   lastUpdated: new Date().toISOString(),
 };
 
@@ -111,7 +120,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (data.sales) setSales(data.sales);
         if (data.expenses) setExpenses(data.expenses);
         if (data.partners && data.partners.length > 0) setPartners(data.partners);
-        if (data.rates) setRates(data.rates);
+        if (data.rates) {
+          // If rates were old, refresh to accurate calculations
+          if (data.rates.karat21 < 500000) {
+            setRates(INITIAL_RATES);
+          } else {
+            setRates(data.rates);
+          }
+        }
         if (data.pinCode) {
           setPinCodeState(data.pinCode);
           setIsLocked(true);
