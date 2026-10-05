@@ -10,27 +10,22 @@ export async function GET() {
   let egpRate = 157.60;
   let source = 'sudanakhbar + yahoo/coinbase';
 
-  // 1. Fetch Live Ounce from Coinbase / Gold-API / Yahoo Finance
+  // 1. Fetch the global gold ounce price from Yahoo Finance (GC=F).
   try {
-    const res = await fetch('https://api.coinbase.com/v2/prices/PAXG-USD/spot', {
+    const yahooRes = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=1m', {
       headers: { 'User-Agent': 'Mozilla/5.0' },
       next: { revalidate: 60 },
     });
-    if (res.ok) {
-      const data = await res.json();
-      const p = parseFloat(data?.data?.amount);
-      if (p && p > 1000) ounceUsd = p;
+    if (yahooRes.ok) {
+      const yahooData = await yahooRes.json();
+      const price = Number(yahooData?.chart?.result?.[0]?.meta?.regularMarketPrice);
+      if (price > 1000) {
+        ounceUsd = price;
+        source = 'Yahoo Finance (GC=F)';
+      }
     }
   } catch (_) {
-    try {
-      const res2 = await fetch('https://api.gold-api.com/price/XAU', {
-        next: { revalidate: 60 },
-      });
-      if (res2.ok) {
-        const data2 = await res2.json();
-        if (data2?.price && data2.price > 1000) ounceUsd = data2.price;
-      }
-    } catch (_) {}
+    // Keep the last known value on the client if Yahoo is temporarily unavailable.
   }
 
   // 2. Fetch Sudan Parallel Market Rates from SudanAkhbar / Sudafax
