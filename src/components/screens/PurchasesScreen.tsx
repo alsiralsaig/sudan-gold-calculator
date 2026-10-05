@@ -250,14 +250,17 @@ export const PurchasesScreen: React.FC = () => {
 
       {/* 3. Table Container (Exact Match to Screenshot 1) */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto overscroll-x-contain">
+          <div className="min-w-[680px]">
         
         {/* Table Column Headers (Amber Themed) */}
-        <div className="bg-amber-500/15 border-b border-amber-500/30 text-amber-400 px-3 py-3 grid grid-cols-5 text-center text-xs font-black">
-          <div>تاريخ</div>
-          <div>وزن</div>
-          <div>عيار</div>
+        <div className="bg-amber-500/15 border-b border-amber-500/30 text-amber-400 px-3 py-3 grid grid-cols-6 text-center text-xs font-black">
+          <div>التاريخ</div>
+          <div>الوزن</div>
+          <div>العيار</div>
           <div>المبلغ</div>
           <div>المتبقي</div>
+          <div>ملاحظات</div>
         </div>
 
         {/* Table Rows List */}
@@ -275,7 +278,7 @@ export const PurchasesScreen: React.FC = () => {
                 <div
                   key={pch.id}
                   onClick={() => setSelectedPurchase(pch)}
-                  className="px-3 py-3.5 grid grid-cols-5 items-center text-center text-xs hover:bg-slate-800/60 cursor-pointer transition-colors"
+                  className="px-3 py-3.5 grid grid-cols-6 items-center text-center text-xs hover:bg-slate-800/60 cursor-pointer transition-colors"
                 >
                   <div className="text-slate-300 font-mono text-[11px] truncate">
                     {formatInvoiceDate(pch.date)}
@@ -302,6 +305,10 @@ export const PurchasesScreen: React.FC = () => {
                       </span>
                     )}
                   </div>
+
+                  <div className="text-slate-400 text-[10px] truncate" title={pch.notes || ''}>
+                    {pch.notes || '—'}
+                  </div>
                 </div>
               );
             })
@@ -309,12 +316,15 @@ export const PurchasesScreen: React.FC = () => {
         </div>
 
         {/* 4. Bottom Sticky Summary Row (الإجمالي) */}
-        <div className="bg-amber-500/20 border-t-2 border-amber-500/50 px-3 py-3.5 grid grid-cols-5 text-center font-black text-xs text-amber-300">
+        <div className="bg-amber-500/20 border-t-2 border-amber-500/50 px-3 py-3.5 grid grid-cols-6 text-center font-black text-xs text-amber-300">
           <div>الإجمالي</div>
           <div className="font-mono text-amber-400 text-sm">{unitsToGhJ(totalUnitsSum)}</div>
           <div>—</div>
           <div className="font-mono text-amber-400 text-sm truncate">{fmtNum(totalAmountSum)}</div>
           <div className="font-mono text-rose-400 text-sm truncate">{fmtNum(totalPendingSum)}</div>
+          <div>—</div>
+        </div>
+          </div>
         </div>
 
       </div>
