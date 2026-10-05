@@ -254,56 +254,70 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setStoreName = (name: string) => setStoreNameState(name.trim());
   const setThemeMode = (mode: ThemeMode) => setThemeModeState(mode);
 
-  // Cloud Authentication (Password-Protected to isolate merchants)
-  const signInCloud = async (email: string, pass: string): Promise<{ success: boolean; message: string }> => {
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail || !pass) {
-      return { success: false, message: 'يرجى كتابة البريد وكلمة المرور' };
-    }
-    if (pass.length < 6) {
-      return { success: false, message: 'كلمة المرور يجب أن تتكون من 6 خانات على الأقل' };
-    }
-
-    setUserEmailState(trimmedEmail);
-    setIsCloudSignedIn(true);
+  // Real Neon-backed authentication and sync.
+  const syncPayload = () => ({ storeName, userEmail, purchases, sales, expenses, partners, rates });
+  const applyCloudPayload = (payload: any) => {
+    if (!payload) return;
+    if (Array.isArray(payload.purchases)) setPurchases(payload.purchases);
+    if (Array.isArray(payload.sales)) setSales(payload.sales);
+    if (Array.isArray(payload.expenses)) setExpenses(payload.expenses);
+    if (Array.isArray(payload.partners)) setPartners(payload.partners);
+    if (payload.rates) setRates(payload.rates);
+    if (typeof payload.storeName === 'string') setStoreNameState(payload.storeName);
+  };
+  const syncTime = () => {
     const now = new Date();
-    const timeStr = `${now.getDate()} أكتوبر ${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
-    setLastSyncTime(timeStr);
+    return `${now.getDate()} أكتوبر ${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+  };
 
-    return { success: true, message: 'تم تسجيل الدخول بنجاح وتفعيل المزامنة المشفرة 🔒' };
+  const signInCloud = async (email: string, pass: string): Promise<{ success: boolean; message: string }> => {
+    if (!email.trim() || pass.length < 6) return { success: false, message: 'يرجى كتابة بريد صحيح وكلمة مرور من 6 خانات على الأقل' };
+    try {
+      const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass }) });
+      const result = await response.json();
+      if (!response.ok) return { success: false, message: result.message || 'تعذر تسجيل الدخول' };
+      const trimmedEmail = email.trim().toLowerCase();
+      setUserEmailState(trimmedEmail);
+      setIsCloudSignedIn(true);
+      const cloud = await fetch('/api/sync');
+      const cloudResult = await cloud.json();
+      if (cloudResult.payload) applyCloudPayload(cloudResult.payload);
+      else await fetch('/api/sync', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(syncPayload()) });
+      setLastSyncTime(syncTime());
+      return { success: true, message: 'تم تسجيل الدخول ومزامنة بيانات السحابة 🔒' };
+    } catch { return { success: false, message: 'تعذر الاتصال بقاعدة البيانات' }; }
   };
 
   const signUpCloud = async (email: string, pass: string): Promise<{ success: boolean; message: string }> => {
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail || !pass) {
-      return { success: false, message: 'يرجى كتابة البريد وكلمة المرور' };
-    }
-    if (pass.length < 6) {
-      return { success: false, message: 'كلمة المرور يجب أن تتكون من 6 أحرف أو أرقام على الأقل' };
-    }
-
-    setUserEmailState(trimmedEmail);
-    setIsCloudSignedIn(true);
-    const now = new Date();
-    const timeStr = `${now.getDate()} أكتوبر ${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
-    setLastSyncTime(timeStr);
-
-    return { success: true, message: 'تم إنشاء الحساب السحابي وتشفير البيانات بنجاح ☁️' };
+    if (!email.trim() || pass.length < 6) return { success: false, message: 'يرجى كتابة بريد صحيح وكلمة مرور من 6 خانات على الأقل' };
+    try {
+      const response = await fetch('/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass }) });
+      const result = await response.json();
+      if (!response.ok) return { success: false, message: result.message || 'تعذر إنشاء الحساب' };
+      setUserEmailState(email.trim().toLowerCase());
+      setIsCloudSignedIn(true);
+      await fetch('/api/sync', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(syncPayload()) });
+      setLastSyncTime(syncTime());
+      return { success: true, message: 'تم إنشاء الحساب ورفع بيانات جهازك إلى Neon ☁️' };
+    } catch { return { success: false, message: 'تعذر الاتصال بقاعدة البيانات' }; }
   };
 
   const signOutCloud = () => {
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     setIsCloudSignedIn(false);
+    setLastSyncTime('');
   };
 
   const syncWithCloud = async (): Promise<boolean> => {
     try {
-      const now = new Date();
-      const timeStr = `${now.getDate()} أكتوبر ${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
-      setLastSyncTime(timeStr);
+      const response = await fetch('/api/sync');
+      if (!response.ok) return false;
+      const result = await response.json();
+      // Cloud wins on conflicts, as agreed.
+      if (result.payload) applyCloudPayload(result.payload);
+      setLastSyncTime(syncTime());
       return true;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   };
 
   const addPurchase = (p: Omit<Purchase, 'id' | 'payments' | 'updatedAt'>) => {
