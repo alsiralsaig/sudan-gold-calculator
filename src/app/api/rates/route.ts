@@ -44,15 +44,20 @@ export async function GET() {
 
     if (sudanRes.ok) {
       const html = await sudanRes.text();
-      // Extract latest numbers (e.g. 8100 - 8250)
-      const matches = html.match(/(\d{4,5}(?:\.\d+)?)\s*(?:جنيه|ج\.س)/g);
-      if (matches && matches.length > 0) {
-        for (const m of matches) {
-          const num = parseFloat(m.replace(/[^\d.]/g, ''));
-          if (num >= 5000 && num <= 15000) {
-            usdRate = num;
-            source = 'sudanakhbar (مباشر)';
-            break;
+      // Follow the newest Sudan Akhbar article about the parallel-market dollar.
+      // The landing page also contains bank rates, so taking the first number
+      // (the old implementation) could incorrectly return 8203 instead of the
+      // published selling rate such as 8400.
+      const article = html.match(/href="(https?:\/\/www\.sudanakhbar\.com\/\d+)"[^>]+title="[^"]*الدولار[^"]*"/i);
+      if (article?.[1]) {
+        const articleRes = await fetch(article[1], { headers: { 'User-Agent': 'Mozilla/5.0' }, next: { revalidate: 300 } });
+        if (articleRes.ok) {
+          const articleHtml = await articleRes.text();
+          const sellMatch = articleHtml.match(/متوسط\s+سعر\s+بيع\s+الدولار[^\d]{0,100}([\d,]+)/i);
+          const sell = sellMatch ? parseFloat(sellMatch[1].replace(/,/g, '')) : 0;
+          if (sell >= 5000 && sell <= 15000) {
+            usdRate = sell;
+            source = 'sudanakhbar (سعر البيع المنشور)';
           }
         }
       }
