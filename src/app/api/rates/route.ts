@@ -61,6 +61,33 @@ export async function GET() {
     // Keep standard parallel market rate
   }
 
+  // 3. SudanFax fallback for the published Sudanese dollar selling rate.
+  // It is only used when Sudan Akhbar is unavailable or has no valid value.
+  if (source === 'sudanakhbar + yahoo/coinbase' || source === 'Yahoo Finance (GC=F)') {
+    try {
+      const faxSearch = await fetch('https://sudafax.com/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1', {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        next: { revalidate: 300 },
+      });
+      if (faxSearch.ok) {
+        const faxHtml = await faxSearch.text();
+        const faxArticle = faxHtml.match(/href="(https?:\/\/sudafax\.com\/\d+\/[^"]+)"/i);
+        if (faxArticle?.[1]) {
+          const faxRes = await fetch(faxArticle[1], { headers: { 'User-Agent': 'Mozilla/5.0' }, next: { revalidate: 300 } });
+          if (faxRes.ok) {
+            const faxBody = await faxRes.text();
+            const faxMatch = faxBody.match(/سعر\s+بيع\s+الدولار[^\d]{0,100}([\d,]+(?:\.\d+)?)/i);
+            const faxRate = faxMatch ? parseFloat(faxMatch[1].replace(/,/g, '')) : 0;
+            if (faxRate >= 5000 && faxRate <= 15000) {
+              usdRate = faxRate;
+              source = 'SudanFax (سعر البيع المنشور)';
+            }
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   // Exact Mathematical Calculations
   const gramUsd = ounceUsd / GRAMS_PER_OUNCE;
   const karat24 = Math.round(gramUsd * usdRate);
