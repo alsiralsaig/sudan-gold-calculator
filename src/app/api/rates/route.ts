@@ -5,12 +5,9 @@ const GRAMS_PER_OUNCE = 31.1034768;
 export async function GET() {
   let ounceUsd = 4144.70;
   let usdRate = 8400.00;
-  let sarRate = 2240.00;
-  let aedRate = 2288.00;
-  let egpRate = 173.00;
   let source = 'sudanakhbar + yahoo/coinbase';
 
-  // 1. Fetch the global gold ounce price from Yahoo Finance (GC=F).
+  // 1. Fetch live global gold price from Yahoo Finance
   try {
     const yahooRes = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=1m', {
       headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -24,8 +21,42 @@ export async function GET() {
         source = 'Yahoo Finance (GC=F)';
       }
     }
-  } catch (_) {
-    // Keep the last known value on the client if Yahoo is temporarily unavailable.
+  } catch (_) {}
+
+  // 1b. Fallback live gold from gold-api.com if Yahoo failed
+  if (source === 'sudanakhbar + yahoo/coinbase') {
+    try {
+      const goldApiRes = await fetch('https://api.gold-api.com/price/XAU', {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        next: { revalidate: 60 },
+      });
+      if (goldApiRes.ok) {
+        const goldData = await goldApiRes.json();
+        const price = Number(goldData?.price);
+        if (price > 1000) {
+          ounceUsd = price;
+          source = 'Gold-API (XAU)';
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 1c. Fallback live gold from Coinbase PAXG if needed
+  if (source === 'sudanakhbar + yahoo/coinbase') {
+    try {
+      const cbRes = await fetch('https://api.coinbase.com/v2/prices/PAXG-USD/spot', {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        next: { revalidate: 60 },
+      });
+      if (cbRes.ok) {
+        const cbData = await cbRes.json();
+        const price = Number(cbData?.data?.amount);
+        if (price > 1000) {
+          ounceUsd = price;
+          source = 'Coinbase (PAXG/Gold)';
+        }
+      }
+    } catch (_) {}
   }
 
   // 2. Fetch Sudan Parallel Market Rates from SudanAkhbar / Sudafax
@@ -39,10 +70,6 @@ export async function GET() {
 
     if (sudanRes.ok) {
       const html = await sudanRes.text();
-      // Follow the newest Sudan Akhbar article about the parallel-market dollar.
-      // The landing page also contains bank rates, so taking the first number
-      // (the old implementation) could incorrectly return 8203 instead of the
-      // published selling rate such as 8400.
       const article = html.match(/href="(https?:\/\/www\.sudanakhbar\.com\/\d+)"[^>]+title="[^"]*الدولار[^"]*"/i);
       if (article?.[1]) {
         const articleRes = await fetch(article[1], { headers: { 'User-Agent': 'Mozilla/5.0' }, next: { revalidate: 300 } });
@@ -52,18 +79,14 @@ export async function GET() {
           const sell = sellMatch ? parseFloat(sellMatch[1].replace(/,/g, '')) : 0;
           if (sell >= 5000 && sell <= 15000) {
             usdRate = sell;
-            source = 'sudanakhbar (سعر البيع المنشور)';
           }
         }
       }
     }
-  } catch (_) {
-    // Keep standard parallel market rate
-  }
+  } catch (_) {}
 
-  // 3. SudanFax fallback for the published Sudanese dollar selling rate.
-  // It is only used when Sudan Akhbar is unavailable or has no valid value.
-  if (source === 'sudanakhbar + yahoo/coinbase' || source === 'Yahoo Finance (GC=F)') {
+  // 3. Sudafax fallback for parallel rate
+  if (usdRate === 8400.00) {
     try {
       const faxSearch = await fetch('https://sudafax.com/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1', {
         headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -80,7 +103,6 @@ export async function GET() {
             const faxRate = faxMatch ? parseFloat(faxMatch[1].replace(/,/g, '')) : 0;
             if (faxRate >= 5000 && faxRate <= 15000) {
               usdRate = faxRate;
-              source = 'SudanFax (سعر البيع المنشور)';
             }
           }
         }
@@ -96,8 +118,12 @@ export async function GET() {
   const karat18 = Math.round(karat24 * (18 / 24));
   const ounceSdg = Math.round(ounceUsd * usdRate);
 
+  const sarRate = Math.round((usdRate / 3.75) * 100) / 100;
+  const aedRate = Math.round((usdRate / 3.6725) * 100) / 100;
+  const egpRate = Math.round((usdRate / 48.5) * 100) / 100;
+
   return NextResponse.json({
-    ounceUsd,
+    ounceUsd: parseFloat(ounceUsd.toFixed(2)),
     gramUsd: parseFloat(gramUsd.toFixed(2)),
     usdRate,
     sarRate,

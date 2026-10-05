@@ -145,7 +145,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (data.expenses) setExpenses(data.expenses);
         if (data.partners) setPartners(safePartners);
         if (data.rates) {
-          if (data.rates.karat21 < 500000) {
+          if (data.rates.karat21 < 500000 || data.rates.usdRate === 8203.10 || !data.rates.usdRate) {
             setRates(INITIAL_RATES);
           } else {
             setRates(data.rates);
@@ -194,6 +194,45 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       console.warn('Failed to save storage:', e);
     }
   }, [purchases, sales, expenses, partners, rates, pinCode, userEmail, storeName, themeMode, lastSyncTime, isCloudSignedIn]);
+
+  // Automatic Background Live Rates Fetch (on load, every 3 mins, and on window focus)
+  useEffect(() => {
+    const fetchLiveRates = async () => {
+      try {
+        const res = await fetch('/api/rates');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.karat21 && data.karat21 > 500000) {
+            setRates((prev) => ({
+              ...prev,
+              globalOunceUsd: data.ounceUsd || prev.globalOunceUsd,
+              usdRate: data.usdRate || prev.usdRate,
+              sarRate: data.sarRate || prev.sarRate,
+              aedRate: data.aedRate || prev.aedRate,
+              egpRate: data.egpRate || prev.egpRate,
+              karat24: data.karat24 || prev.karat24,
+              karat21: data.karat21 || prev.karat21,
+              karat18: data.karat18 || prev.karat18,
+              karat22: data.karat22 || prev.karat22,
+              lastUpdated: data.lastUpdated || new Date().toISOString(),
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn('Auto live rates sync error:', err);
+      }
+    };
+
+    fetchLiveRates();
+    const interval = setInterval(fetchLiveRates, 3 * 60 * 1000);
+    const handleFocus = () => fetchLiveRates();
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   // Apply Theme Mode Dynamically to HTML Root and Body
   useEffect(() => {

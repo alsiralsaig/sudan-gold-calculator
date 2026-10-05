@@ -44,7 +44,7 @@ export const GoldPriceScreen: React.FC = () => {
   const calcKarat18 = Math.round(calcKarat24 * (18 / 24));
   const calcOunceSdg = Math.round(ounceUsd * dollarRate);
 
-  // Sync with global store
+  // Sync with global store when local changes occur
   useEffect(() => {
     updateRates({
       globalOunceUsd: ounceUsd,
@@ -58,6 +58,23 @@ export const GoldPriceScreen: React.FC = () => {
       karat22: isManualKaratMode && parseFloat(manual22) ? parseFloat(manual22) : calcKarat22,
     });
   }, [ounceUsd, dollarRate, sarRate, aedRate, egpRate, isManualKaratMode, manual24, manual21, manual18, manual22]);
+
+  // Keep screen updated when global store auto-syncs in background
+  useEffect(() => {
+    if (!isEditingDollar && !isManualKaratMode) {
+      if (rates.globalOunceUsd && rates.globalOunceUsd !== ounceUsd) {
+        setOunceUsd(rates.globalOunceUsd);
+        setOunceInput(rates.globalOunceUsd.toString());
+      }
+      if (rates.usdRate && rates.usdRate !== dollarRate) {
+        setDollarRate(rates.usdRate);
+        setDollarInput(rates.usdRate.toString());
+      }
+      if (rates.sarRate && rates.sarRate !== sarRate) setSarRate(rates.sarRate);
+      if (rates.aedRate && rates.aedRate !== aedRate) setAedRate(rates.aedRate);
+      if (rates.egpRate && rates.egpRate !== egpRate) setEgpRate(rates.egpRate);
+    }
+  }, [rates.globalOunceUsd, rates.usdRate, rates.sarRate, rates.aedRate, rates.egpRate, isEditingDollar, isManualKaratMode]);
 
   // Live Sync Function calling /api/rates
   const handleLiveMarketSync = async () => {
