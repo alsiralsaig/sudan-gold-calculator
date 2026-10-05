@@ -16,7 +16,9 @@ export async function POST(request: Request) {
     await setSession(id);
     return NextResponse.json({ success: true, email: normalized });
   } catch (e: any) {
+    console.error('Supabase signup error:', e);
     const duplicate = String(e?.message || '').toLowerCase().includes('duplicate') || String(e?.code || '') === '23505';
-    return NextResponse.json({ success: false, message: duplicate ? 'البريد مستخدم بالفعل' : 'تعذر إنشاء الحساب' }, { status: duplicate ? 409 : 500 });
+    const diagnostic = duplicate ? 'البريد مستخدم بالفعل' : `تعذر إنشاء الحساب: ${e?.message || 'خطأ في الاتصال بقاعدة البيانات'}`;
+    return NextResponse.json({ success: false, message: diagnostic }, { status: duplicate ? 409 : 500 });
   }
 }
