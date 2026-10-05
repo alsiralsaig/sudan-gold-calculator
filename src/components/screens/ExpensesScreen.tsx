@@ -23,6 +23,8 @@ export const ExpensesScreen: React.FC = () => {
     partners,
     addExpense,
     archiveExpense,
+    updateExpense,
+    deleteExpense,
   } = useGoldStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -194,6 +196,15 @@ export const ExpensesScreen: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {filteredExpenses.length > 0 && <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">
+        <div className="text-[11px] text-slate-400">إجراءات الصفحة على السجلات الظاهرة فقط</div>
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={() => { if (confirm('أرشفة كل السجلات الظاهرة؟')) filteredExpenses.forEach(x => archiveExpense(x.id)); }} className="py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-black">أرشفة الكل</button>
+          <button onClick={() => { const value = prompt('الملاحظات الجديدة'); if (value !== null) filteredExpenses.forEach(x => updateExpense({ ...x, notes: value })); }} className="py-2 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[11px] font-black">تعديل الكل</button>
+          <button onClick={() => { if (confirm('حذف نهائي لكل السجلات الظاهرة؟')) filteredExpenses.forEach(x => deleteExpense(x.id)); }} className="py-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-black">حذف الكل</button>
+        </div>
+      </div>}
 
       {/* 3. Table Container (Exact Match to Purchases / Sales Table List Design) */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">

@@ -34,6 +34,7 @@ export const SalesScreen: React.FC = () => {
     addSale,
     updateSale,
     archiveSale,
+    deleteSale,
     rates,
   } = useGoldStore();
 
@@ -244,6 +245,15 @@ export const SalesScreen: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {filteredSales.length > 0 && <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">
+        <div className="text-[11px] text-slate-400">إجراءات الصفحة على السجلات الظاهرة فقط</div>
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={() => { if (confirm('أرشفة كل السجلات الظاهرة؟')) filteredSales.forEach(x => archiveSale(x.id)); }} className="py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-black">أرشفة الكل</button>
+          <button onClick={() => { const value = prompt('الملاحظات الجديدة'); if (value !== null) filteredSales.forEach(x => updateSale({ ...x, notes: value })); }} className="py-2 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[11px] font-black">تعديل الكل</button>
+          <button onClick={() => { if (confirm('حذف نهائي لكل السجلات الظاهرة؟')) filteredSales.forEach(x => deleteSale(x.id)); }} className="py-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-black">حذف الكل</button>
+        </div>
+      </div>}
 
       {/* 3. Table Container (Matching the Invoices Grid Design) */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">

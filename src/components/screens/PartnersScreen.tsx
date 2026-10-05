@@ -15,8 +15,11 @@ export const PartnersScreen: React.FC = () => {
     addPartner,
     updatePartner,
     archivePartner,
+    deletePartner,
     expenses,
   } = useGoldStore();
+
+  const visiblePartners = partners.filter((p) => !p.archived);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
@@ -72,12 +75,26 @@ export const PartnersScreen: React.FC = () => {
     setShowAddModal(false);
   };
 
+  const handleBulkPartnerEdit = () => {
+    const value = prompt('نسبة الربح الجديدة للشركاء الظاهرين');
+    if (value !== null) visiblePartners.forEach(p => updatePartner({ ...p, profitPercent: parseFloat(value) || p.profitPercent }));
+  };
+
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-200">
-      
+          <div className="mb-4 bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">
+            <div className="text-[11px] text-slate-400">إجراءات الصفحة على الشركاء الظاهرين فقط</div>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => { if (confirm('أرشفة كل الشركاء الظاهرين؟')) visiblePartners.forEach(p => archivePartner(p.id)); }} className="py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-black">أرشفة الكل</button>
+              <button onClick={handleBulkPartnerEdit} className="py-2 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[11px] font-black">تعديل الكل</button>
+              <button onClick={() => { if (confirm('حذف نهائي لكل الشركاء الظاهرين؟')) visiblePartners.forEach(p => deletePartner(p.id)); }} className="py-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-black">حذف الكل</button>
+            </div>
+          </div>
+
+
       {/* TOP SUMMARY CARD WITH STACKED TITLES AND NUMBER UNDERNEATH */}
       <div className="bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-950 p-5 sm:p-6 rounded-3xl border-2 border-amber-500/50 shadow-2xl space-y-5">
-        
+
         {/* Header Total Capital */}
         <div className="text-center space-y-1">
           <span className="text-xs text-slate-400 font-bold block">إجمالي رأس المال للشركاء</span>
@@ -90,7 +107,7 @@ export const PartnersScreen: React.FC = () => {
 
         {/* 4 COLUMNS ROW: STACKED TITLES ("صافي\nالربح", "منصرفات\nعامة", "منصرفات\nخاصة", "نسب\nالربح") */}
         <div className="grid grid-cols-4 items-center justify-between text-center divide-x divide-x-reverse divide-slate-800">
-          
+
           {/* Col 1: صافي الربح */}
           <div className="px-1 sm:px-2 space-y-1">
             <div className="text-[11px] sm:text-xs font-black text-slate-300 leading-tight">
@@ -162,7 +179,7 @@ export const PartnersScreen: React.FC = () => {
 
       {/* Partners Cards List */}
       <div className="space-y-4">
-        {partners.filter((p) => !p.archived).map((p) => {
+        {visiblePartners.map((p) => {
           // Partner share of profit
           const profitShare = (netProfit * p.profitPercent) / 100;
           // Partner private expenses

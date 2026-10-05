@@ -366,10 +366,10 @@ export const CalculatorScreen: React.FC = () => {
 
             {/* Row 5 */}
             <button
-              onClick={handleStdToggleSign}
-              className="h-14 sm:h-16 rounded-3xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-lg flex items-center justify-center active:scale-90 transition-transform"
+              onClick={() => handleStdOperator('+')}
+              className="h-14 sm:h-16 rounded-3xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/30 active:scale-90 transition-transform"
             >
-              -/+
+              +
             </button>
             <button
               onClick={() => handleStdNumber('0')}
