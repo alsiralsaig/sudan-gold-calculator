@@ -33,7 +33,7 @@ export const SalesScreen: React.FC = () => {
     sales,
     addSale,
     updateSale,
-    deleteSale,
+    archiveSale,
     rates,
   } = useGoldStore();
 
@@ -168,7 +168,7 @@ export const SalesScreen: React.FC = () => {
 
   // Filter & Search Logic
   const filteredSales = useMemo(() => {
-    return sales.filter((item) => {
+    return sales.filter((item) => !item.archived).filter((item) => {
       // Search
       const q = searchQuery.toLowerCase().trim();
       const matchSearch =
@@ -612,7 +612,7 @@ export const SalesScreen: React.FC = () => {
               <button
                 onClick={() => {
                   if (confirm('هل تريد حذف هذه الفاتورة؟')) {
-                    deleteSale(selectedSale.id);
+                    archiveSale(selectedSale.id);
                     setSelectedSale(null);
                   }
                 }}

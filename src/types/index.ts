@@ -16,6 +16,7 @@ export interface Purchase {
   bankAccount: string;
   notes: string;
   payments: Payment[];
+  archived?: boolean;
   updatedAt?: string;
 }
 
@@ -29,6 +30,7 @@ export interface Sale {
   buyer: string;
   notes: string;
   purchaseId?: string;
+  archived?: boolean;
   updatedAt?: string;
 }
 
@@ -40,6 +42,7 @@ export interface Expense {
   target: string; // 'عام' or partner name
   name: string;
   notes: string;
+  archived?: boolean;
   updatedAt?: string;
 }
 
@@ -50,6 +53,7 @@ export interface Partner {
   profitPercent: number;
   phone: string;
   notes: string;
+  archived?: boolean;
   updatedAt?: string;
 }
 

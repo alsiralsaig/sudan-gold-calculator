@@ -44,19 +44,27 @@ interface GoldStoreContextType {
   addPurchase: (p: Omit<Purchase, 'id' | 'payments' | 'updatedAt'>) => void;
   updatePurchase: (p: Purchase) => void;
   deletePurchase: (id: string) => void;
+  archivePurchase: (id: string) => void;
+  restorePurchase: (id: string) => void;
   addPaymentToPurchase: (purchaseId: string, payment: Omit<Payment, 'id'>) => void;
 
   addSale: (s: Omit<Sale, 'id' | 'updatedAt'>) => void;
   updateSale: (s: Sale) => void;
   deleteSale: (id: string) => void;
+  archiveSale: (id: string) => void;
+  restoreSale: (id: string) => void;
 
   addExpense: (e: Omit<Expense, 'id' | 'updatedAt'>) => void;
   updateExpense: (e: Expense) => void;
   deleteExpense: (id: string) => void;
+  archiveExpense: (id: string) => void;
+  restoreExpense: (id: string) => void;
 
   addPartner: (p: Omit<Partner, 'id' | 'updatedAt'>) => void;
   updatePartner: (p: Partner) => void;
   deletePartner: (id: string) => void;
+  archivePartner: (id: string) => void;
+  restorePartner: (id: string) => void;
 
   updateRates: (r: Partial<GoldRates>) => void;
   setPinCode: (pin: string) => void;
@@ -228,25 +236,27 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [themeMode]);
 
   // Derived Calculations
-  const totalCapital = partners.reduce((sum, p) => sum + (p.capital || 0), 0);
-  const totalProfitPercent = partners.reduce((sum, p) => sum + (p.profitPercent || 0), 0);
+  const totalCapital = partners.filter((p) => !p.archived).reduce((sum, p) => sum + (p.capital || 0), 0);
+  const totalProfitPercent = partners.filter((p) => !p.archived).reduce((sum, p) => sum + (p.profitPercent || 0), 0);
 
   const totalSales = sales.reduce((sum, s) => sum + (s.sellAmount || 0), 0);
   const totalCost = sales.reduce((sum, s) => sum + (s.buyAmount || 0), 0);
   const grossProfit = totalSales - totalCost;
 
   const generalExpenses = expenses
+    .filter((e) => !e.archived)
     .filter((e) => e.target === 'عام' || !e.target)
     .reduce((sum, e) => sum + (e.amount || 0), 0);
 
   const privateExpenses = expenses
+    .filter((e) => !e.archived)
     .filter((e) => e.target !== 'عام' && e.target)
     .reduce((sum, e) => sum + (e.amount || 0), 0);
 
   const netProfit = grossProfit - generalExpenses;
 
-  const purchasedUnits = purchases.reduce((sum, p) => sum + (p.units || 0), 0);
-  const soldUnits = sales.reduce((sum, s) => sum + (s.units || 0), 0);
+  const purchasedUnits = purchases.filter((p) => !p.archived).reduce((sum, p) => sum + (p.units || 0), 0);
+  const soldUnits = sales.filter((s) => !s.archived).reduce((sum, s) => sum + (s.units || 0), 0);
   const currentStockUnits = Math.max(0, purchasedUnits - soldUnits);
 
   // Actions
@@ -354,9 +364,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setPurchases((prev) => prev.map((item) => (item.id === p.id ? { ...p, updatedAt: new Date().toISOString() } : item)));
   };
 
-  const deletePurchase = (id: string) => {
-    setPurchases((prev) => prev.filter((item) => item.id !== id));
-  };
+  const deletePurchase = (id: string) => setPurchases((prev) => prev.filter((item) => item.id !== id));
+  const archivePurchase = (id: string) => setPurchases((prev) => prev.map((item) => item.id === id ? { ...item, archived: true } : item));
+  const restorePurchase = (id: string) => setPurchases((prev) => prev.map((item) => item.id === id ? { ...item, archived: false } : item));
 
   const addPaymentToPurchase = (purchaseId: string, payment: Omit<Payment, 'id'>) => {
     setPurchases((prev) =>
@@ -389,9 +399,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setSales((prev) => prev.map((item) => (item.id === s.id ? { ...s, updatedAt: new Date().toISOString() } : item)));
   };
 
-  const deleteSale = (id: string) => {
-    setSales((prev) => prev.filter((item) => item.id !== id));
-  };
+  const deleteSale = (id: string) => setSales((prev) => prev.filter((item) => item.id !== id));
+  const archiveSale = (id: string) => setSales((prev) => prev.map((item) => item.id === id ? { ...item, archived: true } : item));
+  const restoreSale = (id: string) => setSales((prev) => prev.map((item) => item.id === id ? { ...item, archived: false } : item));
 
   const addExpense = (e: Omit<Expense, 'id' | 'updatedAt'>) => {
     const newE: Expense = {
@@ -406,9 +416,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setExpenses((prev) => prev.map((item) => (item.id === e.id ? { ...e, updatedAt: new Date().toISOString() } : item)));
   };
 
-  const deleteExpense = (id: string) => {
-    setExpenses((prev) => prev.filter((item) => item.id !== id));
-  };
+  const deleteExpense = (id: string) => setExpenses((prev) => prev.filter((item) => item.id !== id));
+  const archiveExpense = (id: string) => setExpenses((prev) => prev.map((item) => item.id === id ? { ...item, archived: true } : item));
+  const restoreExpense = (id: string) => setExpenses((prev) => prev.map((item) => item.id === id ? { ...item, archived: false } : item));
 
   const addPartner = (p: Omit<Partner, 'id' | 'updatedAt'>) => {
     const newPt: Partner = {
@@ -423,9 +433,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setPartners((prev) => prev.map((item) => (item.id === p.id ? { ...p, updatedAt: new Date().toISOString() } : item)));
   };
 
-  const deletePartner = (id: string) => {
-    setPartners((prev) => prev.filter((item) => item.id !== id));
-  };
+  const deletePartner = (id: string) => setPartners((prev) => prev.filter((item) => item.id !== id));
+  const archivePartner = (id: string) => setPartners((prev) => prev.map((item) => item.id === id ? { ...item, archived: true } : item));
+  const restorePartner = (id: string) => setPartners((prev) => prev.map((item) => item.id === id ? { ...item, archived: false } : item));
 
   const updateRates = (newRates: Partial<GoldRates>) => {
     setRates((prev) => ({
@@ -534,16 +544,24 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         addPurchase,
         updatePurchase,
         deletePurchase,
+        archivePurchase,
+        restorePurchase,
         addPaymentToPurchase,
         addSale,
         updateSale,
         deleteSale,
+        archiveSale,
+        restoreSale,
         addExpense,
         updateExpense,
         deleteExpense,
+        archiveExpense,
+        restoreExpense,
         addPartner,
         updatePartner,
         deletePartner,
+        archivePartner,
+        restorePartner,
         updateRates,
         setPinCode,
         unlockApp,

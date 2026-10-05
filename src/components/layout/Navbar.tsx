@@ -15,7 +15,8 @@ import {
   RotateCw,
   Sparkles,
   ChevronLeft,
-  Cloud
+  Cloud,
+  Archive
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum } from '../../core/format';
@@ -90,6 +91,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       color: 'text-amber-400 bg-amber-500/10',
     },
     {
+      id: 'archive',
+      label: 'الأرشيف',
+      desc: 'استعادة السجلات المؤرشفة أو حذفها نهائياً',
+      icon: Archive,
+      color: 'text-amber-400 bg-amber-500/10',
+    },
+    {
       id: 'settings',
       label: 'الإعدادات والمزامنة السحابية',
       desc: 'مزامنة الأجهزة، رمز PIN، والنسخ الاحتياطي',
@@ -114,6 +122,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         return 'سجل المصروفات';
       case 'gold_price':
         return 'أسعار الذهب والعملات';
+      case 'archive':
+        return 'الأرشيف';
       case 'settings':
         return 'الإعدادات والمزامنة';
       default:

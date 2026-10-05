@@ -33,7 +33,7 @@ export const PurchasesScreen: React.FC = () => {
     purchases,
     addPurchase,
     updatePurchase,
-    deletePurchase,
+    archivePurchase,
     addPaymentToPurchase,
     rates,
   } = useGoldStore();
@@ -172,7 +172,7 @@ export const PurchasesScreen: React.FC = () => {
 
   // Filter & Search Logic
   const filteredPurchases = useMemo(() => {
-    return purchases.filter((item) => {
+    return purchases.filter((item) => !item.archived).filter((item) => {
       // Search
       const q = searchQuery.toLowerCase().trim();
       const matchSearch =
@@ -605,7 +605,7 @@ export const PurchasesScreen: React.FC = () => {
               <button
                 onClick={() => {
                   if (confirm('هل تريد حذف هذه الفاتورة؟')) {
-                    deletePurchase(selectedPurchase.id);
+                    archivePurchase(selectedPurchase.id);
                     setSelectedPurchase(null);
                   }
                 }}

@@ -22,7 +22,7 @@ export const ExpensesScreen: React.FC = () => {
     expenses,
     partners,
     addExpense,
-    deleteExpense,
+    archiveExpense,
   } = useGoldStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,7 +68,7 @@ export const ExpensesScreen: React.FC = () => {
 
   // Filter & Search Logic
   const filteredExpenses = useMemo(() => {
-    return expenses.filter((item) => {
+    return expenses.filter((item) => !item.archived).filter((item) => {
       // Type Filter
       if (filterType === 'general' && item.target !== 'عام' && item.target) {
         return false;
@@ -374,7 +374,7 @@ export const ExpensesScreen: React.FC = () => {
                     onChange={(e) => setSelectedPartner(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white text-xs focus:border-cyan-400 focus:outline-none"
                   >
-                    {partners.map((p) => (
+                    {partners.filter((p) => !p.archived).map((p) => (
                       <option key={p.id} value={p.name}>
                         {p.name}
                       </option>
@@ -460,13 +460,13 @@ export const ExpensesScreen: React.FC = () => {
               <button
                 onClick={() => {
                   if (confirm('هل تريد حذف هذا المصروف؟')) {
-                    deleteExpense(selectedExpense.id);
+                    archiveExpense(selectedExpense.id);
                     setSelectedExpense(null);
                   }
                 }}
                 className="w-full py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40"
               >
-                حذف المصروف
+                أرشفة المصروف
               </button>
             </div>
           </div>

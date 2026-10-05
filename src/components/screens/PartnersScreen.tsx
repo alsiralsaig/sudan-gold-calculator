@@ -14,7 +14,7 @@ export const PartnersScreen: React.FC = () => {
     totalProfitPercent,
     addPartner,
     updatePartner,
-    deletePartner,
+    archivePartner,
     expenses,
   } = useGoldStore();
 
@@ -162,7 +162,7 @@ export const PartnersScreen: React.FC = () => {
 
       {/* Partners Cards List */}
       <div className="space-y-4">
-        {partners.map((p) => {
+        {partners.filter((p) => !p.archived).map((p) => {
           // Partner share of profit
           const profitShare = (netProfit * p.profitPercent) / 100;
           // Partner private expenses
@@ -199,8 +199,8 @@ export const PartnersScreen: React.FC = () => {
                   </button>
                   <button
                     onClick={() => {
-                      if (confirm(`هل أنت متأكد من حذف الشريك (${p.name})؟`)) {
-                        deletePartner(p.id);
+                      if (confirm(`هل أنت متأكد من أرشفة الشريك (${p.name})؟`)) {
+                        archivePartner(p.id);
                       }
                     }}
                     className="p-2 bg-slate-800 hover:bg-rose-900/40 text-rose-400 rounded-xl transition-colors"
