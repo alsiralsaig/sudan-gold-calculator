@@ -126,7 +126,17 @@ export const SalesScreen: React.FC = () => {
     const h = parseFloat(habba) || 0;
     const j = parseFloat(juz) || 0;
     const totalUnits = weightToUnits(g, h, j);
-    const totalSell = parseFloat(sellAmount) || 0;
+    const enteredPurity = parseFloat(customKarat) || 0;
+    const fineness = enteredPurity > 0 && enteredPurity <= 24
+      ? (enteredPurity / 24) * 1000
+      : enteredPurity;
+    const totalGrams = unitsToGramsDecimal(totalUnits);
+    const calculatedSell = totalGrams > 0 && parseFloat(sellPricePerGram) > 0 && fineness > 0
+      ? Math.round(totalGrams * parseFloat(sellPricePerGram) * (fineness / 875))
+      : 0;
+    // Always use the purity-adjusted formula when a weight and sale price exist.
+    // The manual amount remains a fallback for entries without those inputs.
+    const totalSell = calculatedSell || (parseFloat(sellAmount) || 0);
     const totalBuy = parseFloat(buyAmount) || 0;
 
     if (totalUnits <= 0 && totalSell <= 0) {
