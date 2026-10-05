@@ -206,92 +206,95 @@ export const ExpensesScreen: React.FC = () => {
         </div>
       </div>}
 
-      {/* 3. Table Container (Exact Match to Purchases / Sales Table List Design) */}
+      {/* 3. Table Container */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto overscroll-x-contain">
-          <div className="min-w-[760px]">
-        {/* Table Column Headers (Rose/Amber Themed) */}
-        <div className="bg-rose-500/15 border-b border-rose-500/30 text-rose-400 px-3 py-3 grid grid-cols-12 text-center text-xs font-black">
-          <div className="col-span-2">التاريخ</div>
-          <div className="col-span-3">بيان المصروف</div>
-          <div className="col-span-3">الملاحظات</div>
-          <div className="col-span-2">النوع</div>
-          <div className="col-span-2">المبلغ</div>
+          <table className="w-full min-w-[700px] text-xs border-collapse" dir="rtl">
+            <thead>
+              <tr className="bg-rose-500/15 border-b border-rose-500/30 text-rose-400 font-black">
+                <th className="py-3 px-3 text-right w-[18%]">التاريخ</th>
+                <th className="py-3 px-3 text-center w-[18%]">المبلغ</th>
+                <th className="py-3 px-3 text-right w-[24%]">بيان المصروف</th>
+                <th className="py-3 px-3 text-center w-[16%]">النوع</th>
+                <th className="py-3 px-3 text-right w-[24%]">الملاحظات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/80">
+              {filteredExpenses.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-center py-12 text-slate-500 text-xs">
+                    <TrendingDown className="w-8 h-8 mx-auto text-slate-600 opacity-60 mb-2" />
+                    <p>لا توجد منصرفات مسجلة في هذه الفترة</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredExpenses.map((item) => {
+                  const isGeneral = item.target === 'عام' || !item.target;
+
+                  return (
+                    <tr
+                      key={item.id}
+                      onClick={() => setSelectedExpense(item)}
+                      className="hover:bg-slate-800/60 cursor-pointer transition-colors"
+                    >
+                      <td className="py-3.5 px-3 text-right text-slate-300 font-mono text-[11px] whitespace-nowrap">
+                        {formatInvoiceDate(item.date)}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center text-rose-400 font-mono font-black text-xs whitespace-nowrap">
+                        {fmtNum(item.amount)}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right text-white font-bold text-xs truncate max-w-[180px]">
+                        {item.name}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                        {isGeneral ? (
+                          <span className="inline-block px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 font-bold text-[10px]">
+                            عام
+                          </span>
+                        ) : (
+                          <span className="inline-block px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 font-bold text-[10px]" title={item.target}>
+                            {item.target}
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right text-slate-400 text-[10px] truncate max-w-[180px]" title={item.notes || ''}>
+                        {item.notes || '—'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+            {filteredExpenses.length > 0 && (
+              <tfoot>
+                <tr className="bg-rose-500/20 border-t-2 border-rose-500/60 font-black text-xs text-rose-300">
+                  <td className="py-3.5 px-3 text-right font-black">الإجمالي</td>
+                  <td className="py-3.5 px-3 text-center font-mono text-rose-400 text-sm whitespace-nowrap">
+                    {fmtNum(totalAmountSum)}
+                  </td>
+                  <td colSpan={2} className="py-3.5 px-3 text-center text-[11px] text-slate-300">
+                    عامة: <b className="text-amber-400 font-mono">{fmtNum(generalSum)}</b> • خاصة: <b className="text-cyan-400 font-mono">{fmtNum(privateSum)}</b>
+                  </td>
+                  <td className="py-3.5 px-3 text-right text-slate-400">—</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
         </div>
-
-        {/* Table Rows List */}
-        <div className="divide-y divide-slate-800/80 max-h-[60vh] overflow-y-auto">
-          {filteredExpenses.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-xs space-y-2">
-              <TrendingDown className="w-8 h-8 mx-auto text-slate-600 opacity-60" />
-              <p>لا توجد منصرفات مسجلة في هذه الفترة</p>
-            </div>
-          ) : (
-            filteredExpenses.map((item) => {
-              const isGeneral = item.target === 'عام' || !item.target;
-
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => setSelectedExpense(item)}
-                  className="px-3 py-3.5 grid grid-cols-12 items-center text-center text-xs hover:bg-slate-800/60 cursor-pointer transition-colors"
-                >
-                  <div className="col-span-2 text-slate-300 font-mono text-[11px] truncate">
-                    {formatInvoiceDate(item.date)}
-                  </div>
-
-                  <div className="col-span-3 min-w-0 text-white font-bold text-xs px-1 text-right sm:text-center">
-                    <div className="truncate">{item.name}</div>
-                  </div>
-
-                  <div className="col-span-3 min-w-0 text-slate-400 text-[10px] px-1 truncate">
-                    {item.notes || '—'}
-                  </div>
-
-                  <div className="col-span-2">
-                    {isGeneral ? (
-                      <span className="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 font-bold text-[10px] truncate block">
-                        عام
-                      </span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 font-bold text-[10px] truncate block">
-                        {item.target}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="col-span-2 text-rose-400 font-mono font-black text-xs truncate">
-                    {fmtNum(item.amount)}
-                  </div>
-                </div>
-              );
-            })
-          )}
-          </div>
-          </div>
-        </div>
-
-        {/* 4. Bottom Sticky Summary Row (الإجمالي مع الجمع التلقائي) */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-4xl bg-rose-500/95 border-t-2 border-rose-500/70 px-3 py-3 grid grid-cols-12 text-center font-black text-xs text-rose-300 items-center">
-          <div className="col-span-3">الإجمالي</div>
-          <div className="col-span-6 text-[11px] text-slate-300 truncate">
-            عامة: <b className="text-amber-400 font-mono">{fmtNum(generalSum)}</b> • خاصة: <b className="text-cyan-400 font-mono">{fmtNum(privateSum)}</b>
-          </div>
-          <div className="col-span-3 font-mono text-rose-400 text-sm truncate">
-            {fmtNum(totalAmountSum)}
-          </div>
-        </div>
-
       </div>
 
-      {/* Floating Action Button: + تسجيل مصروف */}
-      <div className="fixed bottom-20 right-4 z-30">
+      {/* Action Button: + تسجيل مصروف */}
+      <div className="pt-1">
         <button
           onClick={handleOpenAdd}
-          className="bg-gradient-to-r from-rose-500 via-rose-600 to-rose-500 hover:from-rose-600 text-white font-black px-4 py-2 rounded-xl shadow-2xl shadow-rose-500/30 flex items-center gap-2 transition-transform active:scale-95"
+          className="w-full bg-gradient-to-r from-rose-500 via-rose-600 to-rose-500 hover:from-rose-600 text-white font-black py-3 px-4 rounded-2xl shadow-xl shadow-rose-500/25 flex items-center justify-center gap-2 transition-transform active:scale-95"
         >
           <Plus className="w-5 h-5 text-white" />
-          <span className="text-xs">تسجيل مصروف</span>
+          <span className="text-xs font-bold">تسجيل مصروف جديد</span>
         </button>
       </div>
 

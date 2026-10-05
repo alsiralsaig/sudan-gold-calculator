@@ -255,106 +255,116 @@ export const SalesScreen: React.FC = () => {
         </div>
       </div>}
 
-      {/* 3. Table Container (Matching the Invoices Grid Design) */}
+      {/* 3. Table Container */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto overscroll-x-contain">
-          <div className="min-w-[780px]">
-        {/* Table Column Headers (Green/Amber Themed) */}
-        <div className="bg-emerald-500/15 border-b border-emerald-500/30 text-emerald-400 px-3 py-3 grid grid-cols-7 text-center text-xs font-black">
-          <div>تاريخ</div>
-          <div>وزن</div>
-          <div>عيار</div>
-          <div>البيع</div>
-          <div>الشراء</div>
-          <div>الربح</div>
-          <div>ملاحظات</div>
-        </div>
+          <table className="w-full min-w-[780px] text-xs border-collapse" dir="rtl">
+            <thead>
+              <tr className="bg-emerald-500/15 border-b border-emerald-500/30 text-emerald-400 font-black">
+                <th className="py-3 px-3 text-right w-[15%]">تاريخ</th>
+                <th className="py-3 px-3 text-center w-[16%]">وزن</th>
+                <th className="py-3 px-3 text-center w-[10%]">عيار</th>
+                <th className="py-3 px-3 text-center w-[15%]">البيع</th>
+                <th className="py-3 px-3 text-center w-[15%]">الشراء</th>
+                <th className="py-3 px-3 text-center w-[14%]">الربح</th>
+                <th className="py-3 px-3 text-right w-[15%]">ملاحظات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/80">
+              {filteredSales.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-slate-500 text-xs">
+                    <DollarSign className="w-8 h-8 mx-auto text-slate-600 opacity-60 mb-2" />
+                    <p>لا توجد فواتير بيع مسجلة في هذه الفترة</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredSales.map((sale) => {
+                  const profit = (sale.sellAmount || 0) - (sale.buyAmount || 0);
 
-        {/* Table Rows List */}
-        <div className="divide-y divide-slate-800/80 max-h-[60vh] overflow-y-auto">
-          {filteredSales.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-xs space-y-2">
-              <DollarSign className="w-8 h-8 mx-auto text-slate-600 opacity-60" />
-              <p>لا توجد فواتير بيع مسجلة في هذه الفترة</p>
-            </div>
-          ) : (
-            filteredSales.map((sale) => {
-              const profit = (sale.sellAmount || 0) - (sale.buyAmount || 0);
+                  return (
+                    <tr
+                      key={sale.id}
+                      onClick={() => setSelectedSale(sale)}
+                      className="hover:bg-slate-800/60 cursor-pointer transition-colors"
+                    >
+                      <td className="py-3.5 px-3 text-right text-slate-300 font-mono text-[11px] whitespace-nowrap">
+                        {formatInvoiceDate(sale.date)}
+                      </td>
 
-              return (
-                <div
-                  key={sale.id}
-                  onClick={() => setSelectedSale(sale)}
-                  className="px-3 py-3.5 grid grid-cols-7 items-center text-center text-xs hover:bg-slate-800/60 cursor-pointer transition-colors"
-                >
-                  <div className="text-slate-300 font-mono text-[11px] truncate">
-                    {formatInvoiceDate(sale.date)}
-                  </div>
+                      <td className="py-3.5 px-3 text-center text-white font-mono font-bold text-xs whitespace-nowrap">
+                        {unitsToGhJ(sale.units)}
+                      </td>
 
-                  <div className="text-white font-mono font-bold text-xs truncate">
-                    {unitsToGhJ(sale.units)}
-                  </div>
+                      <td className="py-3.5 px-3 text-center text-slate-300 font-mono text-xs whitespace-nowrap">
+                        {sale.purity > 0 ? `${sale.purity}k` : '—'}
+                      </td>
 
-                  <div className="text-slate-300 font-mono text-xs">
-                    {sale.purity > 0 ? `${sale.purity}k` : '—'}
-                  </div>
+                      <td className="py-3.5 px-3 text-center text-white font-mono font-black text-xs whitespace-nowrap">
+                        {fmtNum(sale.sellAmount)}
+                      </td>
 
-                  <div className="text-white font-mono font-black text-xs truncate">
-                    {fmtNum(sale.sellAmount)}
-                  </div>
+                      <td className="py-3.5 px-3 text-center text-amber-300 font-mono font-bold text-xs whitespace-nowrap">
+                        {fmtNum(sale.buyAmount)}
+                      </td>
 
-                  <div className="text-amber-300 font-mono font-bold text-xs truncate">
-                    {fmtNum(sale.buyAmount)}
-                  </div>
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                        <span
+                          className={`font-mono font-bold text-xs ${
+                            profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                          }`}
+                        >
+                          {fmtNum(profit)}
+                        </span>
+                      </td>
 
-                  <div>
+                      <td className="py-3.5 px-3 text-right text-slate-400 text-[10px] truncate max-w-[150px]" title={sale.notes || ''}>
+                        {sale.notes || '—'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+            {filteredSales.length > 0 && (
+              <tfoot>
+                <tr className="bg-emerald-500/20 border-t-2 border-emerald-500/60 font-black text-xs text-emerald-300">
+                  <td className="py-3.5 px-3 text-right font-black">الإجمالي</td>
+                  <td className="py-3.5 px-3 text-center font-mono text-emerald-400 text-sm whitespace-nowrap">
+                    {unitsToGhJ(totalUnitsSum)}
+                  </td>
+                  <td className="py-3.5 px-3 text-center text-slate-400">—</td>
+                  <td className="py-3.5 px-3 text-center font-mono text-emerald-400 text-sm whitespace-nowrap">
+                    {fmtNum(totalSellSum)}
+                  </td>
+                  <td className="py-3.5 px-3 text-center font-mono text-amber-300 text-sm whitespace-nowrap">
+                    {fmtNum(totalBuySum)}
+                  </td>
+                  <td className="py-3.5 px-3 text-center whitespace-nowrap">
                     <span
-                      className={`font-mono font-bold text-xs ${
-                        profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                      className={`font-mono text-sm font-black ${
+                        totalProfitSum >= 0 ? 'text-emerald-400' : 'text-rose-400'
                       }`}
                     >
-                      {fmtNum(profit)}
+                      {fmtNum(totalProfitSum)}
                     </span>
-                  </div>
-
-                  <div className="text-slate-400 text-[10px] truncate" title={sale.notes || ''}>
-                    {sale.notes || '—'}
-                  </div>
-                </div>
-              );
-            })
-          )}
+                  </td>
+                  <td className="py-3.5 px-3 text-right text-slate-400">—</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
         </div>
-
-        {/* 4. Bottom Sticky Summary Row (الإجمالي) */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-4xl bg-emerald-500/95 border-t-2 border-emerald-500/70 px-3 py-3 grid grid-cols-7 text-center font-black text-xs text-emerald-300">
-          <div>الإجمالي</div>
-          <div className="font-mono text-emerald-400 text-sm">{unitsToGhJ(totalUnitsSum)}</div>
-          <div>—</div>
-          <div className="font-mono text-emerald-400 text-sm truncate">{fmtNum(totalSellSum)}</div>
-          <div className="font-mono text-amber-300 text-sm truncate">{fmtNum(totalBuySum)}</div>
-          <div
-            className={`font-mono text-sm truncate ${
-              totalProfitSum >= 0 ? 'text-emerald-400' : 'text-rose-400'
-            }`}
-          >
-            {fmtNum(totalProfitSum)}
-          </div>
-          <div>—</div>
-        </div>
-          </div>
-        </div>
-
       </div>
 
-      {/* Floating Action Button: + بيع جديد */}
-      <div className="fixed bottom-20 right-4 z-30">
+      {/* Action Button: + بيع جديد */}
+      <div className="pt-1">
         <button
           onClick={handleOpenAdd}
-          className="bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500 hover:from-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl shadow-2xl shadow-emerald-500/30 flex items-center gap-2 transition-transform active:scale-95"
+          className="w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500 hover:from-emerald-400 text-slate-950 font-black py-3 px-4 rounded-2xl shadow-xl shadow-emerald-500/25 flex items-center justify-center gap-2 transition-transform active:scale-95"
         >
           <Plus className="w-5 h-5 text-slate-950" />
-          <span className="text-xs">بيع جديد</span>
+          <span className="text-xs font-bold">تسجيل بيع جديد</span>
         </button>
       </div>
 
