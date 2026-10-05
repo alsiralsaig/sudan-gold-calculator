@@ -1,29 +1,11 @@
-import { neon } from '@neondatabase/serverless';
+import { createClient } from '@supabase/supabase-js';
 
 export function getDb() {
-  const url = process.env.DATABASE_URL || process.env.STORAGE_URL;
-  if (!url) throw new Error('DATABASE_URL is not configured');
-  return neon(url);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('Supabase server variables are not configured');
+  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
-let initialized = false;
-export async function ensureSchema() {
-  if (initialized) return;
-  const sql = getDb();
-  await sql`
-    CREATE TABLE IF NOT EXISTS app_users (
-      id TEXT PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `;
-  await sql`
-    CREATE TABLE IF NOT EXISTS app_user_data (
-      user_id TEXT PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
-      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `;
-  initialized = true;
-}
+// Schema is created once in Supabase SQL Editor. This function keeps the route API stable.
+export async function ensureSchema() { return true; }

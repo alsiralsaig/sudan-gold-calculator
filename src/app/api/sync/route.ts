@@ -6,16 +6,19 @@ export async function GET() {
   const userId = await currentUserId();
   if (!userId) return NextResponse.json({ message: 'غير مسجل الدخول' }, { status: 401 });
   await ensureSchema();
-  const sql = getDb();
-  const rows = await sql`SELECT payload, updated_at FROM app_user_data WHERE user_id = ${userId} LIMIT 1`;
-  return NextResponse.json({ payload: rows[0]?.payload || null, updatedAt: rows[0]?.updated_at || null });
+  const db = getDb();
+  const { data, error } = await db.from('app_user_data').select('payload,updated_at').eq('user_id', userId).maybeSingle();
+  if (error) return NextResponse.json({ message: 'تعذر قراءة بيانات السحابة' }, { status: 500 });
+  return NextResponse.json({ payload: data?.payload || null, updatedAt: data?.updated_at || null });
 }
+
 export async function PUT(request: Request) {
   const userId = await currentUserId();
   if (!userId) return NextResponse.json({ message: 'غير مسجل الدخول' }, { status: 401 });
   const payload = await request.json();
   await ensureSchema();
-  const sql = getDb();
-  await sql`INSERT INTO app_user_data (user_id, payload, updated_at) VALUES (${userId}, ${JSON.stringify(payload)}::jsonb, NOW()) ON CONFLICT (user_id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`;
+  const db = getDb();
+  const { error } = await db.from('app_user_data').upsert({ user_id: userId, payload, updated_at: new Date().toISOString() });
+  if (error) return NextResponse.json({ message: 'تعذر حفظ بيانات السحابة' }, { status: 500 });
   return NextResponse.json({ success: true, updatedAt: new Date().toISOString() });
 }
