@@ -267,7 +267,7 @@ export const ExpensesScreen: React.FC = () => {
         </div>
 
         {/* 4. Bottom Sticky Summary Row (الإجمالي مع الجمع التلقائي) */}
-        <div className="bg-rose-500/20 border-t-2 border-rose-500/50 px-3 py-3.5 grid grid-cols-12 text-center font-black text-xs text-rose-300 items-center">
+        <div className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-4xl bg-rose-500/95 border-t-2 border-rose-500/70 px-3 py-3 grid grid-cols-12 text-center font-black text-xs text-rose-300 items-center">
           <div className="col-span-3">الإجمالي</div>
           <div className="col-span-6 text-[11px] text-slate-300 truncate">
             عامة: <b className="text-amber-400 font-mono">{fmtNum(generalSum)}</b> • خاصة: <b className="text-cyan-400 font-mono">{fmtNum(privateSum)}</b>
@@ -283,10 +283,10 @@ export const ExpensesScreen: React.FC = () => {
       <div className="fixed bottom-20 right-4 z-30">
         <button
           onClick={handleOpenAdd}
-          className="bg-gradient-to-r from-rose-500 via-rose-600 to-rose-500 hover:from-rose-600 text-white font-black px-5 py-3 rounded-2xl shadow-2xl shadow-rose-500/30 flex items-center gap-2 transition-transform active:scale-95"
+          className="bg-gradient-to-r from-rose-500 via-rose-600 to-rose-500 hover:from-rose-600 text-white font-black px-4 py-2 rounded-xl shadow-2xl shadow-rose-500/30 flex items-center gap-2 transition-transform active:scale-95"
         >
           <Plus className="w-5 h-5 text-white" />
-          <span className="text-sm">تسجيل مصروف</span>
+          <span className="text-xs">تسجيل مصروف</span>
         </button>
       </div>
 
@@ -299,7 +299,7 @@ export const ExpensesScreen: React.FC = () => {
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-black text-base text-rose-400 flex items-center gap-2">
-                <TrendingDown className="w-5 h-5" />
+                <TrendingDown className="w-4 h-4" />
                 <span>تسجيل مصروف جديد</span>
               </h3>
               <button
