@@ -256,6 +256,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Real Neon-backed authentication and sync.
   const syncPayload = () => ({ storeName, userEmail, purchases, sales, expenses, partners, rates });
+  const hasRecords = (payload: any) => Boolean(
+    payload && (
+      (Array.isArray(payload.purchases) && payload.purchases.length) ||
+      (Array.isArray(payload.sales) && payload.sales.length) ||
+      (Array.isArray(payload.expenses) && payload.expenses.length) ||
+      (Array.isArray(payload.partners) && payload.partners.length)
+    )
+  );
   const applyCloudPayload = (payload: any) => {
     if (!payload) return;
     if (Array.isArray(payload.purchases)) setPurchases(payload.purchases);
@@ -281,8 +289,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setIsCloudSignedIn(true);
       const cloud = await fetch('/api/sync');
       const cloudResult = await cloud.json();
-      if (cloudResult.payload) applyCloudPayload(cloudResult.payload);
-      else await fetch('/api/sync', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(syncPayload()) });
+      const localPayload = syncPayload();
+      // Never erase useful local records because an empty cloud row was created
+      // during account setup. Upload local data in that one safe case.
+      if (hasRecords(cloudResult.payload) || !hasRecords(localPayload)) {
+        if (cloudResult.payload) applyCloudPayload(cloudResult.payload);
+      } else {
+        await fetch('/api/sync', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(localPayload) });
+      }
       setLastSyncTime(syncTime());
       return { success: true, message: 'تم تسجيل الدخول ومزامنة بيانات السحابة 🔒' };
     } catch { return { success: false, message: 'تعذر الاتصال بقاعدة البيانات' }; }
@@ -313,8 +327,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const response = await fetch('/api/sync');
       if (!response.ok) return false;
       const result = await response.json();
-      // Cloud wins on conflicts, as agreed.
-      if (result.payload) applyCloudPayload(result.payload);
+      const localPayload = syncPayload();
+      // Cloud wins only when it contains records. An empty cloud payload must
+      // not delete records already entered on this device.
+      if (hasRecords(result.payload) || !hasRecords(localPayload)) {
+        if (result.payload) applyCloudPayload(result.payload);
+      } else {
+        await fetch('/api/sync', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(localPayload) });
+      }
       setLastSyncTime(syncTime());
       return true;
     } catch { return false; }
