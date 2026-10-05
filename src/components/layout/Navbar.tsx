@@ -142,24 +142,27 @@ export const Navbar: React.FC<NavbarProps> = ({
         const data = await res.json();
         updateRates({
           globalOunceUsd: data.ounceUsd || 4144.70,
-          usdRate: data.usdRate || 8203.10,
-          sarRate: data.sarRate || 2185.27,
-          aedRate: data.aedRate || 2233.40,
-          egpRate: data.egpRate || 157.60,
-          karat24: data.karat24 || 1093102,
-          karat21: data.karat21 || 956464,
-          karat18: data.karat18 || 819826,
-          karat22: data.karat22 || 1002010,
+          usdRate: data.usdRate || 8400.00,
+          sarRate: data.sarRate || 2240.00,
+          aedRate: data.aedRate || 2288.00,
+          egpRate: data.egpRate || 173.00,
+          karat24: data.karat24 || 1119344,
+          karat21: data.karat21 || 979426,
+          karat18: data.karat18 || 839508,
+          karat22: data.karat22 || 1026065,
         });
       }
     } catch (_) {
       updateRates({
         globalOunceUsd: 4144.70,
-        usdRate: 8203.10,
-        karat24: 1093102,
-        karat21: 956464,
-        karat18: 819826,
-        karat22: 1002010,
+        usdRate: 8400.00,
+        sarRate: 2240.00,
+        aedRate: 2288.00,
+        egpRate: 173.00,
+        karat24: 1119344,
+        karat21: 979426,
+        karat18: 839508,
+        karat22: 1026065,
       });
     } finally {
       setTimeout(() => {

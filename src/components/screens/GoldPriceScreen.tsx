@@ -8,16 +8,16 @@ const GRAMS_PER_OUNCE = 31.1034768;
 export const GoldPriceScreen: React.FC = () => {
   const { rates, updateRates } = useGoldStore();
 
-  // State: Spot Gold Ounce ($4,144.70 & 8203.1 SDG)
+  // State: Spot Gold Ounce ($4,144.70 & 8400.0 SDG)
   const [ounceUsd, setOunceUsd] = useState<number>(() => {
     return rates.globalOunceUsd >= 4000 ? rates.globalOunceUsd : 4144.70;
   });
   const [dollarRate, setDollarRate] = useState<number>(() => {
-    return rates.usdRate || 8203.10;
+    return rates.usdRate || 8400.00;
   });
-  const [sarRate, setSarRate] = useState<number>(rates.sarRate || 2185.27);
-  const [aedRate, setAedRate] = useState<number>(rates.aedRate || 2233.40);
-  const [egpRate, setEgpRate] = useState<number>(rates.egpRate || 157.60);
+  const [sarRate, setSarRate] = useState<number>(rates.sarRate || 2240.00);
+  const [aedRate, setAedRate] = useState<number>(rates.aedRate || 2288.00);
+  const [egpRate, setEgpRate] = useState<number>(rates.egpRate || 173.00);
 
   const [isEditingDollar, setIsEditingDollar] = useState(false);
   const [isManualKaratMode, setIsManualKaratMode] = useState(false);
@@ -90,8 +90,8 @@ export const GoldPriceScreen: React.FC = () => {
     // Fallback if network issue
     setOunceUsd(4144.70);
     setOunceInput('4144.70');
-    setDollarRate(8203.10);
-    setDollarInput('8203.10');
+    setDollarRate(8400.00);
+    setDollarInput('8400.00');
     setSyncStatus('تم تحديث ومزامنة أسعار السوق الموازي بنجاح! ⚡');
     setTimeout(() => setSyncStatus(''), 3500);
     setIsSyncing(false);

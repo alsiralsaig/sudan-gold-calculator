@@ -83,7 +83,7 @@ const LEGACY_STORAGE_KEY = 'golden_calculator_db_v4';
 
 const GRAMS_PER_OUNCE = 31.1034768;
 const DEFAULT_OUNCE_USD = 4144.70;
-const DEFAULT_USD_RATE = 8203.10;
+const DEFAULT_USD_RATE = 8400.00;
 const DEFAULT_GRAM_USD = DEFAULT_OUNCE_USD / GRAMS_PER_OUNCE;
 const DEFAULT_K24 = Math.round(DEFAULT_GRAM_USD * DEFAULT_USD_RATE);
 const DEFAULT_K21 = Math.round(DEFAULT_K24 * (21 / 24));
@@ -96,9 +96,9 @@ const INITIAL_RATES: GoldRates = {
   karat18: DEFAULT_K18,
   karat22: DEFAULT_K22,
   usdRate: DEFAULT_USD_RATE,
-  sarRate: 2185.27,
-  aedRate: 2233.40,
-  egpRate: 157.60,
+  sarRate: 2240.00,
+  aedRate: 2288.00,
+  egpRate: 173.00,
   globalOunceUsd: DEFAULT_OUNCE_USD,
   lastUpdated: new Date().toISOString(),
 };

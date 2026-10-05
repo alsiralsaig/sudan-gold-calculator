@@ -4,10 +4,10 @@ const GRAMS_PER_OUNCE = 31.1034768;
 
 export async function GET() {
   let ounceUsd = 4144.70;
-  let usdRate = 8203.10;
-  let sarRate = 2185.27;
-  let aedRate = 2233.40;
-  let egpRate = 157.60;
+  let usdRate = 8400.00;
+  let sarRate = 2240.00;
+  let aedRate = 2288.00;
+  let egpRate = 173.00;
   let source = 'sudanakhbar + yahoo/coinbase';
 
   // 1. Fetch the global gold ounce price from Yahoo Finance (GC=F).
