@@ -274,6 +274,23 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       (Array.isArray(payload.partners) && payload.partners.length)
     )
   );
+  const mergeRecords = (local: any[] = [], cloud: any[] = []) => {
+    const merged = new Map<string, any>();
+    cloud.forEach((item) => merged.set(item.id, item));
+    // Local changes win for the same record, while new records from both
+    // devices are retained. Archived records are retained as well.
+    local.forEach((item) => merged.set(item.id, item));
+    return Array.from(merged.values());
+  };
+  const mergePayloads = (local: any, cloud: any) => ({
+    storeName: local?.storeName || cloud?.storeName || 'مجوهرات الذهب',
+    userEmail: local?.userEmail || cloud?.userEmail || '',
+    purchases: mergeRecords(local?.purchases, cloud?.purchases),
+    sales: mergeRecords(local?.sales, cloud?.sales),
+    expenses: mergeRecords(local?.expenses, cloud?.expenses),
+    partners: mergeRecords(local?.partners, cloud?.partners),
+    rates: local?.rates || cloud?.rates || rates,
+  });
   const applyCloudPayload = (payload: any) => {
     if (!payload) return;
     if (Array.isArray(payload.purchases)) setPurchases(payload.purchases);
@@ -300,13 +317,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const cloud = await fetch('/api/sync');
       const cloudResult = await cloud.json();
       const localPayload = syncPayload();
-      // Never erase useful local records because an empty cloud row was created
-      // during account setup. Upload local data in that one safe case.
-      if (hasRecords(cloudResult.payload) || !hasRecords(localPayload)) {
-        if (cloudResult.payload) applyCloudPayload(cloudResult.payload);
-      } else {
-        await fetch('/api/sync', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(localPayload) });
-      }
+      const mergedPayload = mergePayloads(localPayload, cloudResult.payload || {});
+      applyCloudPayload(mergedPayload);
+      await fetch('/api/sync', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mergedPayload) });
       setLastSyncTime(syncTime());
       return { success: true, message: 'تم تسجيل الدخول ومزامنة بيانات السحابة 🔒' };
     } catch { return { success: false, message: 'تعذر الاتصال بقاعدة البيانات' }; }
@@ -338,13 +351,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!response.ok) return false;
       const result = await response.json();
       const localPayload = syncPayload();
-      // Cloud wins only when it contains records. An empty cloud payload must
-      // not delete records already entered on this device.
-      if (hasRecords(result.payload) || !hasRecords(localPayload)) {
-        if (result.payload) applyCloudPayload(result.payload);
-      } else {
-        await fetch('/api/sync', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(localPayload) });
-      }
+      const mergedPayload = mergePayloads(localPayload, result.payload || {});
+      applyCloudPayload(mergedPayload);
+      await fetch('/api/sync', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mergedPayload) });
       setLastSyncTime(syncTime());
       return true;
     } catch { return false; }
