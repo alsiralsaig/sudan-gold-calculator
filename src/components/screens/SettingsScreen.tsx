@@ -519,124 +519,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
 
       </div>
 
-      {/* 4. SECTION: النسخ الاحتياطي (Yellow Warning Card + 4 Action Items) */}
+      {/* 4. SECTION: cloud backup only */}
       <div className="space-y-2">
         <div className="flex items-center gap-2 px-1 text-amber-400 font-black text-sm border-r-4 border-amber-500 pr-2">
-          <span>النسخ الاحتياطي</span>
+          <span>حفظ البيانات والمزامنة</span>
         </div>
-
-        {/* Yellow Notice Card */}
-        <div className="bg-amber-950/20 border border-amber-500/40 rounded-3xl p-4 sm:p-5 space-y-3">
+        <div className="bg-emerald-950/20 border border-emerald-500/40 rounded-3xl p-4 sm:p-5 space-y-3">
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl shrink-0 mt-0.5">
-              <Info className="w-5 h-5" />
-            </div>
-            <div className="space-y-1">
-              <h4 className="font-extrabold text-sm text-amber-300">
-                بياناتك محفوظة داخل الجهاز فقط
-              </h4>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                خُذ نسخة احتياطية بانتظام حتى لا تفقدها عند تغيير الهاتف.
-              </p>
+            <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl shrink-0"><Cloud className="w-5 h-5" /></div>
+            <div>
+              <h4 className="font-extrabold text-sm text-emerald-300">Supabase هو النسخة الأساسية</h4>
+              <p className="text-xs text-slate-300 leading-relaxed mt-1">يتم حفظ البيانات ومزامنتها بين الأجهزة عبر حسابك فقط. لن يتم استيراد بيانات من واتساب أو من ذاكرة الهاتف حتى لا تدخل سجلات غير مطلوبة.</p>
             </div>
           </div>
-
-          <div className="grid grid-cols-4 gap-2 pt-2 border-t border-amber-500/20 text-center">
-            <div className="bg-slate-950/70 p-2 rounded-xl">
-              <span className="text-[10px] text-slate-400 block">مشتريات</span>
-              <span className="text-xs font-mono font-black text-amber-400">{purchases.length}</span>
-            </div>
-            <div className="bg-slate-950/70 p-2 rounded-xl">
-              <span className="text-[10px] text-slate-400 block">مبيعات</span>
-              <span className="text-xs font-mono font-black text-amber-400">{sales.length}</span>
-            </div>
-            <div className="bg-slate-950/70 p-2 rounded-xl">
-              <span className="text-[10px] text-slate-400 block">منصرفات</span>
-              <span className="text-xs font-mono font-black text-amber-400">{expenses.length}</span>
-            </div>
-            <div className="bg-slate-950/70 p-2 rounded-xl">
-              <span className="text-[10px] text-slate-400 block">شركاء</span>
-              <span className="text-xs font-mono font-black text-amber-400">{partners.length}</span>
-            </div>
+          <div className="grid grid-cols-4 gap-2 pt-2 border-t border-emerald-500/20 text-center">
+            <div className="bg-slate-950/70 p-2 rounded-xl"><span className="text-[10px] text-slate-400 block">مشتريات</span><span className="text-xs font-mono font-black text-emerald-400">{purchases.length}</span></div>
+            <div className="bg-slate-950/70 p-2 rounded-xl"><span className="text-[10px] text-slate-400 block">مبيعات</span><span className="text-xs font-mono font-black text-emerald-400">{sales.length}</span></div>
+            <div className="bg-slate-950/70 p-2 rounded-xl"><span className="text-[10px] text-slate-400 block">منصرفات</span><span className="text-xs text-emerald-400 font-black">{expenses.length}</span></div>
+            <div className="bg-slate-950/70 p-2 rounded-xl"><span className="text-[10px] text-slate-400 block">شركاء</span><span className="text-xs text-emerald-400 font-black">{partners.length}</span></div>
           </div>
         </div>
-
-        {/* 4 Backup Actions List */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden divide-y divide-slate-800/80 shadow-md">
-          
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept=".json"
-            className="hidden"
-          />
-
-          <div
-            onClick={exportData}
-            className="p-4 flex items-center justify-between hover:bg-slate-800/60 cursor-pointer transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-2xl">
-                <Save className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-extrabold text-sm text-white">حفظ ملف نسخة احتياطية (JSON)</h4>
-                <p className="text-xs text-slate-400">تصدير وتنزيل ملف بكافة البيانات</p>
-              </div>
-            </div>
-            <ChevronLeft className="w-5 h-5 text-slate-500" />
-          </div>
-
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="p-4 flex items-center justify-between hover:bg-slate-800/60 cursor-pointer transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-2xl">
-                <FolderOpen className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-extrabold text-sm text-white">فتح ملف نسخة احتياطية واستعادة</h4>
-                <p className="text-xs text-slate-400">استيراد ملف من ذاكرة الجهاز</p>
-              </div>
-            </div>
-            <ChevronLeft className="w-5 h-5 text-slate-500" />
-          </div>
-
-          <div
-            onClick={handleCopyToClipboard}
-            className="p-4 flex items-center justify-between hover:bg-slate-800/60 cursor-pointer transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-2xl">
-                <Copy className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-extrabold text-sm text-white">نسخ البيانات كنص (واتساب)</h4>
-                <p className="text-xs text-slate-400">مشاركة النسخة الاحتياطية بسهولة</p>
-              </div>
-            </div>
-            <ChevronLeft className="w-5 h-5 text-slate-500" />
-          </div>
-
-          <div
-            onClick={handleRestoreFromClipboard}
-            className="p-4 flex items-center justify-between hover:bg-slate-800/60 cursor-pointer transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-2xl">
-                <ClipboardPaste className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-extrabold text-sm text-white">استعادة من نص منسوخ</h4>
-                <p className="text-xs text-slate-400">لصق نسخة احتياطية من الحافظة</p>
-              </div>
-            </div>
-            <ChevronLeft className="w-5 h-5 text-slate-500" />
-          </div>
-
-        </div>
+        <button onClick={handleTriggerSync} className="w-full py-3 rounded-2xl bg-emerald-500 text-slate-950 font-black shadow-lg shadow-emerald-500/20">حفظ ومزامنة البيانات على Supabase</button>
       </div>
 
       {/* 5. SECTION: البيانات */}
