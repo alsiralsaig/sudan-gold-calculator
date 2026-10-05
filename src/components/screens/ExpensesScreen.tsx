@@ -467,18 +467,10 @@ export const ExpensesScreen: React.FC = () => {
               )}
             </div>
 
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={() => {
-                  if (confirm('هل تريد حذف هذا المصروف؟')) {
-                    archiveExpense(selectedExpense.id);
-                    setSelectedExpense(null);
-                  }
-                }}
-                className="w-full py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40"
-              >
-                أرشفة المصروف
-              </button>
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              <button onClick={() => { const name = prompt('البيان الجديد', selectedExpense.name); const amount = prompt('المبلغ الجديد', String(selectedExpense.amount)); if (name !== null && amount !== null) { updateExpense({ ...selectedExpense, name: name.trim() || selectedExpense.name, amount: parseFloat(amount) || selectedExpense.amount }); setSelectedExpense(null); } }} className="py-2.5 bg-amber-500/20 text-amber-300 font-bold rounded-xl text-xs border border-amber-500/40">تعديل</button>
+              <button onClick={() => { if (confirm('أرشفة هذا المصروف؟')) { archiveExpense(selectedExpense.id); setSelectedExpense(null); } }} className="py-2.5 bg-rose-600/20 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40">أرشفة</button>
+              <button onClick={() => { if (confirm('حذف نهائي؟ لا يمكن الاستعادة.')) { deleteExpense(selectedExpense.id); setSelectedExpense(null); } }} className="py-2.5 bg-slate-800 text-slate-300 font-bold rounded-xl text-xs border border-slate-700">حذف</button>
             </div>
           </div>
         </div>

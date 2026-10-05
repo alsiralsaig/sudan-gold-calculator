@@ -224,6 +224,7 @@ export const PartnersScreen: React.FC = () => {
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
+                  <button onClick={() => { if (confirm('حذف نهائي لهذا الشريك؟')) deletePartner(p.id); }} className="p-2 bg-slate-800 text-slate-300 rounded-xl"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
 

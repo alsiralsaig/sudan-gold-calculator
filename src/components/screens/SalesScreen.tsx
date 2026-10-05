@@ -619,17 +619,8 @@ export const SalesScreen: React.FC = () => {
                 <Edit2 className="w-4 h-4" />
                 تعديل
               </button>
-              <button
-                onClick={() => {
-                  if (confirm('هل تريد حذف هذه الفاتورة؟')) {
-                    archiveSale(selectedSale.id);
-                    setSelectedSale(null);
-                  }
-                }}
-                className="flex-1 py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40"
-              >
-                <Trash2 className="w-4 h-4 mx-auto" />
-              </button>
+              <button onClick={() => { if (confirm('أرشفة هذه الفاتورة؟')) { archiveSale(selectedSale.id); setSelectedSale(null); } }} className="flex-1 py-2.5 bg-rose-600/20 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40">أرشفة</button>
+              <button onClick={() => { if (confirm('حذف نهائي؟ لا يمكن الاستعادة.')) { deleteSale(selectedSale.id); setSelectedSale(null); } }} className="py-2.5 px-3 bg-slate-800 text-slate-300 font-bold rounded-xl text-xs border border-slate-700">حذف</button>
             </div>
           </div>
         </div>
