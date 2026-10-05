@@ -366,10 +366,10 @@ export const CalculatorScreen: React.FC = () => {
 
             {/* Row 5 */}
             <button
-              onClick={() => handleStdOperator('+')}
-              className="h-14 sm:h-16 rounded-3xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/30 active:scale-90 transition-transform"
+              onClick={handleStdEquals}
+              className="h-14 sm:h-16 rounded-3xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 text-slate-950 font-black text-2xl flex items-center justify-center shadow-xl shadow-amber-500/30 active:scale-90 transition-transform"
             >
-              +
+              =
             </button>
             <button
               onClick={() => handleStdNumber('0')}
@@ -384,10 +384,10 @@ export const CalculatorScreen: React.FC = () => {
               .
             </button>
             <button
-              onClick={handleStdEquals}
-              className="h-14 sm:h-16 rounded-3xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 text-slate-950 font-black text-2xl flex items-center justify-center shadow-xl shadow-amber-500/30 active:scale-90 transition-transform"
+              onClick={() => handleStdOperator('+')}
+              className="h-14 sm:h-16 rounded-3xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/30 active:scale-90 transition-transform"
             >
-              =
+              +
             </button>
 
           </div>
