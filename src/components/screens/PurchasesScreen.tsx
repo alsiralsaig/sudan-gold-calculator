@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   ShoppingBag,
   Plus,
-  Trash2,
+  Archive,
   Edit2,
   CreditCard,
   Search,
@@ -330,7 +330,7 @@ export const PurchasesScreen: React.FC = () => {
       </div>
 
       {/* Floating Action Button: + مشترى جديد */}
-      <div className="fixed bottom-20 right-4 z-30">
+      <div className="fixed bottom-5 right-4 z-30">
         <button
           onClick={resetPurchaseForm}
           className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 text-slate-950 font-black px-5 py-3 rounded-2xl shadow-2xl shadow-amber-500/30 flex items-center gap-2 transition-transform active:scale-95"
@@ -604,14 +604,15 @@ export const PurchasesScreen: React.FC = () => {
               )}
               <button
                 onClick={() => {
-                  if (confirm('هل تريد حذف هذه الفاتورة؟')) {
+                  if (confirm('هل تريد أرشفة هذه الفاتورة؟ ستبقى محفوظة ويمكن استعادتها من الأرشيف.')) {
                     archivePurchase(selectedPurchase.id);
                     setSelectedPurchase(null);
                   }
                 }}
                 className="py-2.5 px-4 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40"
               >
-                <Trash2 className="w-4 h-4" />
+                <Archive className="w-4 h-4" />
+                أرشفة
               </button>
             </div>
           </div>

@@ -52,11 +52,11 @@ function MainAppContent() {
       </main>
 
       {/* Clean 4-Tab Bottom Navigation + Menu Drawer Button */}
-      <BottomNav
+      {activeTab !== 'purchases' && <BottomNav
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onOpenMenu={() => setIsMenuOpen(true)}
-      />
+      />}
 
       {/* PWA iOS/Android Install Modal */}
       <PwaInstallPrompt
