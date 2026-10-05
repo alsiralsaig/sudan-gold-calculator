@@ -34,6 +34,7 @@ export const PurchasesScreen: React.FC = () => {
     addPurchase,
     updatePurchase,
     archivePurchase,
+    deletePurchase,
     addPaymentToPurchase,
     rates,
   } = useGoldStore();
@@ -45,6 +46,10 @@ export const PurchasesScreen: React.FC = () => {
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState<Purchase | null>(null);
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [bulkSeller, setBulkSeller] = useState('');
+  const [bulkNotes, setBulkNotes] = useState('');
+  const [bulkPurity, setBulkPurity] = useState('');
 
   // Form State
   const [grams, setGrams] = useState('');
@@ -247,6 +252,16 @@ export const PurchasesScreen: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* Bulk actions apply to the currently visible filtered records only */}
+      {filteredPurchases.length > 0 && <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">
+        <div className="text-[11px] text-slate-400">إجراءات الصفحة على {fmtNum(filteredPurchases.length)} فاتورة ظاهرة</div>
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={() => { if (confirm(`أرشفة ${filteredPurchases.length} فاتورة ظاهرة؟`)) filteredPurchases.forEach(p => archivePurchase(p.id)); }} className="py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-black">أرشفة الكل</button>
+          <button onClick={() => setShowBulkEdit(true)} className="py-2 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[11px] font-black">تعديل الكل</button>
+          <button onClick={() => { if (confirm(`حذف نهائي لـ ${filteredPurchases.length} فاتورة؟ لا يمكن الاستعادة.`)) filteredPurchases.forEach(p => deletePurchase(p.id)); }} className="py-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-black">حذف الكل</button>
+        </div>
+      </div>}
 
       {/* 3. Table Container (Exact Match to Screenshot 1) */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
@@ -537,6 +552,17 @@ export const PurchasesScreen: React.FC = () => {
           </form>
         </div>
       )}
+
+      {showBulkEdit && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4">
+        <form onSubmit={(e) => { e.preventDefault(); filteredPurchases.forEach(p => updatePurchase({ ...p, seller: bulkSeller.trim() || p.seller, notes: bulkNotes.trim() || p.notes, purity: bulkPurity === '' ? p.purity : (parseFloat(bulkPurity) || 0) })); setShowBulkEdit(false); setBulkSeller(''); setBulkNotes(''); setBulkPurity(''); }} className="bg-slate-900 border-2 border-blue-500/50 rounded-3xl p-5 max-w-sm w-full space-y-4">
+          <div className="flex justify-between items-center"><h3 className="font-black text-blue-300">تعديل الفواتير الظاهرة</h3><button type="button" onClick={() => setShowBulkEdit(false)} className="text-slate-400 text-xl">✕</button></div>
+          <p className="text-xs text-slate-400">اترك أي حقل فارغاً للاحتفاظ بقيمته الحالية.</p>
+          <input value={bulkSeller} onChange={e => setBulkSeller(e.target.value)} placeholder="البائع الجديد" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm" />
+          <input value={bulkPurity} onChange={e => setBulkPurity(e.target.value)} placeholder="العيار الجديد" inputMode="decimal" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm" />
+          <textarea value={bulkNotes} onChange={e => setBulkNotes(e.target.value)} placeholder="الملاحظات الجديدة" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm" />
+          <button className="w-full py-3 rounded-xl bg-blue-500 text-slate-950 font-black">حفظ التعديل الجماعي</button>
+        </form>
+      </div>}
 
       {/* Modal: View / Pay Selected Purchase */}
       {selectedPurchase && (

@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { GoldStoreProvider, useGoldStore } from '../context/GoldStoreContext';
 import { Navbar } from '../components/layout/Navbar';
-import { BottomNav } from '../components/layout/BottomNav';
 import { DashboardScreen } from '../components/screens/DashboardScreen';
 import { CalculatorScreen } from '../components/screens/CalculatorScreen';
 import { PartnersScreen } from '../components/screens/PartnersScreen';
@@ -52,12 +51,6 @@ function MainAppContent() {
       </main>
 
       {/* Clean 4-Tab Bottom Navigation + Menu Drawer Button */}
-      {activeTab !== 'purchases' && <BottomNav
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onOpenMenu={() => setIsMenuOpen(true)}
-      />}
-
       {/* PWA iOS/Android Install Modal */}
       <PwaInstallPrompt
         isOpen={showInstallModal}
