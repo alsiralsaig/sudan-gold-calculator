@@ -331,7 +331,7 @@ export const PurchasesScreen: React.FC = () => {
         </div>
 
         {/* 4. Bottom Sticky Summary Row (الإجمالي) */}
-        <div className="sticky bottom-0 z-20 bg-amber-500/95 border-t-2 border-amber-500/70 px-3 py-3 grid grid-cols-6 text-center font-black text-xs text-amber-300">
+        <div className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-4xl bg-amber-500/95 border-t-2 border-amber-500/70 px-3 py-3 grid grid-cols-6 text-center font-black text-xs text-amber-300">
           <div>الإجمالي</div>
           <div className="font-mono text-amber-400 text-sm">{unitsToGhJ(totalUnitsSum)}</div>
           <div>—</div>
@@ -345,7 +345,7 @@ export const PurchasesScreen: React.FC = () => {
       </div>
 
       {/* Floating Action Button: + مشترى جديد */}
-      <div className="fixed bottom-5 right-4 z-30">
+      <div className="fixed bottom-20 right-4 z-30">
         <button
           onClick={resetPurchaseForm}
           className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl shadow-2xl shadow-amber-500/30 flex items-center gap-1.5 transition-transform active:scale-95"
