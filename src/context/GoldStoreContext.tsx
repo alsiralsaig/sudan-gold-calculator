@@ -252,6 +252,8 @@ const LEGACY_KEYS = ['golden_calculator_db_v5', 'golden_calculator_db_v4'];
 const LOCKOUT_KEY = 'gold_pin_lockout';
 const NOTIFICATIONS_KEY = 'gold_notifications_v1';
 const DISMISSED_NOTIFICATIONS_KEY = 'gold_dismissed_notifications_v1';
+/** سجل السجلات التي أُنشئ لها إشعار سابقاً — يمنع تكرار الإشعارات بعد إعادة التحميل */
+const SEEN_RECORDS_KEY = 'gold_seen_records_v1';
 const NOTIFICATION_PREFS_KEY = 'gold_notification_prefs_v1';
 const PENDING_SYNC_KEY = 'gold_pending_sync';
 
@@ -465,6 +467,23 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           if (Array.isArray(parsed)) {
             dismissedRef.current = parsed.filter((x) => typeof x === 'string');
             setDismissedNotifications(dismissedRef.current);
+          }
+        }
+      } catch {
+        /* تجاهل */
+      }
+
+      try {
+        const rawSeen = localStorage.getItem(SEEN_RECORDS_KEY);
+        if (rawSeen) {
+          const parsedSeen = JSON.parse(rawSeen);
+          if (parsedSeen && typeof parsedSeen === 'object') {
+            seenIdsRef.current = {
+              sales: new Set<string>(parsedSeen.sales || []),
+              purchases: new Set<string>(parsedSeen.purchases || []),
+              expenses: new Set<string>(parsedSeen.expenses || []),
+              loans: new Set<string>(parsedSeen.loans || []),
+            };
           }
         }
       } catch {
@@ -2050,13 +2069,18 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
   const lastPriceRef = useRef<number>(0);
   const notificationsBootRef = useRef(false);
+  /** لحظة التشغيل — خلال فترة السماح لا تُنتج إشعارات (البيانات ما زالت تُحمَّل) */
+  const bootTimeRef = useRef<number>(Date.now());
 
   /** كشف العمليات الجديدة (محلياً أو من جهاز آخر بعد المزامنة) */
   useEffect(() => {
     if (!hydrated.current) return;
 
     const seen = seenIdsRef.current;
-    const first = !notificationsBootRef.current;
+    // فترة سماح 6 ثوانٍ من التشغيل: البيانات تُحمَّل خلالها من الذاكرة المحلية،
+    // وبدونها تُعتبر السجلات الموجودة «جديدة» فتغرق المستخدم بإشعارات وهمية.
+    const withinGrace = Date.now() - bootTimeRef.current < 6000;
+    const first = !notificationsBootRef.current || withinGrace;
     const fresh: AppNotification[] = [];
     const minAmount = notificationPrefs.minAmount || 0;
     const passes = (amount: number) => !minAmount || (amount || 0) >= minAmount;
@@ -2093,6 +2117,22 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     seen.purchases = new Set(allPurchases.map((x) => x.id));
     seen.expenses = new Set(allExpenses.map((x) => x.id));
     seen.loans = new Set(allLoans.map((x) => x.id));
+
+    // حفظ سجل المُشاهَد — يمنع تكرار الإشعارات بعد إعادة تحميل التطبيق
+    try {
+      const cap = (set: Set<string>, max = 600) => Array.from(set).slice(-max);
+      localStorage.setItem(
+        SEEN_RECORDS_KEY,
+        JSON.stringify({
+          sales: cap(seen.sales),
+          purchases: cap(seen.purchases),
+          expenses: cap(seen.expenses),
+          loans: cap(seen.loans),
+        })
+      );
+    } catch {
+      /* تجاهل */
+    }
 
     if (first) {
       notificationsBootRef.current = true;
