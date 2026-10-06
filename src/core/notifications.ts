@@ -90,12 +90,35 @@ export function sortNotifications(list: AppNotification[] = []): AppNotification
   return [...(list || [])].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 }
 
+/** كل مفاتيح إشعار واحد: المفتاح الثابت + المعرّف (للمطابقة الكاملة عند الحذف) */
+export function notificationKeys(notification: AppNotification): string[] {
+  const keys = new Set<string>();
+  if (notification?.dedupeKey) keys.add(notification.dedupeKey);
+  if (notification?.id) keys.add(notification.id);
+  return Array.from(keys);
+}
+
+/** إضافة مفاتيح إلى سجل المحذوفات مع حد أقصى (الأحدث يُحتفظ بها) */
+export function withDismissed(current: string[], keys: string[], keepMax = 400): string[] {
+  const seen = new Set(current || []);
+  (keys || []).forEach((k) => {
+    if (k) seen.add(k);
+  });
+  const list = Array.from(seen);
+  return list.length > keepMax ? list.slice(list.length - keepMax) : list;
+}
+
 export function pruneNotifications(list: AppNotification[] = [], keepMax = 80): AppNotification[] {
   return sortNotifications(list).slice(0, Math.max(5, keepMax));
 }
 
 export function markRead(list: AppNotification[], id: string, at = new Date().toISOString()): AppNotification[] {
   return (list || []).map((n) => (n.id === id && !n.readAt ? { ...n, readAt: at } : n));
+}
+
+/** المفتاح الموحّد لمنع تكرار الإشعار (dedupeKey إن وُجد وإلا المعرّف) */
+export function notificationKey(notification: AppNotification): string {
+  return notification?.dedupeKey || notification?.id || '';
 }
 
 export function markAllRead(list: AppNotification[], at = new Date().toISOString()): AppNotification[] {
@@ -106,11 +129,16 @@ export function markAllRead(list: AppNotification[], at = new Date().toISOString
 export function pushNotification(
   list: AppNotification[],
   notification: AppNotification,
-  keepMax = 80
+  keepMax = 80,
+  /** مفاتيح محذوفة نهائياً — لا يُعاد إشعار حُذف سابقاً أبداً */
+  dismissed: string[] = []
 ): AppNotification[] {
   if (!notification) return list;
-  const key = notification.dedupeKey;
-  if (key && (list || []).some((n) => n.dedupeKey === key)) return list;
+  const key = notificationKey(notification);
+  if (key && dismissed.includes(key)) return list;
+  // توافق: إشعارات قديمة حُذفت بمعرّفها قبل وجود المفاتيح الثابتة
+  if (notification.id && dismissed.includes(notification.id)) return list;
+  if (key && (list || []).some((n) => notificationKey(n) === key)) return list;
   if ((list || []).some((n) => n.id === notification.id)) return list;
   return pruneNotifications([notification, ...(list || [])], keepMax);
 }
@@ -177,6 +205,7 @@ export function saleNotification(sale: Sale, at: string = new Date().toISOString
     level: 'success',
     tab: 'sales',
     amount: sale.sellAmount || 0,
+    dedupeKey: `sale:${sale.id}`,
   };
 }
 
@@ -195,6 +224,7 @@ export function purchaseNotification(
     level: 'info',
     tab: 'purchases',
     amount: purchase.amount || 0,
+    dedupeKey: `purchase:${purchase.id}`,
   };
 }
 
@@ -214,6 +244,7 @@ export function expenseNotification(
     level: 'warning',
     tab: 'expenses',
     amount: expense.amount || 0,
+    dedupeKey: `expense:${expense.id}`,
   };
 }
 
@@ -234,6 +265,7 @@ export function loanNotification(loan: Loan, at: string = new Date().toISOString
     level: 'info',
     tab: 'loans',
     amount: loan.amount || 0,
+    dedupeKey: `loan:${loan.id}`,
   };
 }
 
@@ -254,6 +286,7 @@ export function paymentNotification(
     level: 'success',
     tab: kind === 'sale' ? 'sales' : kind === 'purchase' ? 'purchases' : 'loans',
     amount,
+    dedupeKey: `payment:${kind}:${party}:${amount}:${at.slice(0, 16)}`,
   };
 }
 
@@ -321,6 +354,30 @@ export function digestNotification(input: {
     at,
     level: 'info',
     tab: 'reports',
+  };
+}
+
+/** إشعار واحد مختصر عند وصول دفعة عمليات كبيرة من جهاز آخر (بدل طوفان إشعارات) */
+export function batchSyncNotification(
+  counts: { sales: number; purchases: number; expenses: number; loans: number },
+  at: string = new Date().toISOString()
+): AppNotification {
+  const parts: string[] = [];
+  if (counts.sales) parts.push(`${counts.sales} بيع`);
+  if (counts.purchases) parts.push(`${counts.purchases} شراء`);
+  if (counts.expenses) parts.push(`${counts.expenses} مصروف`);
+  if (counts.loans) parts.push(`${counts.loans} سلفة`);
+  const total = counts.sales + counts.purchases + counts.expenses + counts.loans;
+  return {
+    id: notificationId('sync-batch', at.slice(0, 13)),
+    kind: 'sync',
+    title: `🔄 وصلت ${total} عملية جديدة من جهاز آخر`,
+    body: `${parts.join(' • ')} — فتحت السجلات ومراجعتها من قسم الحسابات`,
+    at,
+    level: 'info',
+    tab: 'dashboard',
+    // مفتاح لكل ساعة: لا يتكرر نفس الإشعار عند كل مزامنة
+    dedupeKey: `syncbatch:${at.slice(0, 13)}`,
   };
 }
 

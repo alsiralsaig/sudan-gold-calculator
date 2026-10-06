@@ -29,6 +29,7 @@ import { DueSummary, computeDues, mergeDueSummaries } from '../core/reminders';
 import { LoanSummary, computeLoanDues, isLoanSettled, loanPending, summarizeLoans } from '../core/loans';
 import {
   AppNotification,
+  batchSyncNotification,
   DEFAULT_NOTIFICATION_PREFS,
   NotificationPrefs,
   dueNotifications,
@@ -37,12 +38,15 @@ import {
   loanSettledNotification,
   markAllRead,
   markRead,
+  notificationKey,
+  notificationKeys,
   paymentNotification,
   priceNotification,
   purchaseNotification,
   pushNotification,
   saleNotification,
   unreadCount,
+  withDismissed,
 } from '../core/notifications';
 import { showSystemNotification } from '../core/systemNotify';
 import {
@@ -230,6 +234,7 @@ const STORAGE_KEY = 'golden_calculator_db_v6';
 const LEGACY_KEYS = ['golden_calculator_db_v5', 'golden_calculator_db_v4'];
 const LOCKOUT_KEY = 'gold_pin_lockout';
 const NOTIFICATIONS_KEY = 'gold_notifications_v1';
+const DISMISSED_NOTIFICATIONS_KEY = 'gold_dismissed_notifications_v1';
 const NOTIFICATION_PREFS_KEY = 'gold_notification_prefs_v1';
 const PENDING_SYNC_KEY = 'gold_pending_sync';
 
@@ -330,6 +335,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [branches, setBranches] = useState<Branch[]>([]);
   const [allLoans, setAllLoans] = useState<Loan[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  /** مفاتيح إشعارات حذفها المستخدم نهائياً — لا تعود أبداً */
+  const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
+  const dismissedRef = useRef<string[]>([]);
   const [notificationPrefs, setNotificationPrefsState] =
     useState<NotificationPrefs>(DEFAULT_NOTIFICATION_PREFS);
   const [activeBranchId, setActiveBranchIdState] = useState<string>(ALL_BRANCHES);
@@ -433,6 +441,19 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       if (localStorage.getItem(PENDING_SYNC_KEY) === '1') setPendingSync(true);
 
+      try {
+        const rawDismissed = localStorage.getItem(DISMISSED_NOTIFICATIONS_KEY);
+        if (rawDismissed) {
+          const parsed = JSON.parse(rawDismissed);
+          if (Array.isArray(parsed)) {
+            dismissedRef.current = parsed.filter((x) => typeof x === 'string');
+            setDismissedNotifications(dismissedRef.current);
+          }
+        }
+      } catch {
+        /* تجاهل */
+      }
+
       const savedNotifications = localStorage.getItem(NOTIFICATIONS_KEY);
       if (savedNotifications) {
         const parsed = JSON.parse(savedNotifications);
@@ -514,6 +535,16 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (pendingSync) localStorage.setItem(PENDING_SYNC_KEY, '1');
       else localStorage.removeItem(PENDING_SYNC_KEY);
 
+      try {
+        if (dismissedNotifications.length > 0) {
+          localStorage.setItem(DISMISSED_NOTIFICATIONS_KEY, JSON.stringify(dismissedNotifications));
+        } else {
+          localStorage.removeItem(DISMISSED_NOTIFICATIONS_KEY);
+        }
+      } catch {
+        /* تجاهل */
+      }
+
       localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifications.slice(0, 120)));
       localStorage.setItem(NOTIFICATION_PREFS_KEY, JSON.stringify(notificationPrefs));
       LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
@@ -541,6 +572,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     pendingSync,
     notifications,
     notificationPrefs,
+    dismissedNotifications,
   ]);
 
   /* ------------------------- تطبيق القفل التلقائي ------------------------- */
@@ -1226,13 +1258,26 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, []);
 
+  /** انتهت جلسة الدخول على السيرفر (كوكي منتهي أو مُسح) */
+  const handleSessionExpired = useCallback(() => {
+    setIsCloudSignedIn(false);
+    setSyncError('انتهت جلسة الدخول — سجّل الدخول من جديد من قسم المزامنة لاستعادة المزامنة');
+  }, []);
+
   const syncWithCloud = useCallback(
     async (silent = false): Promise<boolean> => {
       if (!isCloudSignedIn) return false;
       setIsSyncing(true);
       try {
         const response = await fetch('/api/sync', { cache: 'no-store' });
-        if (!response.ok) return false;
+        if (response.status === 401) {
+          handleSessionExpired();
+          return false;
+        }
+        if (!response.ok) {
+          setSyncError(`تعذر الوصول للسحابة (خطأ ${response.status}) — سيُعاد المحاولة`);
+          return false;
+        }
         const result = await response.json();
         const merged = mergePayloads(syncPayload(), result.payload || {});
         applyCloudPayload(merged);
@@ -1241,7 +1286,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(merged),
         });
-        if (!put.ok) return false;
+        if (put.status === 401) {
+          handleSessionExpired();
+          return false;
+        }
+        if (!put.ok) {
+          setSyncError(`تعذر رفع البيانات للسحابة (خطأ ${put.status}) — سيُعاد المحاولة`);
+          return false;
+        }
         try {
           const putResult = await put.clone().json();
           if (putResult?.updatedAt) lastRemoteStamp.current = String(putResult.updatedAt);
@@ -1259,7 +1311,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setIsSyncing(false);
       }
     },
-    [isCloudSignedIn, mergePayloads, syncPayload, syncBranchesTable]
+    [isCloudSignedIn, mergePayloads, syncPayload, syncBranchesTable, handleSessionExpired]
   );
 
   /**
@@ -1277,6 +1329,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       pullInFlight.current = true;
       try {
         const response = await fetch('/api/sync', { cache: 'no-store' });
+        if (response.status === 401) {
+          handleSessionExpired();
+          return { ok: false, changed: false };
+        }
         if (!response.ok) return { ok: false, changed: false };
         const result = await response.json();
         const stamp = result?.updatedAt ? String(result.updatedAt) : '';
@@ -1298,7 +1354,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isCloudSignedIn, isOnline, mergePayloads, syncPayload]
+    [isCloudSignedIn, isOnline, mergePayloads, syncPayload, handleSessionExpired]
   );
 
   /**
@@ -1425,6 +1481,26 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       document.removeEventListener('resume', onVisible);
     };
   }, [isCloudSignedIn, isOnline, pullFromCloud]);
+
+  /**
+   * التحقق من صلاحية جلسة الدخول عند بدء التشغيل.
+   * بدون هذا: قد يظل التطبيق يظن أنه مسجّل بينما الجلسة منتهية،
+   * فتفشل كل محاولات المزامنة بصمت (وهو ما كان يحدث).
+   */
+  useEffect(() => {
+    if (!hydrated.current || !isCloudSignedIn) return;
+    void (async () => {
+      try {
+        const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.authenticated === false) handleSessionExpired();
+      } catch {
+        /* تجاهل — سنكتشفها عند أول مزامنة */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCloudSignedIn]);
 
   // عودة الشبكة → مزامنة فورية
   useEffect(() => {
@@ -1832,7 +1908,17 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const notify = useCallback(
     (notification: AppNotification, options: { system?: boolean } = {}) => {
       if (!notification) return;
-      setNotifications((prev) => pushNotification(prev, notification, notificationPrefs.keepMax));
+      // إشعار حُذف نهائياً لا يعود أبداً
+      const key = notificationKey(notification);
+      if (
+        (key && dismissedRef.current.includes(key)) ||
+        dismissedRef.current.includes(notification.id)
+      ) {
+        return;
+      }
+      setNotifications((prev) =>
+        pushNotification(prev, notification, notificationPrefs.keepMax, dismissedRef.current)
+      );
       const wantSystem = options.system !== false && notificationPrefs.enabled;
       if (wantSystem) {
         void showSystemNotification(notification.title, notification.body, {
@@ -1852,11 +1938,32 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setNotifications((prev) => markAllRead(prev));
   }, []);
 
-  const clearNotifications = useCallback(() => setNotifications([]), []);
-
-  const deleteNotification = useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  /** تثبيت مفاتيح في سجل الحذف الدائم */
+  const rememberDismissed = useCallback((keys: string[]) => {
+    const next = withDismissed(dismissedRef.current, keys);
+    dismissedRef.current = next;
+    setDismissedNotifications(next);
   }, []);
+
+  /** حذف كل الإشعارات — ولا تعود مرة أخرى */
+  const clearNotifications = useCallback(() => {
+    setNotifications((prev) => {
+      rememberDismissed(prev.flatMap((n) => notificationKeys(n)));
+      return [];
+    });
+  }, [rememberDismissed]);
+
+  /** حذف إشعار واحد نهائياً */
+  const deleteNotification = useCallback(
+    (id: string) => {
+      setNotifications((prev) => {
+        const target = prev.find((n) => n.id === id);
+        if (target) rememberDismissed(notificationKeys(target));
+        return prev.filter((n) => n.id !== id);
+      });
+    },
+    [rememberDismissed]
+  );
 
   const setNotificationPrefs = useCallback((prefs: Partial<NotificationPrefs>) => {
     setNotificationPrefsState((prev) => ({ ...DEFAULT_NOTIFICATION_PREFS, ...prev, ...prefs }));
@@ -1917,6 +2024,21 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       notificationsBootRef.current = true;
       return;
     }
+
+    // لو وصلت عمليات كثيرة معاً (مزامنة من جهاز آخر) → إشعار واحد مختصر
+    const BATCH_LIMIT = 4;
+    if (fresh.length > BATCH_LIMIT) {
+      const counts = { sales: 0, purchases: 0, expenses: 0, loans: 0 };
+      fresh.forEach((n) => {
+        if (n.kind === 'sale') counts.sales += 1;
+        else if (n.kind === 'purchase') counts.purchases += 1;
+        else if (n.kind === 'expense') counts.expenses += 1;
+        else if (n.kind === 'loan') counts.loans += 1;
+      });
+      notify(batchSyncNotification(counts));
+      return;
+    }
+
     fresh.forEach((n) => notify(n));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allSales, allPurchases, allExpenses, allLoans]);
@@ -1946,7 +2068,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setNotifications((prev) => {
       let next = prev;
       list.forEach((n) => {
-        next = pushNotification(next, n, notificationPrefs.keepMax);
+        next = pushNotification(next, n, notificationPrefs.keepMax, dismissedRef.current);
       });
       return next;
     });

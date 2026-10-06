@@ -4,14 +4,17 @@ import assert from 'node:assert/strict';
 import {
   AppNotification,
   DEFAULT_NOTIFICATION_PREFS,
-  dueNotifications,
+  batchSyncNotification,
   digestNotification,
+  dueNotifications,
   expenseNotification,
   loanNotification,
   loanSettledNotification,
   markAllRead,
   markRead,
   notificationId,
+  notificationKey,
+  notificationKeys,
   partnerDigestText,
   paymentNotification,
   priceNotification,
@@ -22,6 +25,7 @@ import {
   saleNotification,
   sortNotifications,
   unreadCount,
+  withDismissed,
 } from '../src/core/notifications';
 import { computeDues } from '../src/core/reminders';
 import { Expense, Loan, Purchase, Sale } from '../src/types';
@@ -230,4 +234,90 @@ test('الإعدادات الافتراضية: الإشعارات مغلقة ح�
   assert.equal(DEFAULT_NOTIFICATION_PREFS.enabled, false);
   assert.equal(DEFAULT_NOTIFICATION_PREFS.priceChangePercent, 2);
   assert.equal(DEFAULT_NOTIFICATION_PREFS.keepMax, 80);
+});
+
+/* ------------------- الحذف النهائي (لا تعود الإشعارات) ------------------- */
+
+test('notificationKey: يستخدم dedupeKey إن وُجد وإلا المعرّف', () => {
+  assert.equal(notificationKey({ id: 'n1' } as AppNotification), 'n1');
+  assert.equal(notificationKey({ id: 'n1', dedupeKey: 'sale:s1' } as AppNotification), 'sale:s1');
+});
+
+test('pushNotification: لا يعيد إشعاراً محذوفاً نهائياً', () => {
+  const incoming = purchaseNotification(
+    { id: 'pu1', date: '2026-10-06', amount: 1000, seller: 'مورد', purity: 21, units: 5 } as never,
+    '2026-10-06T10:00:00Z'
+  )!;
+  const key = notificationKey(incoming);
+
+  const list = pushNotification([], incoming, 80, []);
+  assert.equal(list.length, 1, 'يُضاف عند عدم وجوده في سجل الحذف');
+
+  // محاكاة الحذف: يُرفع من القائمة ويُسجَّل مفتاحه في سجل الحذف
+  const removed = list.filter((n) => notificationKey(n) !== key);
+  assert.equal(removed.length, 0, 'حُذف فعلاً');
+
+  const afterDelete = pushNotification(removed, incoming, 80, [key]);
+  assert.equal(afterDelete.length, 0, 'لا يُعاد بعد حذفه');
+
+  const again = pushNotification(afterDelete, incoming, 80, [key]);
+  assert.equal(again.length, 0, 'ويبقى محذوفاً مهما تكررت المحاولة');
+});
+
+test('pushNotification: dedupeKey ثابت لكل عملية (لا تكرار من نفس السجل)', () => {
+  const purchase = { id: 'pu9', date: '2026-10-06', amount: 500, purity: 21, units: 2 } as never;
+  const a = purchaseNotification(purchase, '2026-10-06T09:00:00Z')!;
+  const b = purchaseNotification(purchase, '2026-10-06T12:00:00Z')!;
+  assert.equal(notificationKey(a), notificationKey(b), 'نفس المفتاح مهما تغيّر الوقت');
+  const list = pushNotification(pushNotification([], a, 80, []), b, 80, []);
+  assert.equal(list.length, 1, 'لا يتكرر نفس السجل');
+});
+
+test('withDismissed: يمنع التكرار ويحترم الحد الأقصى', () => {
+  const first = withDismissed([], ['a', 'b', 'a']);
+  assert.deepEqual(first, ['a', 'b']);
+  const second = withDismissed(first, ['c']);
+  assert.deepEqual(second, ['a', 'b', 'c']);
+  const many = Array.from({ length: 12 }, (_, i) => `k${i}`);
+  const capped = withDismissed(many, ['k12'], 10);
+  assert.equal(capped.length, 10, 'يحافظ على 10 فقط');
+  assert.ok(capped.includes('k12'), 'الأحدث محفوظ');
+  assert.ok(!capped.includes('k0'), 'الأقدم أُسقط');
+});
+
+test('مفاتيح العمليات والدُفعات والمتأخرات ثابتة وقابلة للتتبع', () => {
+  const sale = { id: 's1', date: '2026-10-06', sellAmount: 5000, buyer: 'ز', purity: 21, units: 3 } as never;
+  assert.equal(saleNotification(sale, '2026-10-06')!.dedupeKey, 'sale:s1');
+
+  const loan = { id: 'lon1', date: '2026-10-06', amount: 900, person: 'أ', direction: 'lent' } as never;
+  assert.equal(loanNotification(loan, '2026-10-06')!.dedupeKey, 'loan:lon1');
+
+  const pay = paymentNotification('sale', 'زبون', 250, '2026-10-06T10:30:00Z');
+  assert.ok(pay.dedupeKey?.startsWith('payment:sale:زبون:250:'));
+});
+
+test('notificationKeys: يجمع المفتاح والمعرّف (توافق الإشعارات القديمة)', () => {
+  const n = { id: 'purchase-pu1', dedupeKey: 'purchase:pu1' } as AppNotification;
+  const keys = notificationKeys(n);
+  assert.ok(keys.includes('purchase:pu1'));
+  assert.ok(keys.includes('purchase-pu1'));
+
+  // إشعار قديم بلا مفتاح ثابت
+  const legacy = { id: 'purchase-pu2' } as AppNotification;
+  assert.deepEqual(notificationKeys(legacy), ['purchase-pu2']);
+});
+
+test('pushNotification: يحترم المعرّف القديم في سجل الحذف', () => {
+  const incoming = { id: 'purchase-pu5', dedupeKey: 'purchase:pu5', kind: 'purchase' } as AppNotification;
+  const blocked = pushNotification([], incoming, 80, ['purchase-pu5']);
+  assert.equal(blocked.length, 0, 'لا يعود إشعار حُذف بمعرّفه القديم');
+});
+
+test('batchSyncNotification: إشعار واحد بدل طوفان عند وصول دفعة كبيرة', () => {
+  const n = batchSyncNotification({ sales: 1, purchases: 70, expenses: 4, loans: 1 });
+  assert.equal(n.kind, 'sync');
+  assert.ok(n.title.includes('76'));
+  assert.ok(n.body.includes('70 شراء'));
+  const same = batchSyncNotification({ sales: 0, purchases: 1, expenses: 0, loans: 0 }, n.at);
+  assert.equal(n.dedupeKey, same.dedupeKey, 'مفتاح واحد لكل ساعة');
 });
