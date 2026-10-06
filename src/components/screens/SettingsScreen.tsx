@@ -253,7 +253,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   };
 
   return (
-    <div className="space-y-6 pb-24 animate-in fade-in duration-200">
+    <div className="space-y-6 pb-6 animate-in fade-in duration-200">
       
       {/* 1. SECTION: الأمان وقفل التطبيق */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden divide-y divide-slate-800/80 shadow-md">

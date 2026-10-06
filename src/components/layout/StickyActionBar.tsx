@@ -1,14 +1,16 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LucideIcon } from 'lucide-react';
 
 /**
  * شريط سفلي ثابت (Sticky Action Bar)
  *
- * الفكرة: بيانات الجداول تتحرك (Scroll) بينما الإجماليات والزر الأساسي
- * تبقى ثابتة أسفل الشاشة فوق شريط التنقل السفلي — فلا تحتاج تدرج
- * لآخر الصفحة لإضافة عملية جديدة أو رؤية الإجمالي.
+ * السلوك المطلوب:
+ * - الشريط ملتصق تماماً بأسفل الشاشة (bottom: 0) ولا يتحرك مع السحب.
+ * - المسافة البديلة أعلى الشريط تُحسب تلقائياً من ارتفاعه الحقيقي،
+ *   فلا يبقى فراغ ميت بين آخر صف من البيانات وبين الإجماليات،
+ *   ولا يُحجب أي صف خلف الشريط.
  */
 
 export type BarTone = 'amber' | 'emerald' | 'rose' | 'cyan' | 'slate' | 'blue';
@@ -62,20 +64,56 @@ export const StickyActionBar: React.FC<StickyActionBarProps> = ({
   hint,
   columns,
 }) => {
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [barHeight, setBarHeight] = useState(0);
+
   const hasStats = Boolean(stats && stats.length);
   const hasActions = Boolean(actions && actions.length);
+
+  // يقيس ارتفاع الشريط الفعلي (بما فيه مساحة الأمان أسفل الشاشة)
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      setBarHeight((prev) => (Math.abs(prev - h) > 1 ? h : prev));
+    };
+
+    update();
+    let observer: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(update);
+      observer.observe(el);
+    }
+    if (typeof document !== 'undefined' && document.fonts && 'ready' in document.fonts) {
+      document.fonts.ready.then(update).catch(() => {});
+    }
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+    };
+  }, []);
+
   if (!hasStats && !hasActions) return null;
 
   const cols = columns || Math.min(stats?.length || 1, 4);
 
   return (
     <>
-      {/* مساحة بديلة حتى لا يغطي الشريط آخر صف في الجدول */}
-      <div aria-hidden className="h-32" />
+      {/* مساحة بديلة = ارتفاع الشريط الفعلي + هامش صغير، حتى لا يغطي الشريط آخر صف */}
+      <div aria-hidden style={{ height: barHeight ? barHeight + 12 : 132 }} />
 
       <div
+        ref={wrapRef}
         className="fixed left-0 right-0 z-30 px-3 pointer-events-none"
-        style={{ bottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}
+        style={{
+          bottom: 0,
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
       >
         <div className="sticky-action-bar max-w-4xl mx-auto bg-slate-900/97 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl shadow-slate-950/60 overflow-hidden pointer-events-auto">
           {hasStats && (

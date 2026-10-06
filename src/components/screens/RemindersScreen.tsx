@@ -108,7 +108,7 @@ export const RemindersScreen: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 pb-24 animate-in fade-in duration-200">
+    <div className="space-y-4 animate-in fade-in duration-200">
       {/* الملخص */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4">
         <div className="flex items-center justify-between">

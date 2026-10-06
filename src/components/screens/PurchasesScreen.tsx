@@ -248,7 +248,7 @@ export const PurchasesScreen: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 pb-24 animate-in fade-in duration-200">
+    <div className="space-y-4 animate-in fade-in duration-200">
       
       {/* 1. Search Bar */}
       <div className="relative">

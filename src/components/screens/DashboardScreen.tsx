@@ -143,7 +143,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
   };
 
   return (
-    <div className="space-y-5 pb-20 animate-in fade-in duration-200">
+    <div className="space-y-5 animate-in fade-in duration-200">
       {/* Hero: المركز المالي */}
       <div className="relative overflow-hidden bg-gradient-to-br from-amber-500/20 via-slate-900 to-slate-950 p-6 rounded-3xl border-2 border-amber-500/40 shadow-2xl space-y-5">
         <div className="flex items-start justify-between gap-3">

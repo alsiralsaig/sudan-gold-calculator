@@ -81,7 +81,7 @@ function MainAppContent() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-3 sm:p-6 pb-24">
+      <main className="flex-1 max-w-4xl w-full mx-auto p-3 sm:p-6 pb-0">
         {activeTab === 'dashboard' && <DashboardScreen onNavigate={setActiveTab} />}
         {activeTab === 'calculator' && <CalculatorScreen />}
         {activeTab === 'partners' && <PartnersScreen />}

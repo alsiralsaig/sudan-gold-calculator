@@ -221,7 +221,7 @@ export const ReportsScreen: React.FC = () => {
   }, [inPeriodPurchases]);
 
   return (
-    <div className="space-y-5 pb-24 animate-in fade-in duration-200">
+    <div className="space-y-5 animate-in fade-in duration-200">
       {/* شريط التحكم */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 space-y-3 print:border-0 print:bg-white">
         <div className="flex items-center justify-between">

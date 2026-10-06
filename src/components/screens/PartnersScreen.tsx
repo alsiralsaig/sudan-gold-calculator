@@ -87,7 +87,7 @@ export const PartnersScreen: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 pb-20 animate-in fade-in duration-200">
+    <div className="space-y-6 animate-in fade-in duration-200">
           <div className="mb-4 bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">
             <div className="text-[11px] text-slate-400">إجراءات الصفحة على الشركاء الظاهرين فقط</div>
             <div className="grid grid-cols-3 gap-2">

@@ -207,7 +207,7 @@ export const CalculatorScreen: React.FC = () => {
   const resultingKarat = meltedTotalWeight > 0 ? (totalPureContent / meltedTotalWeight) * 24 : 0;
 
   return (
-    <div className="space-y-6 pb-24 animate-in fade-in duration-200">
+    <div className="space-y-6 pb-6 animate-in fade-in duration-200">
       
       {/* 1. Top Mode Switcher: حاسبة الذهب vs حاسبة عادية */}
       <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-3xl shadow-lg">
