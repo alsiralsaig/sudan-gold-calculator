@@ -47,8 +47,16 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     signOutCloud,
     syncWithCloud,
     refreshFromCloud,
+    inspectCloud,
     pendingSync,
     syncError,
+    allPurchases,
+    allSales,
+    allExpenses,
+    allLoans,
+    branches,
+    activeBranchId,
+    setActiveBranchId,
     purchases,
     sales,
     expenses,
@@ -83,6 +91,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [cloudInfo, setCloudInfo] = useState<string>('');
+  const [checkingCloud, setCheckingCloud] = useState(false);
   const [syncToast, setSyncToast] = useState('');
 
   // تعديل سعر السوق المحلي
@@ -229,6 +239,31 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
       /* نتجاهل ونعيد التحميل على أي حال */
     }
     setTimeout(() => window.location.reload(), 700);
+  };
+
+  /** فحص السحابة: يعرض عدد السجلات على السيرفر مقابل هذا الجهاز */
+  const result_failed = (info: { ok: boolean }) => !info.ok;
+
+  const handleInspectCloud = async () => {
+    setCheckingCloud(true);
+    setCloudInfo('جاري الفحص...');
+    const info = await inspectCloud();
+    setCheckingCloud(false);
+    if (result_failed(info)) {
+      setCloudInfo(
+        info.serverNotConfigured
+          ? '❌ الخادم غير مهيّأ: مفتاح AUTH_SECRET ناقص في Vercel'
+          : info.sessionExpired
+          ? '❌ انتهت جلسة الدخول — سجّل الدخول من جديد'
+          : '❌ تعذر الوصول للسحابة — تحقق من الإنترنت'
+      );
+      return;
+    }
+    const c = info.counts!;
+    setCloudInfo(
+      `☁️ على السيرفر: ${c.purchases} مشتريات • ${c.sales} مبيعات • ${c.expenses} مصروفات • ${c.loans} سلف` +
+        (info.updatedAt ? ` — آخر تحديث: ${new Date(info.updatedAt).toLocaleString('ar-EG')}` : '')
+    );
   };
 
   const handleSignOut = () => {
@@ -454,6 +489,63 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
               <Download className="w-4 h-4" />
               <span>جلب تحديثات الأجهزة الأخرى</span>
             </button>
+
+            {/* لوحة التشخيص: هذا الجهاز مقابل السحابة */}
+            <div className="bg-slate-950/70 border border-slate-700 rounded-2xl p-3 space-y-2">
+              <div className="text-[11px] font-black text-slate-200 text-center">
+                فحص المزامنة — هذا الجهاز مقابل السيرفر
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="bg-slate-900 rounded-xl p-2 text-center border border-slate-800">
+                  <div className="text-slate-400 font-bold mb-0.5">📱 هذا الجهاز</div>
+                  <div className="font-mono text-amber-300 font-bold">
+                    {allPurchases.length} شراء • {allSales.length} بيع
+                  </div>
+                  <div className="font-mono text-emerald-300 font-bold">
+                    {allExpenses.length} مصروف • {allLoans.length} سلفة
+                  </div>
+                </div>
+                <div className="bg-slate-900 rounded-xl p-2 text-center border border-slate-800">
+                  <div className="text-slate-400 font-bold mb-0.5">☁️ على السيرفر</div>
+                  {cloudInfo ? (
+                    <div className="font-bold text-slate-200 leading-relaxed">{cloudInfo}</div>
+                  ) : (
+                    <div className="text-slate-500 font-bold">اضغط «فحص السيرفر»</div>
+                  )}
+                </div>
+              </div>
+
+              {activeBranchId !== 'all' ? (
+                <button
+                  onClick={() => setActiveBranchId('all')}
+                  className="w-full py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-black text-[11px]"
+                >
+                  ⚠️ القائمة معروضة بفرع واحد — اضغط لعرض كل الفروع ({branches.length} فرع)
+                </button>
+              ) : null}
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleInspectCloud}
+                  disabled={checkingCloud}
+                  className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] disabled:opacity-50"
+                >
+                  {checkingCloud ? 'جاري الفحص...' : 'فحص السيرفر'}
+                </button>
+                <button
+                  onClick={handlePullNow}
+                  disabled={isSyncing}
+                  className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] disabled:opacity-50"
+                >
+                  جلب وتطبيق الآن
+                </button>
+              </div>
+
+              <div className="text-[9px] text-slate-500 text-center font-mono">
+                النسخة {APP_VERSION_LABEL} • شريك: {partners.filter((p) => !p.archived).length}
+              </div>
+            </div>
 
             {/* حالة المزامنة الحقيقية */}
             <div

@@ -64,6 +64,21 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type InvoiceCounters = { sale: number; purchase: number };
 
+export interface CloudInspection {
+  ok: boolean;
+  updatedAt: string | null;
+  sessionExpired?: boolean;
+  serverNotConfigured?: boolean;
+  counts?: {
+    purchases: number;
+    sales: number;
+    expenses: number;
+    loans: number;
+    partners: number;
+    branches: number;
+  };
+}
+
 interface GoldStoreContextType {
   /** السجلات بعد تقييدها بالفرع النشط (كل الفروع = الكل) */
   purchases: Purchase[];
@@ -165,6 +180,8 @@ interface GoldStoreContextType {
   pendingSync: boolean;
   /** رسالة آخر خطأ مزامنة */
   syncError: string;
+  /** فحص ما هو موجود فعلاً على السيرفر (بدون تعديل أي شئ) */
+  inspectCloud: () => Promise<CloudInspection>;
   /** سحب التحديثات من الأجهزة الأخرى فوراً */
   refreshFromCloud: (silent?: boolean) => Promise<{ ok: boolean; changed: boolean }>;
   /** محاولة مزامنة فورية */
@@ -1413,6 +1430,36 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return false;
   }, [isCloudSignedIn, isOnline, syncWithCloud]);
 
+  /** فحص السحابة: كم سجل موجود على السيرفر فعلاً؟ (قراءة فقط) */
+  const inspectCloud = useCallback(async (): Promise<CloudInspection> => {
+    try {
+      const res = await fetch('/api/sync', { cache: 'no-store' });
+      if (res.status === 503) {
+        handleServerNotConfigured();
+        return { ok: false, updatedAt: null, serverNotConfigured: true };
+      }
+      if (res.status === 401) {
+        handleSessionExpired();
+        return { ok: false, updatedAt: null, sessionExpired: true };
+      }
+      if (!res.ok) return { ok: false, updatedAt: null };
+      const data = await res.json();
+      const payload = data?.payload || null;
+      const counts = {
+        purchases: (payload?.purchases || []).length,
+        sales: (payload?.sales || []).length,
+        expenses: (payload?.expenses || []).length,
+        loans: (payload?.loans || []).length,
+        partners: (payload?.partners || []).length,
+        branches: (payload?.branches || []).length,
+      };
+      return { ok: true, updatedAt: data?.updatedAt || null, counts };
+    } catch {
+      return { ok: false, updatedAt: null };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleSessionExpired, handleServerNotConfigured]);
+
   const forceSync = useCallback(async () => {
     retryAttempts.current = 0;
     return attemptSync();
@@ -2175,6 +2222,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     syncError,
     forceSync,
     refreshFromCloud: pullFromCloud,
+    inspectCloud,
 
     setUserEmail,
     setStoreName,

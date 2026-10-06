@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { GoldStoreProvider, useGoldStore } from '../context/GoldStoreContext';
 import { Navbar } from '../components/layout/Navbar';
+import { AutoUpdate } from '../components/common/AutoUpdate';
 import { DashboardScreen } from '../components/screens/DashboardScreen';
 import { CalculatorScreen } from '../components/screens/CalculatorScreen';
 import { PartnersScreen } from '../components/screens/PartnersScreen';
@@ -101,6 +102,8 @@ function MainAppContent() {
 
       {/* Clean 4-Tab Bottom Navigation + Menu Drawer Button */}
       {/* PWA iOS/Android Install Modal */}
+      <AutoUpdate />
+
       <PwaInstallPrompt
         isOpen={showInstallModal}
         onClose={() => setShowInstallModal(false)}
