@@ -13,6 +13,8 @@ import {
   salePending,
 } from '../core/accounting';
 import { K21_FINENESS } from '../core/purity';
+import { DueSummary, computeDues } from '../core/reminders';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -51,6 +53,19 @@ interface GoldStoreContextType {
   partnerSharesList: PartnerShare[];
   /** حالة تحديث الأسعار: المصدر، وقت التحديث، التحذيرات */
   ratesMeta: RatesMeta;
+  /** سجل سعر جرام عيار 21 عبر الزمن (محلي) */
+  ratesHistory: { t: string; v: number }[];
+  /** المتأخرات: ذمم الزبائن والديون للموردين */
+  dues: DueSummary;
+
+  /** هل الجهاز متصل بالإنترنت */
+  isOnline: boolean;
+  /** هناك تغييرات لم تُزامن بعد */
+  pendingSync: boolean;
+  /** رسالة آخر خطأ مزامنة */
+  syncError: string;
+  /** محاولة مزامنة فورية */
+  forceSync: () => Promise<boolean>;
 
   // Actions
   setUserEmail: (email: string) => void;
@@ -115,6 +130,7 @@ const GoldStoreContext = createContext<GoldStoreContextType | undefined>(undefin
 const STORAGE_KEY = 'golden_calculator_db_v6';
 const LEGACY_KEYS = ['golden_calculator_db_v5', 'golden_calculator_db_v4'];
 const LOCKOUT_KEY = 'gold_pin_lockout';
+const PENDING_SYNC_KEY = 'gold_pending_sync';
 
 const GRAMS_PER_OUNCE = 31.1034768;
 const DEFAULT_OUNCE_USD = 4150;
@@ -208,10 +224,17 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     fetchedAt: '',
   });
   const [lockout, setLockout] = useState<{ attempts: number; until: number }>({ attempts: 0, until: 0 });
+  const [ratesHistory, setRatesHistory] = useState<{ t: string; v: number }[]>([]);
+  const [pendingSync, setPendingSync] = useState(false);
+  const [syncError, setSyncError] = useState('');
+  const { isOnline } = useOnlineStatus();
 
   const hydrated = useRef(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPushedSignature = useRef<string>('');
+  const retryAttempts = useRef(0);
+  const dataSignatureRef = useRef<string>('');
 
   /* ------------------------- التحميل من التخزين المحلي ------------------------- */
 
@@ -256,6 +279,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           setStoreNameState('مجوهرات الذهب');
           setIsCloudSignedIn(false);
         }
+        if (Array.isArray(data.ratesHistory)) setRatesHistory(data.ratesHistory.slice(-200));
         if (data.themeMode) setThemeModeState(data.themeMode);
         if (data.lastSyncTime) setLastSyncTime(data.lastSyncTime);
         if (!hadSampleAccount && data.isCloudSignedIn !== undefined) {
@@ -265,6 +289,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const savedLockout = localStorage.getItem(LOCKOUT_KEY);
       if (savedLockout) setLockout(JSON.parse(savedLockout));
+
+      if (localStorage.getItem(PENDING_SYNC_KEY) === '1') setPendingSync(true);
     } catch (e) {
       console.warn('Failed to load storage:', e);
     } finally {
@@ -303,8 +329,11 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           themeMode,
           lastSyncTime,
           isCloudSignedIn,
+          ratesHistory,
         })
       );
+      if (pendingSync) localStorage.setItem(PENDING_SYNC_KEY, '1');
+      else localStorage.removeItem(PENDING_SYNC_KEY);
       LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
     } catch (e) {
       console.warn('Failed to save storage:', e);
@@ -322,6 +351,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     themeMode,
     lastSyncTime,
     isCloudSignedIn,
+    ratesHistory,
+    pendingSync,
   ]);
 
   /* ------------------------- تطبيق القفل التلقائي ------------------------- */
@@ -425,6 +456,21 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, [refreshRates]);
 
+  /* ------------------- سجل سعر عيار 21 (محلي) ------------------- */
+
+  useEffect(() => {
+    if (!hydrated.current) return;
+    const value = Number(rates.karat21) || 0;
+    if (value <= 0) return;
+    setRatesHistory((prev) => {
+      const last = prev[prev.length - 1];
+      const changed = !last || Math.abs(last.v - value) / (last.v || 1) > 0.001;
+      const oldEnough = !last || Date.now() - new Date(last.t).getTime() > 6 * 60 * 60 * 1000;
+      if (last && !changed && !oldEnough) return prev;
+      return [...prev, { t: new Date().toISOString(), v: value }].slice(-200);
+    });
+  }, [rates.karat21]);
+
   /* ------------------------- المظهر ------------------------- */
 
   useEffect(() => {
@@ -471,6 +517,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     () => partnerShares(partners, expenses, financials.netProfit, financials.totalCapital),
     [partners, expenses, financials.netProfit, financials.totalCapital]
   );
+
+  const dues = useMemo(() => computeDues(sales, purchases), [sales, purchases]);
 
   const totalProfitPercent = useMemo(
     () => partners.filter((p) => !p.archived).reduce((sum, p) => sum + (p.profitPercent || 0), 0),
@@ -861,7 +909,51 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     [isCloudSignedIn, mergePayloads, syncPayload]
   );
 
-  // مزامنة تلقائية بعد أي تعديل (بتأخير بسيط لتجميع التعديلات)
+  /**
+   * محرّك المزامنة:
+   * - ينتظر 4 ثوانٍ بعد آخر تعديل (لتجميع التعديلات).
+   * - لا يحاول أثناء انقطاع الشبكة، وينتظر حدث العودة للمحاولة فوراً.
+   * - عند الفشل يعيد المحاولة بتأخير متزايد، ويحفظ التغييرات محلياً حتى تنجح.
+   */
+  const attemptSync = useCallback(async (): Promise<boolean> => {
+    if (!isCloudSignedIn) return false;
+
+    if (!isOnline) {
+      setPendingSync(true);
+      setSyncError('لا يوجد اتصال بالإنترنت — سيتم الرفع تلقائياً عند عودة الشبكة');
+      return false;
+    }
+
+    const signature = dataSignatureRef.current;
+    setSyncError('');
+    const ok = await syncWithCloud(true);
+
+    if (ok) {
+      lastPushedSignature.current = signature;
+      retryAttempts.current = 0;
+      setPendingSync(false);
+      setSyncError('');
+      return true;
+    }
+
+    retryAttempts.current += 1;
+    setPendingSync(true);
+    setSyncError('تعذر إكمال المزامنة — سيُعاد المحاولة تلقائياً');
+
+    const delay = Math.min(60_000, 5_000 * 2 ** Math.min(retryAttempts.current - 1, 4));
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    retryTimer.current = setTimeout(() => {
+      void attemptSync();
+    }, delay);
+    return false;
+  }, [isCloudSignedIn, isOnline, syncWithCloud]);
+
+  const forceSync = useCallback(async () => {
+    retryAttempts.current = 0;
+    return attemptSync();
+  }, [attemptSync]);
+
+  // توقيع البيانات: يتغير فقط عند إضافة/تعديل/حذف سجل فعلاً
   const dataSignature = useMemo(
     () =>
       JSON.stringify([
@@ -875,22 +967,55 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
 
   useEffect(() => {
+    dataSignatureRef.current = dataSignature;
+  }, [dataSignature]);
+
+  useEffect(() => {
     if (!isCloudSignedIn || !hydrated.current) return;
-    // لا نرسل شيئاً إذا لم تتغير البيانات منذ آخر مزامنة ناجحة
-    if (dataSignature === lastPushedSignature.current) return;
+
+    if (dataSignature === lastPushedSignature.current) {
+      setPendingSync(false);
+      return;
+    }
+
+    setPendingSync(true);
+    if (!isOnline) return; // سننتظر حدث العودة للشبكة
 
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    syncTimer.current = setTimeout(async () => {
-      const signatureBefore = dataSignature;
-      const ok = await syncWithCloud(true);
-      if (ok) lastPushedSignature.current = signatureBefore;
+    syncTimer.current = setTimeout(() => {
+      void attemptSync();
     }, 4000);
 
     return () => {
       if (syncTimer.current) clearTimeout(syncTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataSignature, isCloudSignedIn]);
+  }, [dataSignature, isCloudSignedIn, isOnline]);
+
+  // عودة الشبكة → مزامنة فورية
+  useEffect(() => {
+    if (isOnline && isCloudSignedIn && pendingSync) {
+      retryAttempts.current = 0;
+      void attemptSync();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline]);
+
+  // عند فتح التطبيق بحساب مسجّل: مزامنة أولية (تُنجز أي تغييرات معلّقة من قبل)
+  useEffect(() => {
+    if (hydrated.current && isCloudSignedIn && isOnline) {
+      void attemptSync();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCloudSignedIn]);
+
+  // تنظيف المؤقتات عند الإغلاق
+  useEffect(() => {
+    return () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+    };
+  }, []);
 
   const signInCloud = async (email: string, pass: string) => {
     if (!email.trim() || pass.length < 6) {
@@ -1102,6 +1227,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     financials,
     partnerSharesList,
     ratesMeta,
+    ratesHistory,
+    dues,
+    isOnline,
+    pendingSync,
+    syncError,
+    forceSync,
 
     setUserEmail,
     setStoreName,

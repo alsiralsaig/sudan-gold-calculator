@@ -17,7 +17,11 @@ import {
   ChevronLeft,
   Cloud,
   Archive,
-  FileBarChart
+  FileBarChart,
+  BarChart3,
+  BellRing,
+  WifiOff,
+  CloudUpload
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum } from '../../core/format';
@@ -37,7 +41,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   isMenuOpen,
   setIsMenuOpen,
 }) => {
-  const { pinCode, lockApp, rates, updateRates, userEmail } = useGoldStore();
+  const { pinCode, lockApp, rates, updateRates, userEmail, dues, isOnline, pendingSync, forceSync } =
+    useGoldStore();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
@@ -99,6 +104,20 @@ export const Navbar: React.FC<NavbarProps> = ({
       color: 'text-cyan-400 bg-cyan-500/10',
     },
     {
+      id: 'analytics',
+      label: 'التحليلات والرسوم البيانية',
+      desc: 'أرباح يومية وشهرية، حركة الوزن، تطور سعر الذهب',
+      icon: BarChart3,
+      color: 'text-cyan-400 bg-cyan-500/10',
+    },
+    {
+      id: 'reminders',
+      label: 'التنبيهات والمتأخرات',
+      desc: 'مواعيد تحصيل الزبائن وسداد الموردين مع تذكير واتساب',
+      icon: BellRing,
+      color: 'text-rose-400 bg-rose-500/10',
+    },
+    {
       id: 'archive',
       label: 'الأرشيف',
       desc: 'استعادة السجلات المؤرشفة أو حذفها نهائياً',
@@ -113,6 +132,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       color: 'text-purple-400 bg-purple-500/10',
     },
   ];
+
+  const syncLabel = () => {
+    if (!isOnline) return { text: 'غير متصل', tone: 'text-rose-300 bg-rose-500/15 border-rose-500/40' };
+    if (pendingSync)
+      return { text: 'بانتظار المزامنة', tone: 'text-amber-300 bg-amber-500/15 border-amber-500/40' };
+    return { text: 'متزامن', tone: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/40' };
+  };
 
   const getTitle = () => {
     switch (activeTab) {
@@ -132,6 +158,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         return 'أسعار الذهب والعملات';
       case 'reports':
         return 'التقارير والكشوفات';
+      case 'analytics':
+        return 'التحليلات والرسوم البيانية';
+      case 'reminders':
+        return 'التنبيهات والمتأخرات';
       case 'archive':
         return 'الأرشيف';
       case 'settings':
@@ -249,6 +279,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden sm:inline">تثبيت</span>
             </button>
 
+            {/* Alerts (المتأخرات) */}
+            <button
+              onClick={() => onNavigate('reminders')}
+              className={`relative p-2 sm:p-2.5 rounded-2xl border transition-colors ${
+                dues.overdue.length > 0
+                  ? 'bg-rose-500/15 hover:bg-rose-500/25 border-rose-500/50 text-rose-300'
+                  : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-300'
+              }`}
+              title={
+                dues.overdue.length > 0
+                  ? `${dues.overdue.length} فاتورة متأخرة`
+                  : 'التنبيهات والمتأخرات'
+              }
+            >
+              <BellRing className="w-4 h-4" />
+              {dues.overdue.length > 0 && (
+                <span className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
+                  {dues.overdue.length > 9 ? '9+' : dues.overdue.length}
+                </span>
+              )}
+            </button>
+
             {/* Lock Button */}
             {pinCode && (
               <button
@@ -263,6 +315,32 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
         </div>
+
+        {/* شريط حالة الشبكة والمزامنة */}
+        {(!isOnline || pendingSync) && (
+          <div
+            className={`flex items-center justify-between gap-2 px-3 py-1.5 text-[10px] sm:text-[11px] font-bold border-t ${
+              !isOnline
+                ? 'bg-rose-950/40 border-rose-500/30 text-rose-200'
+                : 'bg-amber-950/40 border-amber-500/30 text-amber-200'
+            }`}
+          >
+            <span className="flex items-center gap-1.5">
+              {!isOnline ? <WifiOff className="w-3.5 h-3.5" /> : <CloudUpload className="w-3.5 h-3.5 animate-pulse" />}
+              {!isOnline
+                ? 'أنت غير متصل — كل التعديلات محفوظة على جهازك'
+                : 'توجد تغييرات لم تُزامن بعد — جاري الرفع'}
+            </span>
+            {isOnline && pendingSync && (
+              <button
+                onClick={() => void forceSync()}
+                className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-100 shrink-0"
+              >
+                مزامنة الآن
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Floating Toast Notification */}
         {toastMessage && (

@@ -24,6 +24,9 @@ import {
 import { Sale } from '../../types';
 import { purityLabel, unitsToK21 } from '../../core/purity';
 import { salePending } from '../../core/accounting';
+import { buildSaleInvoiceText, openWhatsApp, buildReminderText } from '../../core/share';
+import { toDateInputValue, arabicDate, relativeDays } from '../../core/dates';
+import { ShareButtons } from '../common/ShareButtons';
 
 export const SalesScreen: React.FC = () => {
   const {
@@ -34,6 +37,7 @@ export const SalesScreen: React.FC = () => {
     deleteSale,
     addPaymentToSale,
     rates,
+    storeName,
   } = useGoldStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,6 +62,10 @@ export const SalesScreen: React.FC = () => {
   // البيع الآجل: المبلغ المحصّل والمتبقي
   const [paidFull, setPaidFull] = useState(true);
   const [paidInput, setPaidInput] = useState('');
+
+  // هاتف الزبون وتاريخ الاستحقاق (للتنبيهات وواتساب)
+  const [buyerPhone, setBuyerPhone] = useState('');
+  const [dueDateInput, setDueDateInput] = useState('');
 
   // تسجيل دفعة لاحقة
   const [payModal, setPayModal] = useState<Sale | null>(null);
@@ -109,6 +117,8 @@ export const SalesScreen: React.FC = () => {
     setBuyAmount('');
     setBuyer('');
     setNotes('');
+    setBuyerPhone('');
+    setDueDateInput('');
     setPaidFull(true);
     setPaidInput('');
     setShowAddModal(true);
@@ -126,6 +136,8 @@ export const SalesScreen: React.FC = () => {
     setBuyAmount(sale.buyAmount.toString());
     setBuyer(sale.buyer || '');
     setNotes(sale.notes || '');
+    setBuyerPhone(sale.buyerPhone || '');
+    setDueDateInput(sale.dueDate ? toDateInputValue(sale.dueDate) : '');
     const remaining = salePending(sale);
     setPaidFull(remaining <= 0);
     setPaidInput(remaining > 0 ? String((sale.sellAmount || 0) - remaining) : '');
@@ -170,9 +182,11 @@ export const SalesScreen: React.FC = () => {
       sellAmount: totalSell,
       buyAmount: totalBuy,
       buyer: buyer.trim() || 'زبون عام',
+      buyerPhone: buyerPhone.trim(),
       notes: notes.trim(),
       paidAmount: totalPaid,
       pendingAmount: pending,
+      dueDate: pending > 0 && dueDateInput ? dueDateInput : undefined,
     };
 
     if (editingSale) {
@@ -608,6 +622,21 @@ export const SalesScreen: React.FC = () => {
                       {fmtNum(Math.max(0, (parseFloat(sellAmount) || 0) - (parseFloat(paidInput) || 0)))}
                     </span>
                   </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 font-bold mb-1">
+                      تاريخ السداد المتفق عليه (للتنبيهات):
+                    </label>
+                    <input
+                      type="date"
+                      value={dueDateInput}
+                      onChange={(e) => setDueDateInput(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white text-xs focus:border-amber-400 focus:outline-none"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      سيظهر تذكير في «التنبيهات» قبل الموعد، مع إمكانية الإرسال على واتساب.
+                    </p>
+                  </div>
                 </>
               )}
             </div>
@@ -654,6 +683,18 @@ export const SalesScreen: React.FC = () => {
                   onChange={(e) => setBuyer(e.target.value)}
                   placeholder="محمد أحمد"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  هاتف الزبون <span className="text-slate-500 font-normal">(اختياري — للواتساب)</span>:
+                </label>
+                <input
+                  type="tel"
+                  value={buyerPhone}
+                  onChange={(e) => setBuyerPhone(e.target.value)}
+                  placeholder="09xxxxxxxx"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono focus:border-emerald-400 focus:outline-none text-right"
                 />
               </div>
 
@@ -749,6 +790,25 @@ export const SalesScreen: React.FC = () => {
                   <span className="text-white">{selectedSale.buyer}</span>
                 </div>
               )}
+              {selectedSale.buyerPhone && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">الهاتف:</span>
+                  <span className="text-white font-mono">{selectedSale.buyerPhone}</span>
+                </div>
+              )}
+              {selectedSale.dueDate && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">تاريخ الاستحقاق:</span>
+                  <span className={`font-mono font-bold ${salePending(selectedSale) > 0 && new Date(selectedSale.dueDate) < new Date() ? 'text-rose-300' : 'text-slate-200'}`}>
+                    {arabicDate(selectedSale.dueDate)}
+                    {salePending(selectedSale) > 0 && (
+                      <span className="text-[10px] text-slate-500 mr-1">
+                        ({relativeDays(-Math.round((new Date().setHours(0,0,0,0) - new Date(selectedSale.dueDate).setHours(0,0,0,0)) / 86400000))})
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
               {selectedSale.notes && (
                 <div className="flex justify-between gap-3">
                   <span className="text-slate-400 shrink-0">ملاحظات:</span>
@@ -756,6 +816,41 @@ export const SalesScreen: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* مشاركة الفاتورة على واتساب */}
+            <ShareButtons
+              text={buildSaleInvoiceText(storeName, selectedSale, rates.karat21)}
+              phone={selectedSale.buyerPhone}
+              label="إرسال الفاتورة على واتساب"
+            />
+
+            {salePending(selectedSale) > 0 && (
+              <button
+                onClick={() =>
+                  openWhatsApp(
+                    selectedSale.buyerPhone,
+                    buildReminderText({
+                      storeName,
+                      party: selectedSale.buyer || 'زبون عام',
+                      amount: salePending(selectedSale),
+                      dueDate: selectedSale.dueDate,
+                      daysOverdue: selectedSale.dueDate
+                        ? Math.round(
+                            (new Date().setHours(0, 0, 0, 0) -
+                              new Date(selectedSale.dueDate).setHours(0, 0, 0, 0)) /
+                              86400000
+                          )
+                        : 0,
+                      kind: 'receivable',
+                    })
+                  )
+                }
+                className="w-full py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-200 font-bold rounded-xl text-xs border border-rose-500/40 flex items-center justify-center gap-1.5"
+              >
+                <HandCoins className="w-4 h-4" />
+                إرسال تذكير بالسداد
+              </button>
+            )}
 
             {/* سجل الدفعات */}
             {(selectedSale.payments || []).length > 0 && (

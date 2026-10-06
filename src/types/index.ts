@@ -13,7 +13,11 @@ export interface Purchase {
   amount: number; // total buy amount in SDG
   pendingAmount: number; // remaining debt to seller
   seller: string;
+  /** هاتف المورد/البائع */
+  sellerPhone?: string;
   bankAccount: string;
+  /** تاريخ الاستحقاق المتفق عليه للسداد */
+  dueDate?: string;
   notes: string;
   payments: Payment[];
   archived?: boolean;
@@ -28,6 +32,8 @@ export interface Sale {
   buyAmount: number; // cost
   sellAmount: number; // revenue
   buyer: string;
+  /** هاتف الزبون — للإرسال على واتساب */
+  buyerPhone?: string;
   notes: string;
   purchaseId?: string;
   /** المبلغ المحصّل من الزبون. غير موجود = مدفوع بالكامل (بيانات قديمة) */

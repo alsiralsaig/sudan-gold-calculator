@@ -32,6 +32,8 @@ import {
   kCurrency
 } from '../../core/format';
 import { purityLabel } from '../../core/purity';
+import { buildReportText, buildReminderText, openWhatsApp } from '../../core/share';
+import { MessageCircle, AlertTriangle } from 'lucide-react';
 
 type PeriodKey = 'today' | 'yesterday' | 'week' | 'month' | 'all';
 
@@ -87,6 +89,7 @@ export const ReportsScreen: React.FC = () => {
     rates,
     exportCsv,
     storeName,
+    dues,
   } = useGoldStore();
 
   const [period, setPeriod] = useState<PeriodKey>('today');
@@ -219,6 +222,32 @@ export const ReportsScreen: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2 print:hidden">
+            <button
+              onClick={() =>
+                openWhatsApp(
+                  undefined,
+                  buildReportText({
+                    storeName,
+                    dateLabel: range.label,
+                    salesCount: summary.salesCount,
+                    salesAmount: summary.salesAmount,
+                    salesUnits: summary.salesUnits,
+                    profit: summary.profit,
+                    expenses: summary.expenses,
+                    net: summary.net,
+                    collected: summary.collected,
+                    credit: summary.credit,
+                    stockGramsK21: inventory.gramsK21,
+                    price21: rates.karat21,
+                  })
+                )
+              }
+              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl"
+              title="إرسال التقرير على واتساب"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              واتساب
+            </button>
             <button
               onClick={() => window.print()}
               className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs rounded-xl"
@@ -477,6 +506,94 @@ export const ReportsScreen: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* المتأخرات في الفترة */}
+      {dues.items.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3 print:bg-white">
+          <div className="flex items-center justify-between">
+            <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-400" />
+              المتأخرات والمتبقي على الزبائن ({dues.items.length})
+            </h3>
+            <span className="text-[11px] font-mono text-amber-300">
+              إجمالي المتأخر: {fmtNum(dues.overdueTotal)}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs min-w-[480px]">
+              <thead className="bg-slate-950 text-slate-400">
+                <tr>
+                  <th className="text-right py-2 px-2 font-bold">الطرف</th>
+                  <th className="text-right py-2 px-2 font-bold">النوع</th>
+                  <th className="text-right py-2 px-2 font-bold">المتبقي</th>
+                  <th className="text-right py-2 px-2 font-bold">الاستحقاق</th>
+                  <th className="text-right py-2 px-2 font-bold">الحالة</th>
+                  <th className="text-right py-2 px-2 font-bold print:hidden">تذكير</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {dues.items.slice(0, 12).map((item) => (
+                  <tr key={`${item.kind}-${item.id}`}>
+                    <td className="py-2 px-2 text-slate-200 font-semibold">{item.party}</td>
+                    <td className="py-2 px-2 text-[10px] text-slate-400">
+                      {item.kind === 'receivable' ? 'لنا' : 'علينا'}
+                    </td>
+                    <td className="py-2 px-2 font-mono text-amber-300">{fmtNum(item.amount)}</td>
+                    <td className="py-2 px-2 font-mono text-slate-400">
+                      {item.dueDate ? formatInvoiceDate(item.dueDate) : '—'}
+                    </td>
+                    <td
+                      className={`py-2 px-2 font-bold ${
+                        item.status === 'overdue'
+                          ? 'text-rose-300'
+                          : item.status === 'today'
+                          ? 'text-amber-300'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {item.status === 'overdue'
+                        ? `متأخر ${item.daysOverdue} يوم`
+                        : item.status === 'today'
+                        ? 'اليوم'
+                        : item.dueDate
+                        ? `${Math.abs(item.daysOverdue)} يوم`
+                        : '—'}
+                    </td>
+                    <td className="py-2 px-2 print:hidden">
+                      <button
+                        onClick={() =>
+                          openWhatsApp(
+                            item.phone,
+                            buildReminderText({
+                              storeName,
+                              party: item.party,
+                              amount: item.amount,
+                              dueDate: item.dueDate,
+                              daysOverdue: item.daysOverdue,
+                              kind: item.kind,
+                            })
+                          )
+                        }
+                        className="p-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300"
+                        title="إرسال تذكير على واتساب"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {dues.items.length > 12 && (
+            <p className="text-[10px] text-slate-500">
+              يُعرض أول 12 سطراً — القائمة الكاملة في شاشة «التنبيهات والمتأخرات».
+            </p>
+          )}
+        </div>
+      )}
 
       {/* كشف حساب طرف */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4 print:bg-white">

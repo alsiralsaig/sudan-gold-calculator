@@ -31,6 +31,23 @@ import {
   kCurrency
 } from '../../core/format';
 import { purityLabel } from '../../core/purity';
+import { BarChart } from '../charts/Charts';
+import { summarizeRange, startOfDay, endOfDay } from '../../core/accounting';
+import {
+  arabicDate,
+  arabicDayName,
+  addDays,
+  relativeDays,
+  shortLabel
+} from '../../core/dates';
+import {
+  BellRing,
+  WifiOff,
+  CloudUpload,
+  BarChart3,
+  MessageCircle
+} from 'lucide-react';
+import { buildReportText, openWhatsApp } from '../../core/share';
 
 interface DashboardScreenProps {
   onNavigate: (tab: string) => void;
@@ -60,6 +77,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
     isSyncing,
     isCloudSignedIn,
     lastSyncTime,
+    dues,
+    isOnline,
+    pendingSync,
+    forceSync,
+    storeName,
+    expenses,
   } = useGoldStore();
 
   const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -69,6 +92,40 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
     .filter((s) => !s.archived && (s.pendingAmount || 0) > 0)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 3);
+
+  // ربح آخر 7 أيام (رسم مصغّر)
+  const weekly = React.useMemo(() => {
+    const today = startOfDay(new Date());
+    return Array.from({ length: 7 }, (_, idx) => {
+      const day = addDays(today, -(6 - idx));
+      const summary = summarizeRange(purchases, sales, expenses, startOfDay(day), endOfDay(day));
+      return { label: shortLabel(day), value: summary.profit, hint: `${arabicDayName(day)}: ربح ${fmtNum(summary.profit)}` };
+    });
+  }, [purchases, sales, expenses]);
+
+  const weeklyNet = weekly.reduce((s, d) => s + d.value, 0);
+
+  const sendDailyReport = () => {
+    const today = startOfDay(new Date());
+    const summary = summarizeRange(purchases, sales, expenses, today, endOfDay(today));
+    openWhatsApp(
+      undefined,
+      buildReportText({
+        storeName,
+        dateLabel: `تقرير يوم ${arabicDate(today)}`,
+        salesCount: summary.salesCount,
+        salesAmount: summary.salesAmount,
+        salesUnits: summary.salesUnits,
+        profit: summary.profit,
+        expenses: summary.expenses,
+        net: summary.net,
+        collected: summary.collected,
+        credit: summary.credit,
+        stockGramsK21: inventory.gramsK21,
+        price21: rates.karat21,
+      })
+    );
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -402,6 +459,35 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
         )}
       </div>
 
+      {/* حالة الاتصال */}
+      {!isOnline && (
+        <div className="bg-rose-950/30 border border-rose-500/40 rounded-2xl px-4 py-3 flex items-start gap-2.5">
+          <WifiOff className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <div className="text-[11px] leading-relaxed">
+            <p className="text-rose-200 font-bold">لا يوجد اتصال بالإنترنت</p>
+            <p className="text-rose-200/80">
+              التطبيق يعمل بالكامل من جهازك — كل عملية تسجّلها تُحفظ محلياً وتُرفع تلقائياً عند عودة
+              الشبكة.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isOnline && pendingSync && (
+        <div className="bg-amber-950/30 border border-amber-500/40 rounded-2xl px-4 py-3 flex items-center justify-between gap-2.5">
+          <span className="flex items-center gap-2 text-[11px] text-amber-200 font-bold">
+            <CloudUpload className="w-4 h-4 text-amber-400" />
+            تغييرات بانتظار المزامنة السحابية
+          </span>
+          <button
+            onClick={() => void forceSync()}
+            className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-100 text-[11px] font-bold"
+          >
+            مزامنة الآن
+          </button>
+        </div>
+      )}
+
       {/* المزامنة */}
       {isCloudSignedIn && (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 flex items-center justify-between text-[11px]">
@@ -412,6 +498,81 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
           <span className="text-slate-500">آخر مزامنة: {lastSyncTime || '—'}</span>
         </div>
       )}
+
+      {/* التنبيهات والمتأخرات */}
+      {(dues.overdue.length > 0 || dues.dueToday.length > 0) && (
+        <div className="bg-slate-900 border-2 border-rose-500/40 rounded-3xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 bg-rose-500/15 text-rose-400 rounded-2xl border border-rose-500/40">
+                <BellRing className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm sm:text-base text-white">تنبيهات التحصيل</h3>
+                <p className="text-[11px] text-slate-400">
+                  {dues.overdue.length > 0
+                    ? `${dues.overdue.length} فاتورة متأخرة بقيمة ${fmtMoney(dues.overdueTotal)}`
+                    : `${dues.dueToday.length} فاتورة تستحق اليوم`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => onNavigate('reminders')}
+              className="text-xs font-bold text-rose-300 hover:text-rose-200 flex items-center gap-1"
+            >
+              الكل
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="space-y-1.5">
+            {[...dues.overdue, ...dues.dueToday].slice(0, 3).map((item) => (
+              <div
+                key={`${item.kind}-${item.id}`}
+                className="flex items-center justify-between bg-slate-950 rounded-xl px-3 py-2.5 border border-slate-800"
+              >
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-white block truncate">
+                    {item.party}
+                    <span className="text-[10px] text-slate-500 font-normal mr-1.5">
+                      {item.kind === 'receivable' ? '(لنا)' : '(علينا)'}
+                    </span>
+                  </span>
+                  <span className="text-[10px] text-rose-300 font-bold">
+                    {item.status === 'overdue' ? `متأخر ${item.daysOverdue} يوم` : relativeDays(item.daysOverdue)}
+                  </span>
+                </div>
+                <span className="font-mono font-black text-amber-300 text-xs shrink-0">
+                  {fmtNum(item.amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ربح آخر 7 أيام */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-cyan-400" />
+            <div>
+              <h3 className="font-extrabold text-sm text-white">الربح في آخر 7 أيام</h3>
+              <p className="text-[11px] text-slate-400">
+                الصافي: <span className={weeklyNet >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>{fmtNum(weeklyNet)}</span>
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('analytics')}
+            className="text-xs font-bold text-cyan-300 hover:text-cyan-200 flex items-center gap-1"
+          >
+            تحليلات
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        </div>
+        <BarChart data={weekly} height={120} colors={['#10b981', '#f59e0b']} emptyMessage="لا توجد مبيعات هذا الأسبوع" />
+      </div>
 
       {/* اختصارات */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -463,6 +624,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
         </div>
         <ChevronLeft className="w-5 h-5 text-amber-400 group-hover:-translate-x-1 transition-transform" />
       </div>
+
+      {/* مشاركة تقرير اليوم */}
+      <button
+        onClick={sendDailyReport}
+        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-2xl text-xs flex items-center justify-center gap-2"
+      >
+        <MessageCircle className="w-4 h-4" />
+        إرسال تقرير اليوم على واتساب (للشريك)
+      </button>
 
       {financials.activeSalesCount === 0 && financials.activePurchasesCount === 0 && (
         <div className="bg-slate-900/60 border border-dashed border-slate-700 rounded-3xl p-5 text-center space-y-2">

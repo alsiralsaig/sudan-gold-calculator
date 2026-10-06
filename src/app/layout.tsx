@@ -42,7 +42,9 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              if ('serviceWorker' in navigator) {
+              // Service Worker في نسخة الإنتاج فقط — حتى لا تُخزَّن نسخة قديمة
+              // أثناء التطوير المحلي.
+              if ('serviceWorker' in navigator && ${JSON.stringify(process.env.NODE_ENV === 'production')}) {
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(function(err) {
                     console.log('SW reg error: ', err);

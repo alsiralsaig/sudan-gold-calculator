@@ -1,35 +1,114 @@
-const CACHE_NAME = 'sudan-gold-calculator-v5';
+/**
+ * Service Worker — يعمل في نسخة الإنتاج فقط.
+ *
+ * الهدف: التطبيق يفتح ويعمل بلا إنترنت.
+ *  - التنقل (فتح الصفحة): network-first ثم الكاش.
+ *  - نقاط /api (GET): network-first ثم آخر استجابة محفوظة (مثل آخر سعر ذهب).
+ *  - ملفات ثابتة (_next/static، صور): cache-first مع تحديث بالخلفية.
+ */
+
+const VERSION = 'sgc-v6.2';
+const SHELL_CACHE = `${VERSION}-shell`;
+const RUNTIME_CACHE = `${VERSION}-runtime`;
+const API_CACHE = `${VERSION}-api`;
+
 const APP_SHELL = [
   '/',
   '/manifest.json',
   '/pwa-192x192.png',
   '/pwa-512x512.png',
-  '/apple-touch-icon.png'
+  '/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(APP_SHELL)).catch(() => undefined)
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-    ))
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((key) => !key.startsWith(VERSION)).map((key) => caches.delete(key)))
+      )
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-  event.respondWith(
-    fetch(event.request).then((response) => {
-      if (response.ok && new URL(event.request.url).origin === self.location.origin) {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-      }
+/** تحميل من الشبكة مع حفظ نسخة، والرجوع للكاش عند الفشل */
+async function networkFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  try {
+    const response = await fetch(request);
+    if (response && response.ok) cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw error;
+  }
+}
+
+/** تحميل من الكاش فوراً ثم تحديثه بالخلفية */
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  const fetchAndUpdate = fetch(request)
+    .then((response) => {
+      if (response && response.ok) cache.put(request, response.clone());
       return response;
-    }).catch(() => caches.match(event.request).then((cached) => cached || caches.match('/')))
-  );
+    })
+    .catch(() => null);
+
+  if (cached) {
+    fetchAndUpdate.catch(() => undefined);
+    return cached;
+  }
+
+  const response = await fetchAndUpdate;
+  if (response) return response;
+  throw new Error('offline');
+}
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return; // الموارد الخارجية تمر كما هي
+
+  // فتح صفحة/تنقل
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      networkFirst(request, SHELL_CACHE).catch(async () => {
+        const cache = await caches.open(SHELL_CACHE);
+        return (await cache.match(request)) || (await cache.match('/')) || Response.error();
+      })
+    );
+    return;
+  }
+
+  // واجهات الـ API (أسعار/جلسة/مزامنة) — آخر استجابة ناجحة تُستخدم عند الانقطاع
+  if (url.pathname.startsWith('/api/')) {
+    // طلبات المزامنة (PUT) لا تُخزَّن — لا نتدخل فيها
+    event.respondWith(networkFirst(request, API_CACHE).catch(() => Response.error()));
+    return;
+  }
+
+  // ملفات ثابتة
+  if (url.pathname.startsWith('/_next/static') || /\.(png|jpg|jpeg|svg|webp|ico|woff2?|css|js)$/.test(url.pathname)) {
+    event.respondWith(cacheFirst(request, RUNTIME_CACHE).catch(() => Response.error()));
+    return;
+  }
+
+  // الباقي: شبكة ثم كاش
+  event.respondWith(networkFirst(request, RUNTIME_CACHE).catch(() => Response.error()));
+});
+
+/** رسالة من التطبيق لمسح الكاش عند الحاجة */
+self.addEventListener('message', (event) => {
+  if (event.data === 'skip-waiting') self.skipWaiting();
 });

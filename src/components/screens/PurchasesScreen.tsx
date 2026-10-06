@@ -22,6 +22,9 @@ import {
 } from '../../core/format';
 import { Purchase } from '../../types';
 import { purityLabel, unitsToK21 } from '../../core/purity';
+import { buildPurchaseInvoiceText, buildReminderText, openWhatsApp } from '../../core/share';
+import { toDateInputValue, arabicDate } from '../../core/dates';
+import { ShareButtons } from '../common/ShareButtons';
 
 export const PurchasesScreen: React.FC = () => {
   const {
@@ -32,6 +35,7 @@ export const PurchasesScreen: React.FC = () => {
     deletePurchase,
     addPaymentToPurchase,
     rates,
+    storeName,
   } = useGoldStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,8 +59,10 @@ export const PurchasesScreen: React.FC = () => {
   const [amount, setAmount] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
   const [seller, setSeller] = useState('');
+  const [sellerPhone, setSellerPhone] = useState('');
   const [bankAccount, setBankAccount] = useState('');
   const [notes, setNotes] = useState('');
+  const [dueDateInput, setDueDateInput] = useState('');
 
   // Payment Modal State
   const [newPayAmount, setNewPayAmount] = useState('');
@@ -93,8 +99,10 @@ export const PurchasesScreen: React.FC = () => {
     setAmount('');
     setPaidAmount('');
     setSeller('');
+    setSellerPhone('');
     setBankAccount('');
     setNotes('');
+    setDueDateInput('');
     setShowAddModal(true);
   };
 
@@ -108,8 +116,10 @@ export const PurchasesScreen: React.FC = () => {
     setAmount(purchase.amount.toString());
     setPaidAmount(Math.max(0, purchase.amount - purchase.pendingAmount).toString());
     setSeller(purchase.seller || '');
+    setSellerPhone(purchase.sellerPhone || '');
     setBankAccount(purchase.bankAccount || '');
     setNotes(purchase.notes || '');
+    setDueDateInput(purchase.dueDate ? toDateInputValue(purchase.dueDate) : '');
     setSelectedPurchase(null);
     setShowAddModal(true);
   };
@@ -138,8 +148,10 @@ export const PurchasesScreen: React.FC = () => {
       amount: totalCost,
       pendingAmount: pending,
       seller: seller.trim() || 'بائع عام',
+      sellerPhone: sellerPhone.trim(),
       bankAccount: bankAccount.trim(),
       notes: notes.trim(),
+      dueDate: pending > 0 && dueDateInput ? dueDateInput : undefined,
     };
 
     if (editingPurchase) {
@@ -502,6 +514,19 @@ export const PurchasesScreen: React.FC = () => {
               />
             </div>
 
+            {/* تاريخ استحقاق السداد — للتنبيهات */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                تاريخ استحقاق السداد <span className="text-slate-500 font-normal">(اختياري — يظهر في التنبيهات)</span>:
+              </label>
+              <input
+                type="date"
+                value={dueDateInput}
+                onChange={(e) => setDueDateInput(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-xs focus:border-amber-400 focus:outline-none"
+              />
+            </div>
+
             {/* Karat Selection (Manual / Custom or Standard) */}
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
@@ -544,6 +569,18 @@ export const PurchasesScreen: React.FC = () => {
                   onChange={(e) => setSeller(e.target.value)}
                   placeholder="محمد أحمد"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  هاتف البائع <span className="text-slate-500 font-normal">(اختياري)</span>:
+                </label>
+                <input
+                  type="tel"
+                  value={sellerPhone}
+                  onChange={(e) => setSellerPhone(e.target.value)}
+                  placeholder="09xxxxxxxx"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono focus:border-amber-400 focus:outline-none text-right"
                 />
               </div>
 
@@ -632,7 +669,54 @@ export const PurchasesScreen: React.FC = () => {
                   <span className="text-white">{selectedPurchase.seller}</span>
                 </div>
               )}
+              {selectedPurchase.sellerPhone && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">الهاتف:</span>
+                  <span className="text-white font-mono">{selectedPurchase.sellerPhone}</span>
+                </div>
+              )}
+              {selectedPurchase.dueDate && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">تاريخ الاستحقاق:</span>
+                  <span className="font-mono text-slate-200">{arabicDate(selectedPurchase.dueDate)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-400">سعر الجرام الفعلي:</span>
+                <span className="font-mono text-slate-300">
+                  {selectedPurchase.units > 0
+                    ? fmtNum((selectedPurchase.amount || 0) / (selectedPurchase.units / 100))
+                    : '—'}
+                </span>
+              </div>
             </div>
+
+            {/* مشاركة فاتورة الشراء على واتساب */}
+            <ShareButtons
+              text={buildPurchaseInvoiceText(storeName, selectedPurchase, rates.karat21)}
+              phone={selectedPurchase.sellerPhone}
+              label="إرسال الفاتورة على واتساب"
+            />
+
+            {(selectedPurchase.pendingAmount || 0) > 0 && (
+              <button
+                onClick={() =>
+                  openWhatsApp(
+                    selectedPurchase.sellerPhone,
+                    buildReminderText({
+                      storeName,
+                      party: selectedPurchase.seller || 'مورد',
+                      amount: selectedPurchase.pendingAmount || 0,
+                      dueDate: selectedPurchase.dueDate,
+                      kind: 'payable',
+                    })
+                  )
+                }
+                className="w-full py-2.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-200 font-bold rounded-xl text-xs border border-amber-500/40 flex items-center justify-center gap-1.5"
+              >
+                إبلاغ المورد بموعد السداد
+              </button>
+            )}
 
             <div className="flex items-center gap-2 pt-1">
               <button
