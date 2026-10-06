@@ -77,7 +77,7 @@ export const StickyActionBar: React.FC<StickyActionBarProps> = ({
         className="fixed left-0 right-0 z-30 px-3 pointer-events-none"
         style={{ bottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}
       >
-        <div className="max-w-4xl mx-auto bg-slate-900/97 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl shadow-slate-950/60 overflow-hidden pointer-events-auto">
+        <div className="sticky-action-bar max-w-4xl mx-auto bg-slate-900/97 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl shadow-slate-950/60 overflow-hidden pointer-events-auto">
           {hasStats && (
             <div
               className="grid divide-x divide-x-reverse divide-slate-800 border-b border-slate-800"

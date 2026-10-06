@@ -156,6 +156,32 @@ html.light .bg-gradient-to-br.from-amber-500\/20 {
   background-image: linear-gradient(to bottom right, rgba(245, 158, 11, 0.15), #ffffff, #f8fafc) !important;
 }
 
+
+/* شريط الإجماليات الثابت — يتحول للأبيض في الوضع الفاتح */
+html.light .sticky-action-bar {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .sticky-action-bar .text-amber-300 {
+  color: #b45309 !important;
+}
+html.light .sticky-action-bar .text-emerald-300 {
+  color: #047857 !important;
+}
+html.light .sticky-action-bar .text-rose-300 {
+  color: #be123c !important;
+}
+html.light .sticky-action-bar .text-cyan-300 {
+  color: #0e7490 !important;
+}
+html.light .sticky-action-bar .text-blue-300 {
+  color: #1d4ed8 !important;
+}
+html.light .sticky-action-bar .text-slate-200 {
+  color: #1e293b !important;
+}
+
 /* =========================================================
    PRINT STYLES (طباعة التقارير والكشوفات)
    ========================================================= */
