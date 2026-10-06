@@ -69,7 +69,7 @@ function MainAppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Cairo',sans-serif] selection:bg-amber-500 selection:text-slate-950">
+    <div className="app-shell bg-slate-950 text-slate-100 font-['Cairo',sans-serif] selection:bg-amber-500 selection:text-slate-950">
       
       {/* Top Header Navbar with Dropdown Menu Drawer */}
       <Navbar
@@ -81,7 +81,8 @@ function MainAppContent() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-3 sm:p-6 pb-0">
+      <main className="app-scroll w-full p-3 sm:p-6 pb-0">
+        <div className="max-w-4xl mx-auto">
         {activeTab === 'dashboard' && <DashboardScreen onNavigate={setActiveTab} />}
         {activeTab === 'calculator' && <CalculatorScreen />}
         {activeTab === 'partners' && <PartnersScreen />}
@@ -95,6 +96,7 @@ function MainAppContent() {
         {activeTab === 'loans' && <LoansScreen />}
         {activeTab === 'archive' && <ArchiveScreen />}
         {activeTab === 'settings' && <SettingsScreen onOpenInstallModal={() => setShowInstallModal(true)} />}
+        </div>
       </main>
 
       {/* Clean 4-Tab Bottom Navigation + Menu Drawer Button */}

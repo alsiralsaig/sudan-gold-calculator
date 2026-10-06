@@ -251,7 +251,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 px-3 sm:px-4 py-2.5">
+      <header className="shrink-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 px-3 sm:px-4 py-2.5">
         {/* شريط الفرع النشط — يظهر عند وجود فروع */}
         {branches.length > 0 && (
           <div className="max-w-4xl mx-auto mb-2 flex items-center gap-2 bg-slate-900/80 border border-amber-500/25 rounded-2xl px-2.5 py-1.5">
