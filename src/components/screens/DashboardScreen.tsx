@@ -1,6 +1,7 @@
+'use client';
+
 import React from 'react';
 import {
-  TrendingUp,
   TrendingDown,
   Scale,
   DollarSign,
@@ -10,109 +11,227 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Coins,
-  ShieldCheck,
   ChevronLeft,
   Settings,
-  Cloud
+  FileBarChart,
+  AlertTriangle,
+  Cloud,
+  RefreshCw,
+  Clock,
+  HandCoins,
+  Sparkles
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
-import { fmtMoney, fmtNum, unitsToWeight, unitsToGramsDecimal, kCurrency } from '../../core/format';
+import {
+  fmtMoney,
+  fmtNum,
+  unitsToWeight,
+  unitsToGhJ,
+  unitsToGramsDecimal,
+  kCurrency
+} from '../../core/format';
+import { purityLabel } from '../../core/purity';
 
 interface DashboardScreenProps {
   onNavigate: (tab: string) => void;
 }
 
+function freshnessLabel(fetchedAt?: string, isStale?: boolean): { text: string; tone: string } {
+  if (isStale) return { text: 'بيانات غير محدّثة', tone: 'text-amber-300' };
+  if (!fetchedAt) return { text: 'لم يتم التحديث بعد', tone: 'text-slate-400' };
+  const diffMin = Math.round((Date.now() - new Date(fetchedAt).getTime()) / 60000);
+  if (diffMin < 1) return { text: 'تحديث الآن', tone: 'text-emerald-400' };
+  if (diffMin < 60) return { text: `قبل ${diffMin} دقيقة`, tone: 'text-emerald-400' };
+  const hours = Math.round(diffMin / 60);
+  if (hours < 24) return { text: `قبل ${hours} ساعة`, tone: 'text-amber-300' };
+  return { text: `قبل ${Math.round(hours / 24)} يوم`, tone: 'text-rose-300' };
+}
+
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) => {
   const {
-    totalCapital,
-    totalSales,
-    totalCost,
-    grossProfit,
-    generalExpenses,
-    privateExpenses,
-    netProfit,
-    currentStockUnits,
+    rates,
+    ratesMeta,
+    inventory,
+    financials,
+    partners,
     purchases,
     sales,
-    rates,
-    partners,
+    refreshRates,
+    isSyncing,
+    isCloudSignedIn,
+    lastSyncTime,
   } = useGoldStore();
 
-  const totalDebtToSellers = purchases.reduce((sum, p) => sum + (p.pendingAmount || 0), 0);
-  const currentStockGrams = unitsToGramsDecimal(currentStockUnits);
-  const estimatedStockValue = currentStockGrams * rates.karat21;
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const freshness = freshnessLabel(rates.fetchedAt || rates.lastUpdated, rates.isStale);
+
+  const recentCreditSales = sales
+    .filter((s) => !s.archived && (s.pendingAmount || 0) > 0)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 3);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshRates();
+    setTimeout(() => setIsRefreshing(false), 600);
+  };
 
   return (
-    <div className="space-y-6 pb-20 animate-in fade-in duration-200">
-      
-      {/* Hero Financial Overview Card */}
+    <div className="space-y-5 pb-20 animate-in fade-in duration-200">
+      {/* Hero: المركز المالي */}
       <div className="relative overflow-hidden bg-gradient-to-br from-amber-500/20 via-slate-900 to-slate-950 p-6 rounded-3xl border-2 border-amber-500/40 shadow-2xl space-y-5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-3">
           <div>
             <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
               <Coins className="w-4 h-4" />
               المركز المالي الشامل
             </span>
             <h2 className="text-2xl sm:text-3xl font-black text-white mt-1">
-              {fmtMoney(totalCapital)}
+              {fmtMoney(financials.totalCapital)}
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5">إجمالي رأس مال الشركاء المودع</p>
           </div>
           <div className="text-left bg-slate-950/80 p-3 rounded-2xl border border-slate-800">
             <span className="text-[10px] text-slate-400 block font-bold">صافي الأرباح</span>
-            <span className={`text-base sm:text-lg font-black font-mono ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {fmtMoney(netProfit)}
+            <span
+              className={`text-base sm:text-lg font-black font-mono ${
+                financials.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              }`}
+            >
+              {fmtMoney(financials.netProfit)}
+            </span>
+            <span className="block text-[10px] text-slate-500 mt-0.5">
+              هامش {financials.profitMarginPercent.toFixed(1)}%
             </span>
           </div>
         </div>
 
-        {/* 4 Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2">
-          
-          <div className="bg-slate-950/90 p-3.5 rounded-2xl border border-slate-800/80">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+          <button
+            onClick={() => onNavigate('sales')}
+            className="bg-slate-950/90 p-3.5 rounded-2xl border border-slate-800/80 text-right hover:border-emerald-500/50 transition-colors"
+          >
             <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
               <span>إجمالي المبيعات</span>
               <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <div className="text-sm font-black font-mono text-white truncate">
-              {fmtNum(totalSales)}
+              {fmtNum(financials.totalSales)}
             </div>
-          </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              {financials.activeSalesCount} عملية
+            </div>
+          </button>
 
-          <div className="bg-slate-950/90 p-3.5 rounded-2xl border border-slate-800/80">
+          <button
+            onClick={() => onNavigate('sales')}
+            className="bg-slate-950/90 p-3.5 rounded-2xl border border-slate-800/80 text-right hover:border-amber-500/50 transition-colors"
+          >
             <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>تكلفة المشتريات</span>
+              <span>تكلفة المبيعات</span>
               <ArrowDownLeft className="w-3.5 h-3.5 text-amber-400" />
             </div>
             <div className="text-sm font-black font-mono text-white truncate">
-              {fmtNum(totalCost)}
+              {fmtNum(financials.totalCost)}
             </div>
-          </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              ربح إجمالي {fmtNum(financials.grossProfit)}
+            </div>
+          </button>
 
-          <div className="bg-slate-950/90 p-3.5 rounded-2xl border border-slate-800/80">
+          <button
+            onClick={() => onNavigate('expenses')}
+            className="bg-slate-950/90 p-3.5 rounded-2xl border border-slate-800/80 text-right hover:border-rose-500/50 transition-colors"
+          >
             <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
               <span>المنصرفات العامة</span>
               <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
             </div>
             <div className="text-sm font-black font-mono text-rose-400 truncate">
-              {fmtNum(generalExpenses)}
+              {fmtNum(financials.generalExpenses)}
             </div>
-          </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              خاصة: {fmtNum(financials.privateExpenses)}
+            </div>
+          </button>
 
-          <div className="bg-slate-950/90 p-3.5 rounded-2xl border border-slate-800/80">
+          <button
+            onClick={() => onNavigate('purchases')}
+            className="bg-slate-950/90 p-3.5 rounded-2xl border border-slate-800/80 text-right hover:border-cyan-500/50 transition-colors"
+          >
             <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>متبقي المديونية</span>
+              <span>متبقي للبائعين</span>
               <Wallet className="w-3.5 h-3.5 text-cyan-400" />
             </div>
             <div className="text-sm font-black font-mono text-cyan-400 truncate">
-              {fmtNum(totalDebtToSellers)}
+              {fmtNum(financials.payables)}
             </div>
-          </div>
-
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              على {purchases.filter((p) => !p.archived && (p.pendingAmount || 0) > 0).length} فاتورة
+            </div>
+          </button>
         </div>
       </div>
 
-      {/* Gold Stock & Inventory Balance */}
+      {/* الذمم المدينة (البيع الآجل) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 bg-emerald-500/15 text-emerald-400 rounded-2xl border border-emerald-500/40">
+              <HandCoins className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-sm sm:text-base text-white">متبقي على الزبائن</h3>
+              <p className="text-xs text-slate-400">ذمم مدينة من فواتير البيع الآجل</p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('sales')}
+            className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1"
+          >
+            التفاصيل
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+            <span className="text-xs text-slate-400 block font-bold mb-1">إجمالي المتبقي</span>
+            <div
+              className={`text-xl font-black font-mono ${
+                financials.receivables > 0 ? 'text-amber-300' : 'text-emerald-400'
+              }`}
+            >
+              {fmtMoney(financials.receivables)}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">
+              {financials.openCreditSales > 0
+                ? `${financials.openCreditSales} فاتورة غير مسددة`
+                : 'لا توجد فواتير آجلة 🎉'}
+            </div>
+          </div>
+
+          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+            <span className="text-xs text-slate-400 block font-bold mb-2">أحدث المدينين</span>
+            {recentCreditSales.length === 0 ? (
+              <p className="text-xs text-slate-500">لا يوجد مدينون حالياً</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {recentCreditSales.map((s) => (
+                  <li key={s.id} className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300 font-semibold truncate max-w-[55%]">
+                      {s.buyer || 'زبون عام'}
+                    </span>
+                    <span className="font-mono text-amber-300">{fmtNum(s.pendingAmount || 0)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* رصيد المخزون — أساس عيار 21 */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -120,11 +239,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
               <Scale className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-extrabold text-sm sm:text-base text-white">رصيد المخزون الحالي من الذهب</h3>
-              <p className="text-xs text-slate-400">الوزن المتبقي في الخزينة بعد حركات البيع والشراء</p>
+              <h3 className="font-extrabold text-sm sm:text-base text-white">رصيد المخزون الحالي</h3>
+              <p className="text-xs text-slate-400">
+                محسوب بمعادل <span className="text-amber-400 font-bold">عيار 21</span> (العيار الرسمي
+                للبيع والشراء)
+              </p>
             </div>
           </div>
-
           <button
             onClick={() => onNavigate('calculator')}
             className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1"
@@ -134,85 +255,192 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+        <div className="grid grid-cols-2 gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
           <div>
-            <span className="text-xs text-slate-400 block font-bold mb-1">الوزن بالجرام والنظام السوداني:</span>
+            <span className="text-xs text-slate-400 block font-bold mb-1">معادل عيار 21</span>
             <div className="text-xl font-black text-amber-400 font-mono">
-              {currentStockGrams.toFixed(2)} جرام
+              {unitsToGramsDecimal(inventory.unitsK21).toFixed(2)} جرام
             </div>
             <div className="text-xs text-slate-300 font-semibold mt-0.5">
-              ({unitsToWeight(currentStockUnits)})
+              ({unitsToGhJ(inventory.unitsK21)}) — {unitsToWeight(inventory.unitsK21)}
             </div>
           </div>
 
-          <div className="border-t sm:border-t-0 sm:border-r border-slate-800 pt-3 sm:pt-0 sm:pr-4">
-            <span className="text-xs text-slate-400 block font-bold mb-1">القيمة التقديرية (عيار 21):</span>
+          <div className="border-r border-slate-800 pr-4">
+            <span className="text-xs text-slate-400 block font-bold mb-1">القيمة السوقية اليوم</span>
             <div className="text-xl font-black text-emerald-400 font-mono">
-              {fmtMoney(estimatedStockValue)}
+              {fmtMoney(inventory.marketValue)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">
-              بسعر {fmtNum(rates.karat21)} {kCurrency}/جرام
+              بسعر {fmtNum(rates.karat21)} {kCurrency}/جرام (عيار 21)
             </div>
           </div>
+
+          <div className="border-t border-slate-800 pt-3">
+            <span className="text-xs text-slate-400 block font-bold mb-1">تكلفة المخزون</span>
+            <div className="text-lg font-black text-slate-200 font-mono">
+              {fmtMoney(inventory.costBasis)}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5">
+              متوسط {fmtNum(inventory.avgCostPerGramK21)} {kCurrency}/جرام
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800 pt-3">
+            <span className="text-xs text-slate-400 block font-bold mb-1">ربح غير محقّق</span>
+            <div
+              className={`text-lg font-black font-mono ${
+                inventory.unrealizedProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              }`}
+            >
+              {fmtMoney(inventory.unrealizedProfit)}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5">تقديري على أساس السعر الحالي</div>
+          </div>
         </div>
+
+        {/* تفصيل العيارات */}
+        {inventory.byKarat.length > 0 && (
+          <div className="space-y-2">
+            <span className="text-xs text-slate-400 font-bold">تفصيل المخزون حسب العيار:</span>
+            <div className="flex flex-wrap gap-2">
+              {inventory.byKarat.map((k) => (
+                <div
+                  key={k.purity}
+                  className={`px-3 py-2 rounded-xl border text-[11px] font-bold ${
+                    k.units < 0
+                      ? 'bg-rose-950/30 border-rose-500/40 text-rose-300'
+                      : 'bg-slate-950 border-slate-800 text-slate-200'
+                  }`}
+                >
+                  <span className="text-amber-400">عيار {purityLabel(k.purity)}</span>
+                  <span className="mx-1.5 font-mono">·</span>
+                  <span className="font-mono">{(k.units / 100).toFixed(2)} ج</span>
+                  <span className="text-slate-500 mx-1">→</span>
+                  <span className="font-mono text-slate-400">
+                    معادل {(k.unitsK21 / 100).toFixed(2)} ج21
+                  </span>
+                </div>
+              ))}
+            </div>
+            {inventory.negativeKarats.length > 0 && (
+              <div className="flex items-start gap-2 bg-rose-950/30 border border-rose-500/40 rounded-2xl p-3">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-rose-200 leading-relaxed">
+                  يوجد عجز في العيارات:{' '}
+                  <span className="font-bold">
+                    {inventory.negativeKarats.map((k) => purityLabel(k)).join('، ')}
+                  </span>
+                  . يعني أنك بعت من عيار أكثر مما اشتريت — راجع عمليات البيع أو أدخل جرد افتتاحي.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Quick Navigation Cards */}
+      {/* حالة الأسعار */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-amber-400 font-bold flex items-center gap-1.5">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                rates.isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'
+              }`}
+            />
+            سعر جرام الذهب عيار 21 اليوم
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300"
+              title="تحديث الأسعار"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={() => onNavigate('gold_price')}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl border border-slate-700 transition-colors"
+            >
+              تفاصيل الأسعار
+            </button>
+          </div>
+        </div>
+
+        <div className="text-xl sm:text-2xl font-black text-white font-mono">
+          {fmtMoney(rates.karat21)}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+          <span className={`flex items-center gap-1 ${freshness.tone}`}>
+            <Clock className="w-3 h-3" />
+            {freshness.text}
+          </span>
+          <span className="text-slate-400">دولار السوق: {fmtNum(rates.usdRate)}</span>
+          {rates.bankUsdRate ? (
+            <span className="text-slate-400">البنوك: {fmtNum(rates.bankUsdRate)}</span>
+          ) : null}
+          {rates.globalOunceUsd ? (
+            <span className="text-slate-400">الأونصة: ${rates.globalOunceUsd.toFixed(2)}</span>
+          ) : null}
+        </div>
+
+        <div className="text-[10px] text-slate-500 border-t border-slate-800 pt-2 space-y-0.5">
+          <div>الذهب: {rates.goldSource || '—'}</div>
+          <div>الدولار: {rates.usdSource || '—'}</div>
+        </div>
+
+        {ratesMeta.warnings.length > 0 && (
+          <ul className="space-y-1">
+            {ratesMeta.warnings.slice(0, 3).map((w, i) => (
+              <li key={i} className="text-[11px] text-amber-300 flex items-start gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                {w}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* المزامنة */}
+      {isCloudSignedIn && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 flex items-center justify-between text-[11px]">
+          <span className="flex items-center gap-1.5 text-slate-300">
+            <Cloud className="w-3.5 h-3.5 text-cyan-400" />
+            المزامنة السحابية مفعّلة {isSyncing ? '(جاري المزامنة...)' : ''}
+          </span>
+          <span className="text-slate-500">آخر مزامنة: {lastSyncTime || '—'}</span>
+        </div>
+      )}
+
+      {/* اختصارات */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button
-          onClick={() => onNavigate('partners')}
-          className="bg-slate-900 hover:bg-slate-800/90 p-4 rounded-3xl border border-slate-800 hover:border-amber-500/50 text-right space-y-2 transition-all group"
-        >
-          <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-2xl w-fit group-hover:scale-110 transition-transform">
-            <Users className="w-5 h-5" />
-          </div>
-          <div>
-            <h4 className="font-extrabold text-sm text-white">الشركاء والأرباح</h4>
-            <p className="text-[11px] text-slate-400 mt-0.5">{partners.length} شركاء مسجلين</p>
-          </div>
-        </button>
-
-        <button
-          onClick={() => onNavigate('purchases')}
-          className="bg-slate-900 hover:bg-slate-800/90 p-4 rounded-3xl border border-slate-800 hover:border-amber-500/50 text-right space-y-2 transition-all group"
-        >
-          <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-2xl w-fit group-hover:scale-110 transition-transform">
-            <ShoppingBag className="w-5 h-5" />
-          </div>
-          <div>
-            <h4 className="font-extrabold text-sm text-white">المشتريات والديون</h4>
-            <p className="text-[11px] text-slate-400 mt-0.5">{purchases.length} عمليات شراء</p>
-          </div>
-        </button>
-
-        <button
-          onClick={() => onNavigate('sales')}
-          className="bg-slate-900 hover:bg-slate-800/90 p-4 rounded-3xl border border-slate-800 hover:border-amber-500/50 text-right space-y-2 transition-all group"
-        >
-          <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-2xl w-fit group-hover:scale-110 transition-transform">
-            <DollarSign className="w-5 h-5" />
-          </div>
-          <div>
-            <h4 className="font-extrabold text-sm text-white">المبيعات والأرباح</h4>
-            <p className="text-[11px] text-slate-400 mt-0.5">{sales.length} عمليات بيع</p>
-          </div>
-        </button>
-
-        <button
-          onClick={() => onNavigate('gold_price')}
-          className="bg-slate-900 hover:bg-slate-800/90 p-4 rounded-3xl border border-slate-800 hover:border-amber-500/50 text-right space-y-2 transition-all group"
-        >
-          <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-2xl w-fit group-hover:scale-110 transition-transform">
-            <Coins className="w-5 h-5" />
-          </div>
-          <div>
-            <h4 className="font-extrabold text-sm text-white">أسعار الذهب والعملات</h4>
-            <p className="text-[11px] text-slate-400 mt-0.5">السوق الموازي والدولار</p>
-          </div>
-        </button>
+        {[
+          { tab: 'purchases', label: 'المشتريات والديون', icon: ShoppingBag, color: 'text-blue-400', count: `${purchases.filter((p) => !p.archived).length} عملية شراء` },
+          { tab: 'sales', label: 'المبيعات والأرباح', icon: DollarSign, color: 'text-emerald-400', count: `${sales.filter((s) => !s.archived).length} عملية بيع` },
+          { tab: 'partners', label: 'الشركاء والأرباح', icon: Users, color: 'text-amber-400', count: `${partners.filter((p) => !p.archived).length} شركاء` },
+          { tab: 'reports', label: 'التقارير والكشوفات', icon: FileBarChart, color: 'text-cyan-400', count: 'يومي · شهري · طباعة' },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.tab}
+              onClick={() => onNavigate(item.tab)}
+              className="bg-slate-900 hover:bg-slate-800/90 p-4 rounded-3xl border border-slate-800 hover:border-amber-500/50 text-right space-y-2 transition-all group"
+            >
+              <div className={`p-2.5 bg-slate-950 ${item.color} rounded-2xl w-fit group-hover:scale-110 transition-transform`}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sm text-white">{item.label}</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">{item.count}</p>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Settings & Cloud Sync Quick Card */}
+      {/* الإعدادات */}
       <div
         onClick={() => onNavigate('settings')}
         className="bg-gradient-to-r from-slate-900 via-slate-900 to-amber-950/40 border border-slate-800 hover:border-amber-500/50 p-4 rounded-3xl flex items-center justify-between cursor-pointer transition-all group"
@@ -229,32 +457,23 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
               </span>
             </h4>
             <p className="text-xs text-slate-400 mt-0.5">
-              مزامنة السحابة، رمز القفل، إدارة النسخ الاحتياطي والمظهر
+              تعديل سعر السوق، رمز القفل، النسخ الاحتياطي والمظهر
             </p>
           </div>
         </div>
         <ChevronLeft className="w-5 h-5 text-amber-400 group-hover:-translate-x-1 transition-transform" />
       </div>
 
-      {/* Live Market Price Widget */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-5 flex items-center justify-between">
-        <div className="space-y-1">
-          <span className="text-[11px] text-amber-400 font-bold flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            سعر جرام الذهب عيار 21 اليوم بالسودان
-          </span>
-          <div className="text-xl sm:text-2xl font-black text-white font-mono">
-            {fmtMoney(rates.karat21)}
-          </div>
+      {financials.activeSalesCount === 0 && financials.activePurchasesCount === 0 && (
+        <div className="bg-slate-900/60 border border-dashed border-slate-700 rounded-3xl p-5 text-center space-y-2">
+          <Sparkles className="w-6 h-6 text-amber-400 mx-auto" />
+          <h4 className="font-extrabold text-sm text-white">ابدأ بتسجيل أول عملية</h4>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            أضف المشتريات من «سجل المشتريات»، ثم المبيعات من «سجل المبيعات». سيُحسب المخزون والأرباح
+            تلقائياً بمعادل عيار 21.
+          </p>
         </div>
-        <button
-          onClick={() => onNavigate('gold_price')}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl border border-slate-700 transition-colors"
-        >
-          تفاصيل العملات
-        </button>
-      </div>
-
+      )}
     </div>
   );
 };

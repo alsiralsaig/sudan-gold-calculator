@@ -1,12 +1,15 @@
 {
   "name": "gold-calculator-nextjs",
-  "version": "1.0.0",
+  "version": "6.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001 -H 0.0.0.0",
     "build": "next build",
     "start": "next start -p 3001 -H 0.0.0.0",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "check": "npm run typecheck && npm test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
@@ -24,6 +27,8 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.2"
-  }
+  },
+  "description": "حاسبة الذهب والشركاء لتجارة الذهب في السودان — أساس التسعير عيار 21"
 }

@@ -2,9 +2,9 @@ import React from 'react';
 import {
   LayoutDashboard,
   Calculator,
-  Users,
   Menu,
-  Settings
+  Settings,
+  FileBarChart
 } from 'lucide-react';
 
 interface BottomNavProps {
@@ -21,7 +21,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const mainTabs = [
     { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
     { id: 'calculator', label: 'الحاسبة', icon: Calculator },
-    { id: 'partners', label: 'الشركاء', icon: Users },
+    { id: 'reports', label: 'التقارير', icon: FileBarChart },
     { id: 'settings', label: 'الإعدادات', icon: Settings },
   ];
 

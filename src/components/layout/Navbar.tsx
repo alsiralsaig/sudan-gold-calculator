@@ -16,7 +16,8 @@ import {
   Sparkles,
   ChevronLeft,
   Cloud,
-  Archive
+  Archive,
+  FileBarChart
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum } from '../../core/format';
@@ -91,6 +92,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       color: 'text-amber-400 bg-amber-500/10',
     },
     {
+      id: 'reports',
+      label: 'التقارير والكشوفات',
+      desc: 'تقرير يومي وشهري، جرد المخزون، كشف حساب زبون أو مورد',
+      icon: FileBarChart,
+      color: 'text-cyan-400 bg-cyan-500/10',
+    },
+    {
       id: 'archive',
       label: 'الأرشيف',
       desc: 'استعادة السجلات المؤرشفة أو حذفها نهائياً',
@@ -122,6 +130,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         return 'سجل المصروفات';
       case 'gold_price':
         return 'أسعار الذهب والعملات';
+      case 'reports':
+        return 'التقارير والكشوفات';
       case 'archive':
         return 'الأرشيف';
       case 'settings':

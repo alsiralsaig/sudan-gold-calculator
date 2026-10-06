@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { Users, Plus, Edit2, Trash2, Phone, DollarSign, Percent, TrendingUp, CheckCircle, ShieldAlert } from 'lucide-react';
+import {
+  Users,
+  Plus,
+  Edit2,
+  Trash2
+} from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtMoney, fmtNum, kCurrency } from '../../core/format';
 import { Partner } from '../../types';

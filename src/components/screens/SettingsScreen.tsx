@@ -1,30 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Lock,
-  Unlock,
-  KeyRound,
   Timer,
   Sun,
   Moon,
   Laptop,
   Cloud,
-  CloudOff,
   CloudLightning,
   RefreshCw,
   LogOut,
   LogIn,
   UserPlus,
   Save,
-  FolderOpen,
-  Copy,
-  ClipboardPaste,
   Trash2,
   Info,
   Check,
   ChevronLeft,
-  ChevronRight,
   Sparkles,
-  Smartphone,
   Eye,
   EyeOff,
   ShieldCheck
@@ -40,6 +32,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   const {
     pinCode,
     setPinCode,
+    verifyPin,
     userEmail,
     themeMode,
     setThemeMode,
@@ -54,8 +47,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     expenses,
     partners,
     exportData,
+    exportCsv,
     importData,
     resetAllData,
+    rates,
+    setLocalPremium,
+    deletedCount,
   } = useGoldStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -80,6 +77,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   const [authError, setAuthError] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncToast, setSyncToast] = useState('');
+
+  // تعديل سعر السوق المحلي
+  const [premiumInput, setPremiumInput] = useState(String(rates.localPremiumPercent ?? 0));
 
   // Load auto lock timeout from storage
   useEffect(() => {
@@ -107,13 +107,16 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   };
 
   // PIN Save Handler
-  const handleSavePin = (e: React.FormEvent) => {
+  const handleSavePin = async (e: React.FormEvent) => {
     e.preventDefault();
     setPinError('');
 
-    if (pinCode && oldPinInput !== pinCode) {
-      setPinError('كلمة السر الحالية غير صحيحة');
-      return;
+    if (pinCode) {
+      const ok = await verifyPin(oldPinInput);
+      if (!ok) {
+        setPinError('كلمة السر الحالية غير صحيحة');
+        return;
+      }
     }
     if (newPinInput.length !== 4) {
       setPinError('يجب أن يتكون الرقم السري من 4 أرقام بالضبط');
@@ -124,7 +127,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
       return;
     }
 
-    setPinCode(newPinInput);
+    await setPinCode(newPinInput);
     setShowPinModal(false);
     setOldPinInput('');
     setNewPinInput('');
@@ -133,9 +136,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     setTimeout(() => setPinSuccess(''), 3000);
   };
 
-  const handleRemovePin = () => {
+  const handleRemovePin = async () => {
     if (confirm('هل تريد إلغاء كلمة السر ورمز القفل تماماً؟')) {
-      setPinCode('');
+      await setPinCode('');
       setShowPinModal(false);
       setPinSuccess('تم إلغاء قفل التطبيق');
       setTimeout(() => setPinSuccess(''), 3000);
@@ -519,6 +522,62 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
 
       </div>
 
+      {/* 3.b SECTION: تسعير السوق المحلي */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 px-1 text-amber-400 font-black text-sm border-r-4 border-amber-500 pr-2">
+          <span>تسعير السوق</span>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-extrabold text-sm text-white">سعر جرام عيار 21 الحالي</h4>
+              <p className="text-[11px] text-slate-400">
+                العيار الرسمي للبيع والشراء — كل الحسابات تُبنى عليه
+              </p>
+            </div>
+            <span className="font-mono font-black text-amber-300 text-sm">{fmtNum(rates.karat21)}</span>
+          </div>
+
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3 space-y-2">
+            <label className="block text-[11px] text-slate-400 font-bold">
+              تعديل سوقك المحلي (٪): إذا كان سعر مدينتك أعلى أو أقل من السعر المنشور
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.5"
+                value={premiumInput}
+                onChange={(e) => setPremiumInput(e.target.value)}
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white font-mono text-sm text-right focus:border-amber-400 focus:outline-none"
+                placeholder="0"
+              />
+              <button
+                onClick={() => {
+                  const value = parseFloat(premiumInput) || 0;
+                  setLocalPremium(value);
+                  setSyncToast(`تم تطبيق تعديل السوق: ${value > 0 ? '+' : ''}${value}%`);
+                  setTimeout(() => setSyncToast(''), 2500);
+                }}
+                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl"
+              >
+                تطبيق
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="bg-slate-950 rounded-xl p-2.5 flex items-center justify-between">
+              <span className="text-slate-400">دولار السوق</span>
+              <span className="font-mono text-slate-200">{fmtNum(rates.usdRate)}</span>
+            </div>
+            <div className="bg-slate-950 rounded-xl p-2.5 flex items-center justify-between">
+              <span className="text-slate-400">دولار البنوك</span>
+              <span className="font-mono text-slate-200">{rates.bankUsdRate ? fmtNum(rates.bankUsdRate) : '—'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 4. SECTION: cloud backup only */}
       <div className="space-y-2">
         <div className="flex items-center gap-2 px-1 text-amber-400 font-black text-sm border-r-4 border-amber-500 pr-2">
@@ -539,7 +598,23 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
             <div className="bg-slate-950/70 p-2 rounded-xl"><span className="text-[10px] text-slate-400 block">شركاء</span><span className="text-xs text-emerald-400 font-black">{partners.length}</span></div>
           </div>
         </div>
-        <button onClick={handleTriggerSync} className="w-full py-3 rounded-2xl bg-emerald-500 text-slate-950 font-black shadow-lg shadow-emerald-500/20">حفظ ومزامنة البيانات على Supabase</button>
+        <button onClick={handleTriggerSync} disabled={isSyncing} className="w-full py-3 rounded-2xl bg-emerald-500 disabled:opacity-60 text-slate-950 font-black shadow-lg shadow-emerald-500/20">
+          {isSyncing ? 'جاري المزامنة...' : 'حفظ ومزامنة البيانات على Supabase'}
+        </button>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={exportData} className="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700">
+            نسخة احتياطية (JSON)
+          </button>
+          <button onClick={exportCsv} className="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700">
+            تصدير Excel (CSV)
+          </button>
+        </div>
+
+        <p className="text-[10px] text-slate-500 leading-relaxed">
+          سجل الحذف: {deletedCount} عنصر. يُحفظ هذا السجل حتى لا تعود السجلات المحذوفة عند المزامنة
+          من جهاز آخر.
+        </p>
       </div>
 
       {/* 5. SECTION: البيانات */}
@@ -585,7 +660,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
             </div>
             <div>
               <h4 className="font-extrabold text-sm text-white">حاسبة الذهب والشركاء (Sudan Gold Pro)</h4>
-              <p className="text-xs text-slate-400">النسخة v4.0.0 — معتمد لتجارة الذهب بالسودان</p>
+              <p className="text-xs text-slate-400">النسخة v6.0.0 — معتمد لتجارة الذهب بالسودان (أساس عيار 21)</p>
             </div>
           </div>
         </div>

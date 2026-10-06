@@ -155,3 +155,30 @@ html.light .bg-rose-950\/40 {
 html.light .bg-gradient-to-br.from-amber-500\/20 {
   background-image: linear-gradient(to bottom right, rgba(245, 158, 11, 0.15), #ffffff, #f8fafc) !important;
 }
+
+/* =========================================================
+   PRINT STYLES (طباعة التقارير والكشوفات)
+   ========================================================= */
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  header, nav, button, .print\:hidden {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  .bg-slate-900, .bg-slate-950, .bg-slate-950\/90, .bg-slate-900\/60 {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+  }
+  table {
+    font-size: 10px !important;
+    page-break-inside: auto;
+  }
+  tr { page-break-inside: avoid; }
+  .rounded-3xl, .rounded-2xl { border-radius: 6px !important; }
+}

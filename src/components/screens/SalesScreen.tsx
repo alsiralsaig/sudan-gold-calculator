@@ -2,16 +2,11 @@ import React, { useState, useMemo } from 'react';
 import {
   DollarSign,
   Plus,
-  Trash2,
   Edit2,
   Search,
   Filter,
-  CheckCircle2,
-  Sparkles,
-  Calendar,
-  X,
-  ChevronLeft,
-  ArrowUpRight
+  HandCoins,
+  Wallet
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import {
@@ -27,6 +22,8 @@ import {
   kCurrency
 } from '../../core/format';
 import { Sale } from '../../types';
+import { purityLabel } from '../../core/purity';
+import { salePending } from '../../core/accounting';
 
 export const SalesScreen: React.FC = () => {
   const {
@@ -35,6 +32,7 @@ export const SalesScreen: React.FC = () => {
     updateSale,
     archiveSale,
     deleteSale,
+    addPaymentToSale,
     rates,
   } = useGoldStore();
 
@@ -56,6 +54,15 @@ export const SalesScreen: React.FC = () => {
   const [buyAmount, setBuyAmount] = useState('');
   const [buyer, setBuyer] = useState('');
   const [notes, setNotes] = useState('');
+
+  // البيع الآجل: المبلغ المحصّل والمتبقي
+  const [paidFull, setPaidFull] = useState(true);
+  const [paidInput, setPaidInput] = useState('');
+
+  // تسجيل دفعة لاحقة
+  const [payModal, setPayModal] = useState<Sale | null>(null);
+  const [payAmount, setPayAmount] = useState('');
+  const [payNote, setPayNote] = useState('');
 
   // Auto-calculate Total Sell & Buy Amounts when Weight or Price changes
   const handleWeightOrPriceChange = (
@@ -102,6 +109,8 @@ export const SalesScreen: React.FC = () => {
     setBuyAmount('');
     setBuyer('');
     setNotes('');
+    setPaidFull(true);
+    setPaidInput('');
     setShowAddModal(true);
   };
 
@@ -117,6 +126,9 @@ export const SalesScreen: React.FC = () => {
     setBuyAmount(sale.buyAmount.toString());
     setBuyer(sale.buyer || '');
     setNotes(sale.notes || '');
+    const remaining = salePending(sale);
+    setPaidFull(remaining <= 0);
+    setPaidInput(remaining > 0 ? String((sale.sellAmount || 0) - remaining) : '');
     setSelectedSale(null);
     setShowAddModal(true);
   };
@@ -147,6 +159,10 @@ export const SalesScreen: React.FC = () => {
 
     const karatNum = customKarat === '-' ? 0 : parseFloat(customKarat) || 0;
 
+    // البيع الآجل: المتبقي = الإجمالي − المحصّل
+    const totalPaid = paidFull ? totalSell : Math.min(totalSell, Math.max(0, parseFloat(paidInput) || 0));
+    const pending = Math.max(0, totalSell - totalPaid);
+
     const saleData = {
       date: editingSale?.date || new Date().toISOString(),
       units: totalUnits,
@@ -155,6 +171,8 @@ export const SalesScreen: React.FC = () => {
       buyAmount: totalBuy,
       buyer: buyer.trim() || 'زبون عام',
       notes: notes.trim(),
+      paidAmount: totalPaid,
+      pendingAmount: pending,
     };
 
     if (editingSale) {
@@ -207,6 +225,24 @@ export const SalesScreen: React.FC = () => {
   const totalSellSum = filteredSales.reduce((sum, s) => sum + (s.sellAmount || 0), 0);
   const totalBuySum = filteredSales.reduce((sum, s) => sum + (s.buyAmount || 0), 0);
   const totalProfitSum = totalSellSum - totalBuySum;
+  const totalPendingSum = filteredSales.reduce((sum, s) => sum + salePending(s), 0);
+
+  const handleAddPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payModal) return;
+    const value = parseFloat(payAmount) || 0;
+    const remaining = salePending(payModal);
+    if (value <= 0) return;
+    if (value > remaining && !confirm('المبلغ أكبر من المتبقي، سيتم تسجيل المتبقي فقط. متابعة؟')) return;
+    addPaymentToSale(payModal.id, {
+      date: new Date().toISOString(),
+      amount: value,
+      note: payNote.trim() || 'تحصيل دفعة',
+    });
+    setPayModal(null);
+    setPayAmount('');
+    setPayNote('');
+  };
 
   return (
     <div className="space-y-4 pb-24 animate-in fade-in duration-200">
@@ -267,13 +303,14 @@ export const SalesScreen: React.FC = () => {
                 <th className="py-3 px-3 text-center w-[15%]">البيع</th>
                 <th className="py-3 px-3 text-center w-[15%]">الشراء</th>
                 <th className="py-3 px-3 text-center w-[14%]">الربح</th>
+                <th className="py-3 px-3 text-center w-[13%]">متبقي</th>
                 <th className="py-3 px-3 text-right w-[15%]">ملاحظات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
               {filteredSales.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-slate-500 text-xs">
+                  <td colSpan={8} className="text-center py-12 text-slate-500 text-xs">
                     <DollarSign className="w-8 h-8 mx-auto text-slate-600 opacity-60 mb-2" />
                     <p>لا توجد فواتير بيع مسجلة في هذه الفترة</p>
                   </td>
@@ -297,7 +334,7 @@ export const SalesScreen: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-3 text-center text-slate-300 font-mono text-xs whitespace-nowrap">
-                        {sale.purity > 0 ? `${sale.purity}k` : '—'}
+                        {sale.purity > 0 ? purityLabel(sale.purity) : '—'}
                       </td>
 
                       <td className="py-3.5 px-3 text-center text-white font-mono font-black text-xs whitespace-nowrap">
@@ -316,6 +353,24 @@ export const SalesScreen: React.FC = () => {
                         >
                           {fmtNum(profit)}
                         </span>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                        {salePending(sale) > 0 ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPayModal(sale);
+                              setPayAmount(salePending(sale).toString());
+                            }}
+                            className="font-mono text-xs font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2 py-1"
+                            title="تسجيل دفعة"
+                          >
+                            {fmtNum(salePending(sale))}
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-emerald-400">مسدد ✓</span>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-3 text-right text-slate-400 text-[10px] truncate max-w-[150px]" title={sale.notes || ''}>
@@ -347,6 +402,11 @@ export const SalesScreen: React.FC = () => {
                       }`}
                     >
                       {fmtNum(totalProfitSum)}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-3 text-center font-mono text-sm whitespace-nowrap">
+                    <span className={totalPendingSum > 0 ? 'text-amber-300 font-black' : 'text-slate-500'}>
+                      {fmtNum(totalPendingSum)}
                     </span>
                   </td>
                   <td className="py-3.5 px-3 text-right text-slate-400">—</td>
@@ -490,6 +550,51 @@ export const SalesScreen: React.FC = () => {
               />
             </div>
 
+            {/* التحصيل: نقدي أم آجل */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5 text-cyan-400" />
+                  طريقة التحصيل
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPaidFull((v) => !v)}
+                  className={`text-[11px] font-black px-3 py-1.5 rounded-xl border transition-colors ${
+                    paidFull
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  }`}
+                >
+                  {paidFull ? 'مدفوع بالكامل ✓' : 'آجل (جزئي)'}
+                </button>
+              </div>
+
+              {!paidFull && (
+                <>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 font-bold mb-1">
+                      المبلغ المحصّل الآن ({kCurrency}):
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={paidInput}
+                      onChange={(e) => setPaidInput(e.target.value)}
+                      placeholder="0"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white font-mono text-sm focus:border-amber-400 focus:outline-none text-right"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">المتبقي على الزبون:</span>
+                    <span className="font-mono font-black text-amber-300">
+                      {fmtNum(Math.max(0, (parseFloat(sellAmount) || 0) - (parseFloat(paidInput) || 0)))}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
             {/* Karat Selection (Manual / Custom or Standard) */}
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
@@ -591,7 +696,9 @@ export const SalesScreen: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">العيار:</span>
-                <span className="font-mono text-white">{selectedSale.purity > 0 ? `${selectedSale.purity}k` : 'بدون عيار'}</span>
+                <span className="font-mono text-white">
+                  {selectedSale.purity > 0 ? purityLabel(selectedSale.purity) : 'بدون عيار'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">مبلغ البيع:</span>
@@ -605,6 +712,18 @@ export const SalesScreen: React.FC = () => {
                 <span className="text-slate-400">الربح الصافي:</span>
                 <span className="font-mono font-black text-emerald-400">
                   {fmtMoney(selectedSale.sellAmount - selectedSale.buyAmount)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">المحصّل:</span>
+                <span className="font-mono text-emerald-300">
+                  {fmtMoney((selectedSale.sellAmount || 0) - salePending(selectedSale))}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">المتبقي:</span>
+                <span className={`font-mono font-black ${salePending(selectedSale) > 0 ? 'text-amber-300' : 'text-emerald-400'}`}>
+                  {fmtMoney(salePending(selectedSale))}
                 </span>
               </div>
               {selectedSale.buyer && (
@@ -621,6 +740,34 @@ export const SalesScreen: React.FC = () => {
               )}
             </div>
 
+            {/* سجل الدفعات */}
+            {(selectedSale.payments || []).length > 0 && (
+              <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-1.5 max-h-40 overflow-y-auto">
+                <span className="text-[11px] font-bold text-slate-400 block">سجل التحصيل:</span>
+                {(selectedSale.payments || []).map((p) => (
+                  <div key={p.id} className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">{formatInvoiceDate(p.date)}</span>
+                    <span className="text-slate-300 truncate max-w-[45%]">{p.note}</span>
+                    <span className="font-mono text-emerald-300 font-bold">{fmtNum(p.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {salePending(selectedSale) > 0 && (
+              <button
+                onClick={() => {
+                  setPayModal(selectedSale);
+                  setPayAmount(salePending(selectedSale).toString());
+                  setSelectedSale(null);
+                }}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2"
+              >
+                <HandCoins className="w-4 h-4" />
+                تسجيل دفعة ({fmtNum(salePending(selectedSale))})
+              </button>
+            )}
+
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => handleOpenEdit(selectedSale)}
@@ -633,6 +780,80 @@ export const SalesScreen: React.FC = () => {
               <button onClick={() => { if (confirm('حذف نهائي؟ لا يمكن الاستعادة.')) { deleteSale(selectedSale.id); setSelectedSale(null); } }} className="py-2.5 px-3 bg-slate-800 text-slate-300 font-bold rounded-xl text-xs border border-slate-700">حذف</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal: تسجيل دفعة تحصيل */}
+      {payModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4">
+          <form
+            onSubmit={handleAddPayment}
+            className="bg-slate-900 border-2 border-amber-500/60 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl text-white animate-in zoom-in-95"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-black text-sm text-amber-400 flex items-center gap-2">
+                <HandCoins className="w-4 h-4" />
+                تسجيل دفعة تحصيل
+              </h3>
+              <button type="button" onClick={() => setPayModal(null)} className="text-slate-400 hover:text-white">
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">الزبون:</span>
+                <span className="text-white font-bold">{payModal.buyer || 'زبون عام'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">إجمالي الفاتورة:</span>
+                <span className="font-mono text-white">{fmtNum(payModal.sellAmount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">المتبقي حالياً:</span>
+                <span className="font-mono font-black text-amber-300">{fmtNum(salePending(payModal))}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">مبلغ الدفعة ({kCurrency})</label>
+              <input
+                type="number"
+                step="any"
+                required
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white font-mono text-sm focus:border-amber-400 focus:outline-none text-right"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">البيان / طريقة الدفع</label>
+              <input
+                type="text"
+                value={payNote}
+                onChange={(e) => setPayNote(e.target.value)}
+                placeholder="نقداً / بنكك / فوري..."
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:border-amber-400 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setPayModal(null)}
+                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs"
+              >
+                حفظ الدفعة
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

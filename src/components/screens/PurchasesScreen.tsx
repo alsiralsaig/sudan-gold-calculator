@@ -4,14 +4,8 @@ import {
   Plus,
   Archive,
   Edit2,
-  CreditCard,
   Search,
-  Filter,
-  CheckCircle2,
-  Sparkles,
-  Calendar,
-  X,
-  ChevronLeft
+  Filter
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import {
@@ -27,6 +21,7 @@ import {
   kCurrency
 } from '../../core/format';
 import { Purchase } from '../../types';
+import { purityLabel, unitsToK21 } from '../../core/purity';
 
 export const PurchasesScreen: React.FC = () => {
   const {
@@ -163,6 +158,10 @@ export const PurchasesScreen: React.FC = () => {
 
     const payVal = parseFloat(newPayAmount) || 0;
     if (payVal <= 0) return;
+    const remaining = Math.max(0, showPaymentModal.pendingAmount || 0);
+    if (payVal > remaining) {
+      if (!confirm('المبلغ أكبر من المتبقي، سيتم تسجيل المتبقي فقط. متابعة؟')) return;
+    }
 
     addPaymentToPurchase(showPaymentModal.id, {
       date: new Date().toISOString(),
@@ -304,7 +303,7 @@ export const PurchasesScreen: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-3 text-center text-slate-300 font-mono text-xs whitespace-nowrap">
-                        {pch.purity > 0 ? `${pch.purity}k` : '—'}
+                        {pch.purity > 0 ? purityLabel(pch.purity) : '—'}
                       </td>
 
                       <td className="py-3.5 px-3 text-center text-white font-mono font-black text-xs whitespace-nowrap">
@@ -432,6 +431,25 @@ export const PurchasesScreen: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* أثر الوزن على المخزون بمعادل عيار 21 */}
+              {(() => {
+                const u = weightToUnits(parseFloat(grams) || 0, parseFloat(habba) || 0, parseFloat(juz) || 0);
+                if (u <= 0) return null;
+                const karatNum = customKarat === '-' ? 0 : parseFloat(customKarat) || 0;
+                const k21 = karatNum > 0 ? unitsToK21(u, karatNum) : u;
+                const isOfficial = !karatNum || Math.abs(karatNum - 21) < 0.05;
+                return (
+                  <div className="mt-2 flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[11px]">
+                    <span className="text-slate-400">
+                      معادل المخزون بعيار 21 {isOfficial ? '(العيار الرسمي)' : '— بعد التحويل من العيار المدخل'}:
+                    </span>
+                    <span className="font-mono font-black text-amber-300">
+                      {(k21 / 100).toFixed(2)} جرام21
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Price Per Gram & Auto Calculation */}
@@ -596,7 +614,7 @@ export const PurchasesScreen: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">العيار:</span>
-                <span className="font-mono text-white">{selectedPurchase.purity > 0 ? `${selectedPurchase.purity}k` : 'بدون عيار'}</span>
+                <span className="font-mono text-white">{selectedPurchase.purity > 0 ? purityLabel(selectedPurchase.purity) : 'بدون عيار'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">إجمالي المبلغ:</span>

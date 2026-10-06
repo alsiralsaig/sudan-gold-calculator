@@ -1,15 +1,57 @@
 import { NextResponse } from 'next/server';
 import { ensureSchema, getDb } from '../../../../lib/db';
 import { setSession, verifyPassword } from '../../../../lib/auth';
+import { checkRateLimit, clientIp, registerFailure, registerSuccess } from '../../../../lib/rateLimit';
 
 export async function POST(request: Request) {
+  const ip = clientIp(request);
+  let email = '';
+
   try {
-    const { email, password } = await request.json();
+    const body = await request.json();
+    email = String(body?.email || '').trim().toLowerCase();
+    const password = String(body?.password || '');
+
+    const limit = checkRateLimit(ip, email);
+    if (!limit.allowed) {
+      const minutes = Math.ceil(limit.retryAfterSeconds / 60);
+      return NextResponse.json(
+        { success: false, message: `محاولات كثيرة خاطئة. حاول بعد ${minutes} دقيقة.` },
+        { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
+      );
+    }
+
+    if (!email || !password) {
+      return NextResponse.json(
+        { success: false, message: 'يرجى إدخال البريد وكلمة المرور' },
+        { status: 400 }
+      );
+    }
+
     await ensureSchema();
     const db = getDb();
-    const { data, error } = await db.from('app_users').select('id,email,password_hash').eq('email', String(email || '').trim().toLowerCase()).maybeSingle();
-    if (error || !data || !verifyPassword(String(password || ''), data.password_hash)) return NextResponse.json({ success: false, message: 'البريد أو كلمة المرور غير صحيحة' }, { status: 401 });
+    const { data, error } = await db
+      .from('app_users')
+      .select('id,email,password_hash')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (error || !data || !verifyPassword(password, data.password_hash)) {
+      registerFailure(ip, email);
+      return NextResponse.json(
+        { success: false, message: 'البريد أو كلمة المرور غير صحيحة' },
+        { status: 401 }
+      );
+    }
+
+    registerSuccess(ip, email);
     await setSession(data.id);
     return NextResponse.json({ success: true, email: data.email });
-  } catch { return NextResponse.json({ success: false, message: 'تعذر تسجيل الدخول' }, { status: 500 }); }
+  } catch (error: any) {
+    console.error('Login error:', error?.message || error);
+    return NextResponse.json(
+      { success: false, message: 'تعذر تسجيل الدخول. تحقق من إعدادات الخادم.' },
+      { status: 500 }
+    );
+  }
 }

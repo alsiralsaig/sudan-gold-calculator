@@ -2,7 +2,19 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { cookies } from 'next/headers';
 
 const COOKIE = 'gold_session';
-const secret = () => process.env.AUTH_SECRET || 'change-me-in-vercel';
+
+/**
+ * مفتاح توقيع الجلسة.
+ * في الإنتاج يجب ضبط AUTH_SECRET، وإلا فإن الجلسات ستكون غير آمنة.
+ */
+const secret = () => {
+  const value = process.env.AUTH_SECRET;
+  if (value && value.length >= 16) return value;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('AUTH_SECRET غير مضبوط: يجب إضافة متغير بيئة بطول 16 حرفاً على الأقل.');
+  }
+  return 'dev-only-insecure-secret';
+};
 
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString('hex');

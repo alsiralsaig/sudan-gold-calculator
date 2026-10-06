@@ -6,11 +6,8 @@ import {
   CheckCircle2,
   X,
   Download,
-  ShieldCheck,
   Sparkles,
-  MoreVertical,
-  Check,
-  Info
+  MoreVertical
 } from 'lucide-react';
 
 interface PwaInstallPromptProps {

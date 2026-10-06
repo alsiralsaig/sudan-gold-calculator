@@ -12,6 +12,7 @@ import { ExpensesScreen } from '../components/screens/ExpensesScreen';
 import { GoldPriceScreen } from '../components/screens/GoldPriceScreen';
 import { ArchiveScreen } from '../components/screens/ArchiveScreen';
 import { SettingsScreen } from '../components/screens/SettingsScreen';
+import { ReportsScreen } from '../components/screens/ReportsScreen';
 import { LockScreen } from '../components/common/LockScreen';
 import { PwaInstallPrompt } from '../components/common/PwaInstallPrompt';
 
@@ -46,6 +47,7 @@ function MainAppContent() {
         {activeTab === 'sales' && <SalesScreen />}
         {activeTab === 'expenses' && <ExpensesScreen />}
         {activeTab === 'gold_price' && <GoldPriceScreen />}
+        {activeTab === 'reports' && <ReportsScreen />}
         {activeTab === 'archive' && <ArchiveScreen />}
         {activeTab === 'settings' && <SettingsScreen onOpenInstallModal={() => setShowInstallModal(true)} />}
       </main>

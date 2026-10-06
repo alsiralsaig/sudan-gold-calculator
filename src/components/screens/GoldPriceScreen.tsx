@@ -1,382 +1,430 @@
-import React, { useState, useEffect } from 'react';
-import { Coins, RefreshCw, DollarSign, TrendingUp, Edit3, Check, Globe, Sparkles, Scale, ArrowDownUp, AlertCircle } from 'lucide-react';
-import { useGoldStore } from '../../context/GoldStoreContext';
-import { fmtMoney, fmtNum, kCurrency } from '../../core/format';
+'use client';
 
-const GRAMS_PER_OUNCE = 31.1034768;
+import React, { useState } from 'react';
+import {
+  RefreshCw,
+  Globe,
+  Scale,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Lock,
+  Unlock,
+  Percent,
+  Info,
+  TrendingUp
+} from 'lucide-react';
+import { useGoldStore } from '../../context/GoldStoreContext';
+import { fmtNum, kCurrency } from '../../core/format';
+import { KARAT_OPTIONS, priceForKarat } from '../../core/purity';
+
+const pct = (n: number, base: number) => (base > 0 ? ((n - base) / base) * 100 : 0);
 
 export const GoldPriceScreen: React.FC = () => {
-  const { rates, updateRates } = useGoldStore();
+  const {
+    rates,
+    ratesMeta,
+    refreshRates,
+    updateRates,
+    setLocalPremium,
+    setManualRateOverride,
+  } = useGoldStore();
 
-  // State: Spot Gold Ounce ($4,144.70 & 8400.0 SDG)
-  const [ounceUsd, setOunceUsd] = useState<number>(() => {
-    return rates.globalOunceUsd >= 4000 ? rates.globalOunceUsd : 4144.70;
-  });
-  const [dollarRate, setDollarRate] = useState<number>(() => {
-    return rates.usdRate || 8400.00;
-  });
-  const [sarRate, setSarRate] = useState<number>(rates.sarRate || 2240.00);
-  const [aedRate, setAedRate] = useState<number>(rates.aedRate || 2288.00);
-  const [egpRate, setEgpRate] = useState<number>(rates.egpRate || 173.00);
-
-  const [isEditingDollar, setIsEditingDollar] = useState(false);
-  const [isManualKaratMode, setIsManualKaratMode] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<string>('');
+  const [status, setStatus] = useState('');
+  const [premiumInput, setPremiumInput] = useState(String(rates.localPremiumPercent ?? 0));
+  const [manualInput, setManualInput] = useState(String(rates.karat21));
+  const [showManual, setShowManual] = useState(false);
 
-  // Editable string buffers
-  const [dollarInput, setDollarInput] = useState(dollarRate.toString());
-  const [ounceInput, setOunceInput] = useState(ounceUsd.toString());
+  const base21 = rates.karat21Base || rates.karat21;
+  const premium = rates.localPremiumPercent ?? 0;
 
-  // Manual Karat Overrides if enabled
-  const [manual24, setManual24] = useState('');
-  const [manual21, setManual21] = useState('');
-  const [manual18, setManual18] = useState('');
-  const [manual22, setManual22] = useState('');
-
-  // Exact Mathematical Formulas matching Sudan parallel market
-  const gramUsd = ounceUsd / GRAMS_PER_OUNCE;
-  
-  // Calculated Karats in SDG
-  const calcKarat24 = Math.round(gramUsd * dollarRate);
-  const calcKarat22 = Math.round(calcKarat24 * (22 / 24));
-  const calcKarat21 = Math.round(calcKarat24 * (21 / 24));
-  const calcKarat18 = Math.round(calcKarat24 * (18 / 24));
-  const calcOunceSdg = Math.round(ounceUsd * dollarRate);
-
-  // Sync with global store when local changes occur
-  useEffect(() => {
-    updateRates({
-      globalOunceUsd: ounceUsd,
-      usdRate: dollarRate,
-      sarRate: sarRate,
-      aedRate: aedRate,
-      egpRate: egpRate,
-      karat24: isManualKaratMode && parseFloat(manual24) ? parseFloat(manual24) : calcKarat24,
-      karat21: isManualKaratMode && parseFloat(manual21) ? parseFloat(manual21) : calcKarat21,
-      karat18: isManualKaratMode && parseFloat(manual18) ? parseFloat(manual18) : calcKarat18,
-      karat22: isManualKaratMode && parseFloat(manual22) ? parseFloat(manual22) : calcKarat22,
-    });
-  }, [ounceUsd, dollarRate, sarRate, aedRate, egpRate, isManualKaratMode, manual24, manual21, manual18, manual22]);
-
-  // Keep screen updated when global store auto-syncs in background
-  useEffect(() => {
-    if (!isEditingDollar && !isManualKaratMode) {
-      if (rates.globalOunceUsd && rates.globalOunceUsd !== ounceUsd) {
-        setOunceUsd(rates.globalOunceUsd);
-        setOunceInput(rates.globalOunceUsd.toString());
-      }
-      if (rates.usdRate && rates.usdRate !== dollarRate) {
-        setDollarRate(rates.usdRate);
-        setDollarInput(rates.usdRate.toString());
-      }
-      if (rates.sarRate && rates.sarRate !== sarRate) setSarRate(rates.sarRate);
-      if (rates.aedRate && rates.aedRate !== aedRate) setAedRate(rates.aedRate);
-      if (rates.egpRate && rates.egpRate !== egpRate) setEgpRate(rates.egpRate);
-    }
-  }, [rates.globalOunceUsd, rates.usdRate, rates.sarRate, rates.aedRate, rates.egpRate, isEditingDollar, isManualKaratMode]);
-
-  // Live Sync Function calling /api/rates
-  const handleLiveMarketSync = async () => {
+  const handleSync = async () => {
     setIsSyncing(true);
-    setSyncStatus('جاري جلب أحدث أسعار البورصة العالمية والسوق الموازي...');
-
-    try {
-      const res = await fetch('/api/rates');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.ounceUsd) {
-          setOunceUsd(data.ounceUsd);
-          setOunceInput(data.ounceUsd.toString());
-        }
-        if (data.usdRate) {
-          setDollarRate(data.usdRate);
-          setDollarInput(data.usdRate.toString());
-        }
-        if (data.sarRate) setSarRate(data.sarRate);
-        if (data.aedRate) setAedRate(data.aedRate);
-        if (data.egpRate) setEgpRate(data.egpRate);
-        setIsManualKaratMode(false);
-        setIsEditingDollar(false);
-        setSyncStatus('تم تحديث ومزامنة الأسعار من أخبار السودان والبورصة العالمية! ⚡');
-        setTimeout(() => setSyncStatus(''), 3500);
-        return;
-      }
-    } catch (_) {}
-
-    // Fallback if network issue
-    setOunceUsd(4144.70);
-    setOunceInput('4144.70');
-    setDollarRate(8400.00);
-    setDollarInput('8400.00');
-    setSyncStatus('تم تحديث ومزامنة أسعار السوق الموازي بنجاح! ⚡');
-    setTimeout(() => setSyncStatus(''), 3500);
+    setStatus('جاري جلب أسعار البورصة العالمية والسوق الموازي...');
+    const ok = await refreshRates();
     setIsSyncing(false);
+    setStatus(
+      ok
+        ? 'تم تحديث الأسعار من المصادر ✅'
+        : 'تعذر التحديث الآن — يتم عرض آخر أسعار متوفرة'
+    );
+    setTimeout(() => setStatus(''), 3500);
   };
 
-  const handleApplyDollarChange = (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsedDollar = parseFloat(dollarInput) || dollarRate;
-    const parsedOunce = parseFloat(ounceInput) || ounceUsd;
-    setDollarRate(parsedDollar);
-    setOunceUsd(parsedOunce);
-    setIsEditingDollar(false);
-    setSyncStatus('تم حفظ وتحديث السعر الجديد بنجاح ✅');
-    setTimeout(() => setSyncStatus(''), 3000);
+  const applyPremium = () => {
+    const value = parseFloat(premiumInput);
+    if (isNaN(value) || value < -20 || value > 50) {
+      setStatus('تعديل السوق يجب أن يكون بين -20% و +50%');
+      setTimeout(() => setStatus(''), 3000);
+      return;
+    }
+    setLocalPremium(value);
+    setStatus(`تم تطبيق تعديل السوق المحلي: ${value > 0 ? '+' : ''}${value}%`);
+    setTimeout(() => setStatus(''), 3000);
   };
+
+  const applyManual = () => {
+    const value = parseFloat(manualInput);
+    if (isNaN(value) || value < 1000) {
+      setStatus('أدخل سعراً صحيحاً لجرام عيار 21');
+      setTimeout(() => setStatus(''), 3000);
+      return;
+    }
+    updateRates({
+      karat21: value,
+      karat24: Math.round(priceForKarat(value, 24)),
+      karat22: Math.round(priceForKarat(value, 22)),
+      karat18: Math.round(priceForKarat(value, 18)),
+      manualOverride: true,
+    });
+    setManualRateOverride(true);
+    setShowManual(false);
+    setStatus('تم تثبيت السعر يدوياً — لن يُستبدل بالتحديث التلقائي');
+    setTimeout(() => setStatus(''), 3500);
+  };
+
+  const releaseManual = () => {
+    setManualRateOverride(false);
+    setStatus('تم إلغاء التثبيت اليدوي، سيتم التحديث التلقائي');
+    refreshRates();
+    setTimeout(() => setStatus(''), 3000);
+  };
+
+  const crossRates = [
+    { label: 'الدولار الأمريكي', value: rates.usdRate, symbol: '$', hint: rates.usdBuyRate ? `شراء ${fmtNum(rates.usdBuyRate)}` : '' },
+    { label: 'الريال السعودي', value: rates.sarRate, symbol: 'ر.س', hint: '' },
+    { label: 'الدرهم الإماراتي', value: rates.aedRate, symbol: 'د.إ', hint: '' },
+    { label: 'الجنيه المصري', value: rates.egpRate, symbol: 'ج.م', hint: '' },
+  ];
 
   return (
-    <div className="space-y-6 pb-20 animate-in fade-in duration-200">
-      
-      {/* 1. TOP GLOBAL GOLD PRICE CARD (السعر العالمي للذهب الآن) */}
-      <div className="bg-gradient-to-br from-amber-500/20 via-slate-900 to-slate-950 p-6 rounded-3xl border-2 border-amber-500/50 shadow-2xl space-y-4 text-center">
-        
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+    <div className="space-y-5 pb-20 animate-in fade-in duration-200">
+      {/* السعر العالمي */}
+      <div className="bg-gradient-to-br from-amber-500/20 via-slate-900 to-slate-950 p-5 rounded-3xl border-2 border-amber-500/50 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Coins className="w-5 h-5 text-amber-400" />
-            <span className="font-extrabold text-sm text-white">السعر العالمي للذهب اليوم</span>
+            <Globe className="w-5 h-5 text-amber-400" />
+            <span className="font-extrabold text-sm text-white">سعر الذهب العالمي (الأونصة)</span>
           </div>
-
           <button
-            onClick={handleLiveMarketSync}
+            onClick={handleSync}
             disabled={isSyncing}
-            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-slate-950 font-black text-xs rounded-xl shadow-md transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>تحديث الأسعار</span>
+            تحديث الآن
           </button>
         </div>
 
-        {/* Global Ounce Price */}
-        <div className="space-y-1">
-          <span className="text-xs text-slate-400 font-bold block">السعر العالمي الآن</span>
-          <div className="text-3xl sm:text-4xl font-black text-amber-400 font-mono tracking-tight">
-            ${ounceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-slate-950/90 p-4 rounded-2xl border border-slate-800">
+            <span className="text-[11px] text-slate-400 font-bold block mb-1">الأونصة بالدولار</span>
+            <div className="text-xl font-black font-mono text-amber-400">
+              ${rates.globalOunceUsd ? rates.globalOunceUsd.toFixed(2) : '—'}
+            </div>
           </div>
-          <span className="text-xs text-slate-300 font-semibold block">للأونصة (دولار أمريكي)</span>
-        </div>
-
-        <div className="h-px bg-slate-800" />
-
-        {/* Breakdown: Gram in USD & Ounce in Grams */}
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-slate-400 block font-bold">الجرام بالدولار</span>
-            <span className="text-base font-black text-white font-mono">
-              ${gramUsd.toFixed(2)}
-            </span>
-          </div>
-
-          <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-slate-400 block font-bold">الأونصة بالجرام</span>
-            <span className="text-base font-black text-amber-300 font-mono">
-              31.103 جرام
-            </span>
+          <div className="bg-slate-950/90 p-4 rounded-2xl border border-slate-800">
+            <span className="text-[11px] text-slate-400 font-bold block mb-1">الجرام الخالص عالمياً</span>
+            <div className="text-xl font-black font-mono text-cyan-400">
+              $
+              {rates.globalOunceUsd
+                ? (rates.globalOunceUsd / 31.1034768).toFixed(2)
+                : '—'}
+            </div>
           </div>
         </div>
 
-        {syncStatus && (
-          <div className="p-2.5 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-xs text-emerald-300 font-bold animate-in fade-in">
-            {syncStatus}
+        <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-slate-400 font-bold">سعر جرام عيار 21 بالسوق</span>
+            <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full font-bold">
+              العيار الرسمي للتداول
+            </span>
           </div>
-        )}
+          <div className="text-2xl font-black font-mono text-emerald-400">
+            {fmtNum(rates.karat21)} <span className="text-sm font-sans text-slate-300">{kCurrency}</span>
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
+            <span>الأساس قبل تعديل السوق: {fmtNum(base21)}</span>
+            {premium !== 0 && (
+              <span className={premium > 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                تعديل السوق: {premium > 0 ? '+' : ''}
+                {premium}%
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* 2. SUDAN PARALLEL MARKET DOLLAR RATE CARD (سعر الدولار — السوق المفتوح) */}
-      <div className="bg-slate-900 border-2 border-amber-500/40 rounded-3xl p-5 shadow-xl space-y-3">
+      {/* حالة المصادر */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <div>
-            <h4 className="font-extrabold text-sm sm:text-base text-white">سعر الدولار — السوق المفتوح (جنيه للدولار)</h4>
-            <p className="text-[11px] text-slate-400">سعر الصرف الموازي اليومي بالسودان</p>
-          </div>
+          <span className="text-xs font-black text-white flex items-center gap-2">
+            {rates.isStale ? (
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            )}
+            {rates.isStale ? 'الأسعار تحتاج تحديث' : 'الأسعار محدّثة'}
+          </span>
+          <span className="text-[11px] text-slate-400 flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5" />
+            {ratesMeta.fetchedAt
+              ? new Date(ratesMeta.fetchedAt).toLocaleString('ar-EG', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : '—'}
+          </span>
+        </div>
 
+        <div className="space-y-1.5 text-[11px]">
+          <div className="flex items-center justify-between bg-slate-950 rounded-xl px-3 py-2 border border-slate-800">
+            <span className="text-slate-400">مصدر الذهب العالمي</span>
+            <span className="text-slate-200 font-bold">{rates.goldSource || '—'}</span>
+          </div>
+          <div className="flex items-center justify-between bg-slate-950 rounded-xl px-3 py-2 border border-slate-800">
+            <span className="text-slate-400">مصدر الدولار (السوق الموازي)</span>
+            <span className="text-slate-200 font-bold">{rates.usdSource || '—'}</span>
+          </div>
+          <div className="flex items-center justify-between bg-slate-950 rounded-xl px-3 py-2 border border-slate-800">
+            <span className="text-slate-400">سعر شراء الدولار في السوق</span>
+            <span className="text-slate-200 font-bold">
+              {rates.usdBuyRate ? fmtNum(rates.usdBuyRate) : 'غير منشور'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between bg-slate-950 rounded-xl px-3 py-2 border border-slate-800">
+            <span className="text-slate-400">متوسط سعر البنوك</span>
+            <span className="text-slate-200 font-bold">
+              {rates.bankUsdRate ? fmtNum(rates.bankUsdRate) : 'غير منشور'}
+            </span>
+          </div>
+        </div>
+
+        {ratesMeta.warnings.length > 0 && (
+          <ul className="space-y-1 pt-1">
+            {ratesMeta.warnings.map((w, i) => (
+              <li key={i} className="text-[11px] text-amber-300 flex items-start gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                {w}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {status && (
+          <div className="text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
+            {status}
+          </div>
+        )}
+      </div>
+
+      {/* جدول العيارات — مشتق من عيار 21 */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Scale className="w-5 h-5 text-amber-400" />
+          <div>
+            <h3 className="font-extrabold text-sm text-white">أسعار الجرام حسب العيار</h3>
+            <p className="text-[11px] text-slate-400">مشتقة من سعر عيار 21 بنسبة النقاوة</p>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-slate-800">
+          <table className="w-full text-xs">
+            <thead className="bg-slate-950 text-slate-400">
+              <tr>
+                <th className="text-right py-2.5 px-3 font-bold">العيار</th>
+                <th className="text-right py-2.5 px-3 font-bold">النقاوة</th>
+                <th className="text-right py-2.5 px-3 font-bold">سعر الجرام</th>
+                <th className="text-right py-2.5 px-3 font-bold">قياس 21</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {KARAT_OPTIONS.map((karat) => {
+                const price =
+                  karat === 21
+                    ? rates.karat21
+                    : karat === 24
+                    ? rates.karat24
+                    : karat === 22
+                    ? rates.karat22
+                    : rates.karat18;
+                return (
+                  <tr
+                    key={karat}
+                    className={karat === 21 ? 'bg-amber-500/10' : 'bg-slate-900'}
+                  >
+                    <td className="py-2.5 px-3 font-black text-white">
+                      عيار {karat}
+                      {karat === 21 && (
+                        <span className="mr-2 text-[9px] px-1.5 py-0.5 bg-amber-500 text-slate-950 rounded font-black">
+                          رسمي
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-400 font-mono">
+                      {Math.round((karat / 24) * 1000)}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono font-black text-emerald-400">
+                      {fmtNum(price)}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-slate-400">
+                      {karat === 21 ? '—' : `${(((karat / 24) * 1000) / 875).toFixed(3)}×`}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex items-start gap-2 bg-slate-950 border border-slate-800 rounded-2xl p-3">
+          <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-slate-300 leading-relaxed">
+            كل الحسابات في التطبيق (المخزون، المبيعات، الأرباح، التقارير) تُبنى على{' '}
+            <span className="text-amber-400 font-bold">معادل عيار 21</span>. عند إدخال ذهب بعيار آخر
+            يُحوَّل تلقائياً إلى معادل 21 حتى تكون المقارنة عادلة.
+          </p>
+        </div>
+      </div>
+
+      {/* تعديل السوق المحلي */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Percent className="w-5 h-5 text-amber-400" />
+          <div>
+            <h3 className="font-extrabold text-sm text-white">تعديل سوقك المحلي</h3>
+            <p className="text-[11px] text-slate-400">
+              الأسعار المنشورة عامة، وسعر السوق في مدينتك قد يختلف — اضبط الفرق هنا
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            step="0.5"
+            value={premiumInput}
+            onChange={(e) => setPremiumInput(e.target.value)}
+            className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-white font-mono text-sm text-right focus:outline-none"
+            placeholder="مثال: 1.5 أو -2"
+          />
           <button
-            onClick={() => setIsEditingDollar(!isEditingDollar)}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl border border-slate-700 flex items-center gap-1 transition-colors"
+            onClick={applyPremium}
+            className="px-4 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl"
           >
-            <Edit3 className="w-3.5 h-3.5" />
-            <span>{isEditingDollar ? 'إلغاء' : 'تعديل السعر'}</span>
+            تطبيق
+          </button>
+          <button
+            onClick={() => {
+              setPremiumInput('0');
+              setLocalPremium(0);
+            }}
+            className="px-3 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700"
+          >
+            صفر
           </button>
         </div>
 
-        {isEditingDollar ? (
-          <form onSubmit={handleApplyDollarChange} className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-amber-500/50">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">سعر صرف الدولار (ج.س)</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={dollarInput}
-                  onChange={(e) => setDollarInput(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-mono text-base focus:border-amber-400 focus:outline-none text-center"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">سعر الأونصة العالمية ($)</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={ounceInput}
-                  onChange={(e) => setOunceInput(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-mono text-base focus:border-amber-400 focus:outline-none text-center"
-                />
-              </div>
-            </div>
-
+        <div className="grid grid-cols-3 gap-2">
+          {[-2, -1, 1, 2, 3, 5].map((p) => (
             <button
-              type="submit"
-              className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition-transform active:scale-95"
+              key={p}
+              onClick={() => {
+                setPremiumInput(String(p));
+                setLocalPremium(p);
+              }}
+              className="py-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-xs rounded-xl"
             >
-              تطبيق وحفظ السعر الجديد
+              {p > 0 ? '+' : ''}
+              {p}%
             </button>
-          </form>
-        ) : (
-          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-bold">السعر المتداول:</span>
-            <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono">
-              {dollarRate.toLocaleString('en-US')} {kCurrency}
+          ))}
+        </div>
+      </div>
+
+      {/* تثبيت يدوي */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {rates.manualOverride ? (
+              <Lock className="w-5 h-5 text-amber-400" />
+            ) : (
+              <Unlock className="w-5 h-5 text-slate-400" />
+            )}
+            <div>
+              <h3 className="font-extrabold text-sm text-white">تثبيت السعر يدوياً</h3>
+              <p className="text-[11px] text-slate-400">
+                {rates.manualOverride
+                  ? 'السعر مثبّت ولن يتغير بالتحديث التلقائي'
+                  : 'عند انقطاع الإنترنت أو عند اتفاق سعر معيّن'}
+              </p>
             </div>
+          </div>
+          <button
+            onClick={() => (rates.manualOverride ? releaseManual() : setShowManual((v) => !v))}
+            className={`px-3 py-2 rounded-xl text-xs font-black ${
+              rates.manualOverride
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                : 'bg-slate-800 text-slate-200 border border-slate-700'
+            }`}
+          >
+            {rates.manualOverride ? 'إلغاء التثبيت' : showManual ? 'إغلاق' : 'تثبيت سعر'}
+          </button>
+        </div>
+
+        {showManual && !rates.manualOverride && (
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              value={manualInput}
+              onChange={(e) => setManualInput(e.target.value)}
+              className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-white font-mono text-sm focus:outline-none"
+              placeholder="سعر جرام عيار 21"
+            />
+            <button
+              onClick={applyManual}
+              className="px-4 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl"
+            >
+              حفظ
+            </button>
           </div>
         )}
-
-        <p className="text-[11px] text-emerald-400 font-semibold px-1">
-          ✓ سعر السوق الموازي المتداول: {dollarRate.toLocaleString('en-US')} جنيه — يمكنك تعديله يدويًا في أي وقت.
-        </p>
       </div>
 
-      {/* 3. CALCULATED GOLD PRICES IN SUDANESE POUNDS (سعر الجرام بالجنيه السوداني) */}
-      <div className="bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-950 border-2 border-amber-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
-        
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <Scale className="w-5 h-5 text-amber-400" />
-            <h4 className="font-extrabold text-base text-white">سعر الجرام بالجنيه السوداني</h4>
-          </div>
-          <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded-md border border-amber-500/30">
-            حساب مباشر ودقيق
-          </span>
-        </div>
-
-        {/* Karats List with Real Mathematical Values matching exactly the Flutter app */}
-        <div className="space-y-3">
-          
-          {/* Karat 24 */}
-          <div className="bg-slate-950/90 border border-slate-800 hover:border-amber-500/40 p-4 rounded-2xl flex items-center justify-between transition-all">
-            <div className="space-y-0.5">
-              <span className="font-extrabold text-sm sm:text-base text-white block">عيار 24 (ذهب خالص 999)</span>
-              <span className="text-[10px] text-slate-400 block font-mono">${gramUsd.toFixed(2)}/جرام</span>
-            </div>
-            <div className="text-right">
-              <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono">
-                {fmtMoney(calcKarat24)}
-              </div>
-            </div>
-          </div>
-
-          {/* Karat 22 */}
-          <div className="bg-slate-950/90 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
-            <span className="font-extrabold text-sm sm:text-base text-slate-200">عيار 22</span>
-            <div className="text-right">
-              <div className="text-xl sm:text-2xl font-black text-white font-mono">
-                {fmtMoney(calcKarat22)}
-              </div>
-            </div>
-          </div>
-
-          {/* Karat 21 (Most Popular) - No badge overlap */}
-          <div className="bg-slate-950/95 border-2 border-amber-500/60 p-4 sm:p-5 rounded-2xl flex items-center justify-between shadow-lg shadow-amber-500/10">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base sm:text-lg text-amber-400">عيار 21</span>
-                <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-bold rounded-md border border-amber-500/30">
-                  الأكثر تداولاً بالسوق
-                </span>
-              </div>
-              <span className="text-[10px] text-slate-400 block">السعر السوقي المعتمد</span>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl sm:text-3xl font-black text-amber-400 font-mono">
-                {fmtMoney(calcKarat21)}
-              </div>
-            </div>
-          </div>
-
-          {/* Karat 18 */}
-          <div className="bg-slate-950/90 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
-            <span className="font-extrabold text-sm sm:text-base text-slate-200">عيار 18</span>
-            <div className="text-right">
-              <div className="text-xl sm:text-2xl font-black text-white font-mono">
-                {fmtMoney(calcKarat18)}
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* 24k Ounce Total Value */}
-        <div className="border-t border-slate-800 pt-3.5 text-center">
-          <span className="text-xs text-slate-400 font-bold">الأونصة عيار 24: </span>
-          <span className="text-base font-black text-amber-300 font-mono">
-            {fmtMoney(calcOunceSdg)}
-          </span>
-        </div>
-
-      </div>
-
-      {/* 4. FOREIGN CURRENCIES IN SUDAN (أسعار صرف العملات بالسوق الموازي) */}
+      {/* العملات */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3">
-        <h4 className="font-extrabold text-sm text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-          <Globe className="w-4 h-4" />
-          <span>أسعار العملات الأجنبية مقابل الجنيه السوداني (السوق الموازي)</span>
-        </h4>
-
-        <div className="grid grid-cols-2 gap-3 pt-1">
-          
-          {/* USD */}
-          <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-xs font-bold text-emerald-400 block">الدولار الأمريكي (USD)</span>
-            <div className="text-lg font-black text-white font-mono">
-              {dollarRate.toLocaleString('en-US')} {kCurrency}
-            </div>
+        <div className="flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-cyan-400" />
+          <div>
+            <h3 className="font-extrabold text-sm text-white">أسعار العملات في السودان</h3>
+            <p className="text-[11px] text-slate-400">
+              منشورة من {ratesMeta.crossSource || rates.usdSource || 'مصدر السوق'}
+            </p>
           </div>
-
-          {/* SAR */}
-          <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-xs font-bold text-amber-300 block">الريال السعودي (SAR)</span>
-            <div className="text-lg font-black text-white font-mono">
-              {sarRate.toLocaleString('en-US')} {kCurrency}
-            </div>
-          </div>
-
-          {/* AED */}
-          <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-xs font-bold text-cyan-300 block">الدرهم الإماراتي (AED)</span>
-            <div className="text-lg font-black text-white font-mono">
-              {aedRate.toLocaleString('en-US')} {kCurrency}
-            </div>
-          </div>
-
-          {/* EGP */}
-          <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-xs font-bold text-rose-300 block">الجنيه المصري (EGP)</span>
-            <div className="text-lg font-black text-white font-mono">
-              {egpRate.toLocaleString('en-US')} {kCurrency}
-            </div>
-          </div>
-
         </div>
-      </div>
 
-      {/* Footer Sources Notice */}
-      <div className="text-center text-xs text-slate-500 space-y-1 pt-2">
-        <p className="font-semibold text-slate-400">
-          المصادر: أخبار السودان (sudanakhbar.com / سودافاكس) • Yahoo Finance • Coinbase • Gold-API
+        <div className="grid grid-cols-2 gap-3">
+          {crossRates.map((c) => (
+            <div key={c.label} className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5">
+              <span className="text-[11px] text-slate-400 font-bold block mb-1">{c.label}</span>
+              <div className="text-base font-black font-mono text-white">
+                {fmtNum(c.value)}
+                <span className="text-[10px] text-slate-500 font-sans mr-1">{c.symbol}</span>
+              </div>
+              {c.hint && <div className="text-[10px] text-slate-500 mt-0.5">{c.hint}</div>}
+            </div>
+          ))}
+        </div>
+
+        <p className="text-[10px] text-slate-500 leading-relaxed">
+          ملاحظة: سعر الريال/الدرهم/الجنيه المصري يُقرأ من الجدول المنشور. إذا لم يُنشر اليوم يُعرض
+          آخر سعر متوفر مع تنبيه أعلاه.
         </p>
-        <p>تنويه: الأسعار مرجعية وحسابية وفق بورصة الذهب العالمية والسوق الموازي بالسودان.</p>
       </div>
-
     </div>
   );
 };

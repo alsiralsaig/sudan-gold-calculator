@@ -2,19 +2,18 @@ import React, { useState, useMemo } from 'react';
 import {
   TrendingDown,
   Plus,
-  Trash2,
   Search,
   Filter,
-  CheckCircle2,
-  Sparkles,
-  Calendar,
-  X,
   Building2,
-  UserCheck,
-  ChevronLeft
+  UserCheck
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
-import { fmtMoney, fmtNum, formatInvoiceDate, kCurrency } from '../../core/format';
+import {
+  fmtMoney,
+  fmtNum,
+  formatInvoiceDate,
+  kCurrency
+} from '../../core/format';
 import { Expense } from '../../types';
 
 export const ExpensesScreen: React.FC = () => {

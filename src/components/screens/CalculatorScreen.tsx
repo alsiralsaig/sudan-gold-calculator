@@ -2,18 +2,8 @@ import React, { useState } from 'react';
 import {
   Calculator as CalcIcon,
   Coins,
-  Scale,
   Sparkles,
-  ArrowRightLeft,
-  Flame,
-  Delete,
-  Check,
-  RefreshCw,
-  Percent,
-  Plus,
-  Minus,
-  X as Multiply,
-  Divide
+  Check
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import {
@@ -22,9 +12,9 @@ import {
   weightToUnits,
   unitsToWeight,
   fmtMoney,
-  fmtNum,
-  kCurrency
+  fmtNum
 } from '../../core/format';
+import { priceForKarat, purityToFineness, K21_FINENESS } from '../../core/purity';
 
 export const CalculatorScreen: React.FC = () => {
   const { rates } = useGoldStore();
@@ -202,9 +192,12 @@ export const CalculatorScreen: React.FC = () => {
 
   // 3. Scrap Karat Equivalent
   const scW = parseFloat(scrapWeight) || 0;
-  const scP = parseFloat(scrapPrice) || (scrapKarat === 24 ? rates.karat24 : scrapKarat === 21 ? rates.karat21 : rates.karat18);
+  // السعر الافتراضي يُشتق دائماً من سعر عيار 21 (العيار الرسمي) بنسبة النقاوة
+  const scP = parseFloat(scrapPrice) || priceForKarat(rates.karat21, scrapKarat);
   const scrapTotalValue = scW * scP;
   const scrapPure24k = (scW * scrapKarat) / 24;
+  // معادل عيار 21 لوزن الكسر المدخل
+  const scrapK21Grams = (scW * purityToFineness(scrapKarat)) / K21_FINENESS;
 
   // 4. Melting Result
   const rW = parseFloat(rawWeight) || 0;
@@ -645,10 +638,18 @@ export const CalculatorScreen: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                  <span className="text-[11px] text-slate-400 font-bold block mb-1">معادل الخالص (عيار 24)</span>
-                  <div className="text-2xl font-black font-mono text-cyan-400">
-                    {scrapPure24k.toFixed(3)} <span className="text-sm font-sans font-bold">جرام</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <span className="text-[11px] text-slate-400 font-bold block mb-1">معادل عيار 21 (الرسمي)</span>
+                    <div className="text-xl font-black font-mono text-amber-300">
+                      {scrapK21Grams.toFixed(3)} <span className="text-xs font-sans font-bold">جرام</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <span className="text-[11px] text-slate-400 font-bold block mb-1">معادل الخالص (24)</span>
+                    <div className="text-xl font-black font-mono text-cyan-400">
+                      {scrapPure24k.toFixed(3)} <span className="text-xs font-sans font-bold">جرام</span>
+                    </div>
                   </div>
                 </div>
               </div>
