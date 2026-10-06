@@ -25,6 +25,7 @@ import { useGoldStore } from '../../context/GoldStoreContext';
 import { BranchesSection } from '../settings/BranchesSection';
 import { NotificationsSection } from '../settings/NotificationsSection';
 import { fmtNum } from '../../core/format';
+import { APP_VERSION_LABEL } from '../../core/version';
 
 interface SettingsScreenProps {
   onOpenInstallModal?: () => void;
@@ -668,7 +669,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
             </div>
             <div>
               <h4 className="font-extrabold text-sm text-white">حاسبة الذهب والشركاء (Sudan Gold Pro)</h4>
-              <p className="text-xs text-slate-400">النسخة v6.5.0 — معتمد لتجارة الذهب بالسودان (أساس عيار 21) + الفروع وطباعة الفواتير والسلف النقدية والإشعارات</p>
+              <p className="text-xs text-slate-400">النسخة {APP_VERSION_LABEL} — معتمد لتجارة الذهب بالسودان (أساس عيار 21) + الفروع وطباعة الفواتير والسلف النقدية والإشعارات</p>
             </div>
           </div>
         </div>

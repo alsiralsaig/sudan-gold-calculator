@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum } from '../../core/format';
+import { APP_VERSION_LABEL } from '../../core/version';
 import { ALL_BRANCHES, UNASSIGNED_BRANCH } from '../../core/branches';
 import { NotificationsSheet } from '../common/NotificationsSheet';
 
@@ -518,7 +519,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <div className="text-center text-[10px] text-slate-500 pt-1">
-                حاسبة الذهب والشركاء v4.0.0
+                حاسبة الذهب والشركاء {APP_VERSION_LABEL}
               </div>
             </div>
 
