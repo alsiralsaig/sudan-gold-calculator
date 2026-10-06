@@ -1,25 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Lock,
-  Timer,
-  Sun,
-  Moon,
-  Laptop,
-  Cloud,
-  CloudLightning,
-  RefreshCw,
-  LogOut,
-  LogIn,
-  UserPlus,
-  Save,
-  Trash2,
-  Info,
   Check,
   ChevronLeft,
-  Sparkles,
+  Cloud,
+  CloudLightning,
+  Download,
   Eye,
   EyeOff,
-  ShieldCheck
+  Info,
+  Laptop,
+  Lock,
+  LogIn,
+  LogOut,
+  Moon,
+  RefreshCw,
+  Save,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  Timer,
+  Trash2,
+  UserPlus,
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { BranchesSection } from '../settings/BranchesSection';
@@ -45,6 +46,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     signUpCloud,
     signOutCloud,
     syncWithCloud,
+    refreshFromCloud,
+    pendingSync,
+    syncError,
     purchases,
     sales,
     expenses,
@@ -175,16 +179,34 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     }
   };
 
-  // Trigger Sync Now
+  // مزامنة الآن: نتيجة حقيقية (لا رسالة نجاح وهمية)
   const handleTriggerSync = async () => {
     setIsSyncing(true);
-    setSyncToast('جاري المزامنة مع سحابة المتجر المشفرة...');
-    await syncWithCloud();
-    setTimeout(() => {
-      setIsSyncing(false);
-      setSyncToast('تمت المزامنة بنجاح وحفظ كافة السجلات ⚡');
-      setTimeout(() => setSyncToast(''), 3000);
-    }, 600);
+    setSyncToast('جاري المزامنة مع سحابة المتجر...');
+    const ok = await syncWithCloud();
+    setIsSyncing(false);
+    setSyncToast(
+      ok
+        ? 'تمت المزامنة بنجاح وحفظ كافة السجلات ⚡'
+        : 'تعذر إكمال المزامنة — تأكد من الاتصال بالإنترنت وحاول مرة أخرى'
+    );
+    setTimeout(() => setSyncToast(''), ok ? 2500 : 5000);
+  };
+
+  // سحب تحديثات الأجهزة الأخرى فوراً
+  const handlePullNow = async () => {
+    setIsSyncing(true);
+    setSyncToast('جاري جلب تحديثات الأجهزة الأخرى...');
+    const result = await refreshFromCloud(false);
+    setIsSyncing(false);
+    setSyncToast(
+      result.changed
+        ? 'تم جلب أحدث البيانات من الأجهزة الأخرى ✅'
+        : result.ok
+        ? 'بياناتك محدّثة — لا يوجد جديد من الأجهزة الأخرى'
+        : 'تعذر الاتصال بالسحابة — تحقق من الإنترنت'
+    );
+    setTimeout(() => setSyncToast(''), 3000);
   };
 
   const handleSignOut = () => {
@@ -395,15 +417,42 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
               <button
                 onClick={handleTriggerSync}
                 disabled={isSyncing}
-                className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 text-slate-950 font-black text-xs rounded-2xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 active:scale-95"
+                className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 text-slate-950 font-black text-xs rounded-2xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
               >
                 <RefreshCw className={`w-4 h-4 text-slate-950 ${isSyncing ? 'animate-spin' : ''}`} />
                 <span>مزامنة الآن</span>
               </button>
             </div>
 
-            <p className="text-[11px] text-slate-400 text-center leading-relaxed pt-1">
-              المزامنة تتم تلقائياً بصورة مشفرة بين أجهزتك وأجهزة الشركاء المصرح لهم فقط.
+            <button
+              onClick={handlePullNow}
+              disabled={isSyncing}
+              className="w-full py-2.5 bg-slate-900/90 hover:bg-slate-800 text-emerald-300 border border-emerald-700/60 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              <Download className="w-4 h-4" />
+              <span>جلب تحديثات الأجهزة الأخرى</span>
+            </button>
+
+            {/* حالة المزامنة الحقيقية */}
+            <div
+              className={`text-[11px] text-center font-bold leading-relaxed rounded-2xl px-3 py-2 border ${
+                syncError
+                  ? 'text-rose-300 bg-rose-950/40 border-rose-800/60'
+                  : pendingSync
+                  ? 'text-amber-300 bg-amber-950/40 border-amber-800/60'
+                  : 'text-emerald-300 bg-emerald-950/40 border-emerald-800/60'
+              }`}
+            >
+              {syncError
+                ? syncError
+                : pendingSync
+                ? 'توجد تغييرات لم تُزامن بعد — سيتم رفعها تلقائياً'
+                : 'كل شئ متزامن ✅'}
+            </div>
+
+            <p className="text-[11px] text-slate-400 text-center leading-relaxed">
+              المزامنة تلقائية في الاتجاهين: أي تعديل هنا يظهر على أجهزة الشركاء خلال ثوانٍ، وأي تعديل
+              منهم يظهر هنا فوراً — حتى بدون ضغط أي زر.
             </p>
 
           </div>

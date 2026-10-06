@@ -161,6 +161,8 @@ interface GoldStoreContextType {
   pendingSync: boolean;
   /** رسالة آخر خطأ مزامنة */
   syncError: string;
+  /** سحب التحديثات من الأجهزة الأخرى فوراً */
+  refreshFromCloud: (silent?: boolean) => Promise<{ ok: boolean; changed: boolean }>;
   /** محاولة مزامنة فورية */
   forceSync: () => Promise<boolean>;
 
@@ -359,6 +361,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const lastPushedSignature = useRef<string>('');
   const retryAttempts = useRef(0);
   const dataSignatureRef = useRef<string>('');
+  /* المزامنة ثنائية الاتجاه: آخر بصمة سحابية رأيناها + منع رفع مرتد بعد السحب */
+  const lastRemoteStamp = useRef<string>('');
+  const suppressNextPush = useRef(false);
+  const pullInFlight = useRef(false);
 
   /* ------------------------- التحميل من التخزين المحلي ------------------------- */
 
@@ -1236,6 +1242,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           body: JSON.stringify(merged),
         });
         if (!put.ok) return false;
+        try {
+          const putResult = await put.clone().json();
+          if (putResult?.updatedAt) lastRemoteStamp.current = String(putResult.updatedAt);
+        } catch {
+          /* لا يعطّل المزامنة */
+        }
         setLastSyncTime(syncTimeLabel());
         // مرآة الفروع إلى جدول Supabase المستقل (أفضل جهد — لا يعطّل المزامنة)
         void syncBranchesTable(merged.branches || []);
@@ -1248,6 +1260,45 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     },
     [isCloudSignedIn, mergePayloads, syncPayload, syncBranchesTable]
+  );
+
+  /**
+   * سحب التحديثات من السحابة (لأجهزة أخرى).
+   * - طلب قراءة واحد فقط، ولا يفعل شيئاً إن لم يتغيّر شئ على السحابة.
+   * - بعد الدمج: إن لم يكن لدينا تغييرات غير مرفوعة، لا نرفع مرة أخرى (تفادي الحلقة).
+   */
+  const pullFromCloud = useCallback(
+    async (silent = true): Promise<{ ok: boolean; changed: boolean }> => {
+      if (!isCloudSignedIn || !isOnline) return { ok: false, changed: false };
+      if (pullInFlight.current) return { ok: true, changed: false };
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return { ok: true, changed: false };
+      }
+      pullInFlight.current = true;
+      try {
+        const response = await fetch('/api/sync', { cache: 'no-store' });
+        if (!response.ok) return { ok: false, changed: false };
+        const result = await response.json();
+        const stamp = result?.updatedAt ? String(result.updatedAt) : '';
+        if (!stamp || stamp === lastRemoteStamp.current) return { ok: true, changed: false };
+
+        const hadUnsyncedLocal = dataSignatureRef.current !== lastPushedSignature.current;
+        const merged = mergePayloads(syncPayload(), result.payload || {});
+        applyCloudPayload(merged);
+        lastRemoteStamp.current = stamp;
+
+        // لا نرفع ردّاً على سحب لم يصاحبه أي تعديل محلي
+        if (!hadUnsyncedLocal) suppressNextPush.current = true;
+        if (!silent) setLastSyncTime(syncTimeLabel());
+        return { ok: true, changed: true };
+      } catch {
+        return { ok: false, changed: false };
+      } finally {
+        pullInFlight.current = false;
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isCloudSignedIn, isOnline, mergePayloads, syncPayload]
   );
 
   /**
@@ -1315,6 +1366,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     if (!isCloudSignedIn || !hydrated.current) return;
 
+    if (suppressNextPush.current) {
+      suppressNextPush.current = false;
+      lastPushedSignature.current = dataSignature;
+      setPendingSync(false);
+      return;
+    }
+
     if (dataSignature === lastPushedSignature.current) {
       setPendingSync(false);
       return;
@@ -1333,6 +1391,40 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataSignature, isCloudSignedIn, isOnline]);
+
+  /**
+   * مزامنة ثنائية الاتجاه بين الأجهزة:
+   * - كل 15 ثانية (والتطبيق في المقدمة) نسحب أي جديد من السحابة.
+   * - عند رجوع التطبيق للمقدمة أو إعادة التركيز → سحب فوري.
+   * النتيجة: أي تعديل على جهاز يظهر على الأجهزة الأخرى خلال ثوانٍ دون أي تدخل.
+   */
+  useEffect(() => {
+    if (!isCloudSignedIn || !isOnline) return;
+
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      void pullFromCloud(true);
+    };
+
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') tick();
+    };
+
+    const interval = setInterval(tick, 15_000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('resume', onVisible);
+
+    // سحب أولي عند التفعيل
+    tick();
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('resume', onVisible);
+    };
+  }, [isCloudSignedIn, isOnline, pullFromCloud]);
 
   // عودة الشبكة → مزامنة فورية
   useEffect(() => {
@@ -1933,6 +2025,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     pendingSync,
     syncError,
     forceSync,
+    refreshFromCloud: pullFromCloud,
 
     setUserEmail,
     setStoreName,
