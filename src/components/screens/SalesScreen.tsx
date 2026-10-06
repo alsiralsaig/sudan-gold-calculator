@@ -22,7 +22,7 @@ import {
   kCurrency
 } from '../../core/format';
 import { Sale } from '../../types';
-import { purityLabel } from '../../core/purity';
+import { purityLabel, unitsToK21 } from '../../core/purity';
 import { salePending } from '../../core/accounting';
 
 export const SalesScreen: React.FC = () => {
@@ -500,11 +500,28 @@ export const SalesScreen: React.FC = () => {
               </div>
             </div>
 
+            {/* مؤشر معادل عيار 21 — أساس التداول الرسمي */}
+            {(() => {
+              const u = weightToUnits(parseFloat(grams) || 0, parseFloat(habba) || 0, parseFloat(juz) || 0);
+              if (u <= 0) return null;
+              const karatNum = customKarat === '-' ? 0 : parseFloat(customKarat) || 0;
+              const k21 = karatNum > 0 ? unitsToK21(u, karatNum) : u;
+              const isOfficial = !karatNum || Math.abs(karatNum - 21) < 0.05;
+              return (
+                <div className="mt-2 flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[11px]">
+                  <span className="text-slate-400">
+                    {isOfficial ? 'الوزن بعيار 21 (الرسمي)' : 'معادل عيار 21 بعد التحويل من العيار المدخل'}:
+                  </span>
+                  <span className="font-mono font-black text-amber-300">{(k21 / 100).toFixed(2)} جرام21</span>
+                </div>
+              );
+            })()}
+
             {/* Price Per Gram & Sell Amount Auto Calculation */}
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  سعر بيع الجرام ({kCurrency}):
+                  سعر بيع الجرام — <span className="text-amber-400">عيار 21 (الرسمي)</span> ({kCurrency}):
                 </label>
                 <input
                   type="number"

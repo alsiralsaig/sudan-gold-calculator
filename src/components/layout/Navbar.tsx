@@ -208,11 +208,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               <h1 className="font-black text-sm sm:text-base text-white flex items-center gap-1.5 truncate">
                 <span className="truncate">{getTitle()}</span>
                 <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md font-bold shrink-0">
-                  السودان
+                  التسعير: عيار 21
                 </span>
               </h1>
-              <p className="text-[10px] sm:text-[11px] text-slate-400 font-mono truncate">
-                21k: <span className="text-amber-400 font-bold">{fmtNum(rates.karat21)}</span> ج.س • $ <span className="text-white font-bold">{fmtNum(rates.usdRate)}</span>
+              <p className="text-[10px] sm:text-[11px] text-slate-400 font-mono truncate flex items-center gap-1.5">
+                <span
+                  className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                    rates.isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'
+                  }`}
+                  title={rates.isStale ? 'الأسعار تحتاج تحديث' : 'الأسعار محدّثة'}
+                />
+                <span className="text-amber-300 font-bold">عيار 21 (الرسمي):</span>
+                <span className="text-amber-400 font-bold">{fmtNum(rates.karat21)}</span>
+                <span>ج.س • $</span>
+                <span className="text-white font-bold">{fmtNum(rates.usdRate)}</span>
               </p>
             </div>
           </div>
