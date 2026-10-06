@@ -46,7 +46,8 @@ function statusStyle(item: DueItem) {
 }
 
 export const RemindersScreen: React.FC = () => {
-  const { dues, storeName, sales, purchases, addPaymentToSale, addPaymentToPurchase } = useGoldStore();
+  const { dues, storeName, sales, purchases, addPaymentToSale, addPaymentToPurchase, addPaymentToLoan } =
+    useGoldStore();
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState('');
@@ -83,7 +84,8 @@ export const RemindersScreen: React.FC = () => {
       amount: item.amount,
       note: 'سداد كامل من شاشة التنبيهات',
     };
-    if (item.kind === 'receivable') addPaymentToSale(item.id, payment);
+    if (item.source === 'loan') addPaymentToLoan(item.id, payment);
+    else if (item.kind === 'receivable') addPaymentToSale(item.id, payment);
     else addPaymentToPurchase(item.id, payment);
     setToast('تم تسجيل السداد بالكامل ✅');
     setTimeout(() => setToast(''), 2500);
@@ -127,7 +129,7 @@ export const RemindersScreen: React.FC = () => {
               <AlertTriangle className="w-3 h-3" /> متأخر
             </span>
             <span className="font-mono font-black text-rose-300 text-sm">{fmtNum(dues.overdueTotal)}</span>
-            <span className="block text-[10px] text-slate-500 mt-0.5">{dues.overdue.length} فاتورة</span>
+            <span className="block text-[10px] text-slate-500 mt-0.5">{dues.overdue.length} مستحق</span>
           </div>
           <div className="bg-amber-950/25 border border-amber-500/40 rounded-2xl p-3">
             <span className="text-[10px] text-amber-300 font-bold block mb-1 flex items-center gap-1">
@@ -136,7 +138,7 @@ export const RemindersScreen: React.FC = () => {
             <span className="font-mono font-black text-amber-300 text-sm">
               {fmtNum(dues.dueToday.reduce((s, i) => s + i.amount, 0))}
             </span>
-            <span className="block text-[10px] text-slate-500 mt-0.5">{dues.dueToday.length} فاتورة</span>
+            <span className="block text-[10px] text-slate-500 mt-0.5">{dues.dueToday.length} مستحق</span>
           </div>
           <div className="bg-emerald-950/25 border border-emerald-500/40 rounded-2xl p-3">
             <span className="text-[10px] text-emerald-300 font-bold block mb-1 flex items-center gap-1">
@@ -144,7 +146,7 @@ export const RemindersScreen: React.FC = () => {
             </span>
             <span className="font-mono font-black text-emerald-300 text-sm">{fmtNum(dues.receivablesTotal)}</span>
             <span className="block text-[10px] text-slate-500 mt-0.5">
-              {dues.items.filter((i) => i.kind === 'receivable').length} فاتورة
+              {dues.items.filter((i) => i.kind === 'receivable').length} مستحق
             </span>
           </div>
           <div className="bg-cyan-950/25 border border-cyan-500/40 rounded-2xl p-3">
@@ -153,7 +155,7 @@ export const RemindersScreen: React.FC = () => {
             </span>
             <span className="font-mono font-black text-cyan-300 text-sm">{fmtNum(dues.payablesTotal)}</span>
             <span className="block text-[10px] text-slate-500 mt-0.5">
-              {dues.items.filter((i) => i.kind === 'payable').length} فاتورة
+              {dues.items.filter((i) => i.kind === 'payable').length} مستحق
             </span>
           </div>
         </div>
@@ -217,7 +219,7 @@ export const RemindersScreen: React.FC = () => {
         <div className="space-y-2">
           {filtered.length > 0 && (
             <div className="flex items-center justify-between px-1 text-[11px] text-slate-400">
-              <span>{filtered.length} فاتورة</span>
+              <span>{filtered.length} مستحق</span>
               <span className="font-mono">الإجمالي: {fmtMoney(filteredTotal)}</span>
             </div>
           )}
@@ -241,9 +243,14 @@ export const RemindersScreen: React.FC = () => {
                         <Users className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                       )}
                       {item.party}
+                      {item.source === 'loan' ? (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-300 mr-1">
+                          سلفة
+                        </span>
+                      ) : null}
                     </h4>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      {isReceivable ? 'لنا عند الزبون' : 'علينا للمورد'} · فاتورة {arabicDate(item.date)}
+                      {isReceivable ? 'لنا عند الزبون' : 'علينا للمورد'} · {item.source === 'loan' ? 'سلفة' : 'فاتورة'} {arabicDate(item.date)}
                       {item.phone ? ` · ${item.phone}` : ''}
                     </p>
                   </div>

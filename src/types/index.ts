@@ -26,6 +26,37 @@ export interface Branch {
   updatedAt?: string;
 }
 
+/**
+ * سلفة نقدية (دين).
+ * - lent = سلّفنا شخصاً (لنا عليه — أصل)
+ * - borrowed = استلفنا من شخص (علينا له — التزام)
+ *
+ * قاعدة العمل: السلفة ليست مصروفاً ولا إيراداً، فلا تؤثر على الربح إطلاقاً.
+ * عند الإقراض ينقص النقد وتزيد الذمة، وعند السداد ينقص العكس.
+ */
+export type LoanDirection = 'lent' | 'borrowed';
+
+export interface Loan {
+  id: string;
+  date: string;
+  /** اسم الشخص */
+  person: string;
+  phone?: string;
+  /** مبلغ السلفة الأصلي */
+  amount: number;
+  direction: LoanDirection;
+  /** تاريخ الاستحقاق المتوقع للسداد */
+  dueDate?: string;
+  notes?: string;
+  /** الدفعات المستلمة/المسددة */
+  payments?: Payment[];
+  /** الفرع الذي تمت فيه العملية */
+  branchId?: string;
+  /** يُؤرشف تلقائياً عند اكتمال السداد */
+  archived?: boolean;
+  updatedAt?: string;
+}
+
 export interface Purchase {
   id: string;
   date: string;
@@ -160,6 +191,7 @@ export interface BackupFile {
   expenses: Expense[];
   partners: Partner[];
   branches?: Branch[];
+  loans?: Loan[];
   rates: GoldRates;
   tombstones?: AppTombstones;
 }

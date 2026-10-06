@@ -5,7 +5,10 @@ import {
   Search,
   Filter,
   Building2,
-  UserCheck
+  UserCheck,
+  HandCoins,
+  ArrowLeftRight,
+  Info
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { StickyActionBar } from '../layout/StickyActionBar';
@@ -15,7 +18,7 @@ import {
   formatInvoiceDate,
   kCurrency
 } from '../../core/format';
-import { Expense } from '../../types';
+import { Expense, LoanDirection } from '../../types';
 
 export const ExpensesScreen: React.FC = () => {
   const {
@@ -25,6 +28,8 @@ export const ExpensesScreen: React.FC = () => {
     archiveExpense,
     updateExpense,
     deleteExpense,
+    addLoan,
+    loanSummary,
   } = useGoldStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,18 +46,43 @@ export const ExpensesScreen: React.FC = () => {
   const [selectedPartner, setSelectedPartner] = useState<string>(partners[0]?.name || 'السر الصائغ');
   const [notes, setNotes] = useState('');
 
+  // وضع «سلفة» داخل شاشة المنصرفات — السلفة لا تُحسب مصروفاً
+  const [isLoanMode, setIsLoanMode] = useState(false);
+  const [loanDirection, setLoanDirection] = useState<LoanDirection>('lent');
+  const [loanPhone, setLoanPhone] = useState('');
+  const [loanDueDate, setLoanDueDate] = useState('');
+
   const handleOpenAdd = () => {
     setName('');
     setAmount('');
     setTargetType('عام');
     setSelectedPartner(partners[0]?.name || '');
     setNotes('');
+    setIsLoanMode(false);
+    setLoanDirection('lent');
+    setLoanPhone('');
+    setLoanDueDate('');
     setShowAddModal(true);
   };
 
   const handleSaveExpense = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+
+    // سلفة: لا تذهب إلى المنصرفات إطلاقاً — لا تؤثر على الربح
+    if (isLoanMode) {
+      addLoan({
+        date: new Date().toISOString(),
+        person: name.trim(),
+        phone: loanPhone.trim(),
+        amount: parseFloat(amount) || 0,
+        direction: loanDirection,
+        dueDate: loanDueDate ? new Date(loanDueDate).toISOString() : undefined,
+        notes: notes.trim(),
+      });
+      setShowAddModal(false);
+      return;
+    }
 
     const actualTarget = targetType === 'عام' ? 'عام' : (selectedPartner || 'شريك');
 
@@ -298,9 +328,13 @@ export const ExpensesScreen: React.FC = () => {
             className="bg-slate-900 border-2 border-rose-500/60 rounded-3xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl text-white relative animate-in zoom-in-95 my-auto"
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-black text-base text-rose-400 flex items-center gap-2">
-                <TrendingDown className="w-4 h-4" />
-                <span>تسجيل مصروف جديد</span>
+              <h3
+                className={`font-black text-base flex items-center gap-2 ${
+                  isLoanMode ? 'text-emerald-400' : 'text-rose-400'
+                }`}
+              >
+                {isLoanMode ? <HandCoins className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                <span>{isLoanMode ? 'تسجيل سلفة جديدة' : 'تسجيل مصروف جديد'}</span>
               </h3>
               <button
                 type="button"
@@ -311,10 +345,82 @@ export const ExpensesScreen: React.FC = () => {
               </button>
             </div>
 
+            {/* وضع السجل: مصروف أم سلفة */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsLoanMode(false)}
+                className={`py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 ${
+                  !isLoanMode ? 'bg-rose-500 text-white shadow-md' : 'bg-slate-950 text-slate-300 border border-slate-800'
+                }`}
+              >
+                <TrendingDown className="w-4 h-4" />
+                مصروف (ينقص الربح)
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsLoanMode(true)}
+                className={`py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 ${
+                  isLoanMode ? 'bg-emerald-500 text-slate-950 shadow-md' : 'bg-slate-950 text-slate-300 border border-slate-800'
+                }`}
+              >
+                <HandCoins className="w-4 h-4" />
+                سلفة (لا تنقص الربح)
+              </button>
+            </div>
+
+            {isLoanMode && (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-3 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  {(['lent', 'borrowed'] as LoanDirection[]).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setLoanDirection(d)}
+                      className={`py-2 rounded-xl text-[11px] font-black border transition-colors ${
+                        loanDirection === d
+                          ? d === 'lent'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                            : 'bg-rose-500 text-white border-rose-400'
+                          : 'bg-slate-950 text-slate-300 border-slate-700'
+                      }`}
+                    >
+                      {d === 'lent' ? 'سلّفناه (لنا عليه)' : 'استلفنا منه (علينا له)'}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">الهاتف (واتساب)</label>
+                    <input
+                      value={loanPhone}
+                      onChange={(e) => setLoanPhone(e.target.value)}
+                      inputMode="tel"
+                      placeholder="09xxxxxxxx"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-xs font-mono focus:border-emerald-400 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">تاريخ السداد المتوقع</label>
+                    <input
+                      type="date"
+                      value={loanDueDate}
+                      onChange={(e) => setLoanDueDate(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-xs font-mono focus:border-emerald-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-emerald-200/80 leading-relaxed flex items-start gap-1.5">
+                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  ستُسجَّل في «السلف والأمانات» كذمة (أصل) وليس كمصروف، ويمكن متابعتها وسدادها على دفعات.
+                </p>
+              </div>
+            )}
+
             {/* Expense Name / Statement */}
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                بيان المصروف (الاسم):
+                {isLoanMode ? 'اسم الشخص:' : 'بيان المصروف (الاسم):'}
               </label>
               <input
                 type="text"
@@ -343,6 +449,7 @@ export const ExpensesScreen: React.FC = () => {
             </div>
 
             {/* Target Type: General vs Partner Private */}
+            {!isLoanMode && (
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
                 نوع المصروف:
@@ -394,6 +501,8 @@ export const ExpensesScreen: React.FC = () => {
                 </div>
               )}
             </div>
+
+            )}
 
             {/* Notes */}
             <div>
@@ -466,6 +575,30 @@ export const ExpensesScreen: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* تحويل المصروف القديم إلى سلفة (بدون أثر على الربح) */}
+            <button
+              onClick={() => {
+                const isGeneral = selectedExpense.target === 'عام' || !selectedExpense.target;
+                const msg = isGeneral
+                  ? 'تحويل هذا السجل إلى سلفة؟ سيُحذف من المنصرفات (ويرتفع الربح بنفس المبلغ) ويُضاف إلى «السلف والأمانات» كذمة لنا على الشخص.'
+                  : 'هذا السجل مسحوبات شريك وليس سلفة. تحويله إلى سلفة سيحذفه من المسحوبات ويسجّله كذمة. متابعة؟';
+                if (!confirm(msg)) return;
+                addLoan({
+                  date: selectedExpense.date,
+                  person: selectedExpense.name.trim(),
+                  amount: selectedExpense.amount,
+                  direction: 'lent',
+                  notes: selectedExpense.notes || 'مُحوَّلة من المنصرفات',
+                });
+                deleteExpense(selectedExpense.id);
+                setSelectedExpense(null);
+              }}
+              className="w-full py-2.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 font-bold rounded-xl text-[11px] border border-emerald-500/40 flex items-center justify-center gap-1.5"
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              تحويل إلى سلفة (يخرج من المصروفات)
+            </button>
 
             <div className="grid grid-cols-3 gap-2 pt-1">
               <button onClick={() => { const name = prompt('البيان الجديد', selectedExpense.name); const amount = prompt('المبلغ الجديد', String(selectedExpense.amount)); if (name !== null && amount !== null) { updateExpense({ ...selectedExpense, name: name.trim() || selectedExpense.name, amount: parseFloat(amount) || selectedExpense.amount }); setSelectedExpense(null); } }} className="py-2.5 bg-amber-500/20 text-amber-300 font-bold rounded-xl text-xs border border-amber-500/40">تعديل</button>

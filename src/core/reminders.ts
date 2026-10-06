@@ -8,6 +8,8 @@ export interface DueItem {
   id: string;
   /** receivable = لنا عند الزبون / payable = علينا للمورد */
   kind: 'receivable' | 'payable';
+  /** مصدر الاستحقاق: فاتورة بيع، فاتورة شراء، أو سلفة */
+  source?: 'sale' | 'purchase' | 'loan';
   party: string;
   phone?: string;
   amount: number;
@@ -64,6 +66,7 @@ export function computeDues(
     items.push({
       id: sale.id,
       kind: 'receivable',
+      source: 'sale',
       party: sale.buyer || 'زبون عام',
       phone: sale.buyerPhone,
       amount: pending,
@@ -84,6 +87,7 @@ export function computeDues(
     items.push({
       id: purchase.id,
       kind: 'payable',
+      source: 'purchase',
       party: purchase.seller || 'مورد عام',
       phone: purchase.sellerPhone,
       amount: pending,
@@ -126,4 +130,45 @@ export function suggestedDueDate(from: Date = new Date()): string {
   const d = new Date(from);
   d.setDate(d.getDate() + 30);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * دمج ملخصات الاستحقاق (المبيعات/المشتريات + السلف) في ملخص واحد
+ * حتى تظهر كلها في شاشة التنبيهات وشارة الجرس بدون تكرار المنطق.
+ */
+export function mergeDueSummaries(...summaries: DueSummary[]): DueSummary {
+  const valid = (summaries || []).filter(Boolean);
+  if (valid.length === 0) {
+    return {
+      items: [],
+      overdue: [],
+      dueToday: [],
+      upcoming: [],
+      withoutDate: [],
+      receivablesTotal: 0,
+      payablesTotal: 0,
+      overdueTotal: 0,
+    };
+  }
+  if (valid.length === 1) return valid[0];
+
+  const items = valid.flatMap((s) => s.items || []);
+  const order: Record<DueStatus, number> = { overdue: 0, today: 1, soon: 2, later: 3, nodate: 4 };
+  items.sort((a, b) => {
+    const diff = order[a.status] - order[b.status];
+    if (diff !== 0) return diff;
+    if (a.status === 'overdue' && b.status === 'overdue') return b.daysOverdue - a.daysOverdue;
+    return (b.amount || 0) - (a.amount || 0);
+  });
+
+  return {
+    items,
+    overdue: items.filter((i) => i.status === 'overdue'),
+    dueToday: items.filter((i) => i.status === 'today'),
+    upcoming: items.filter((i) => i.status === 'soon' || i.status === 'later'),
+    withoutDate: items.filter((i) => i.status === 'nodate'),
+    receivablesTotal: valid.reduce((sum, s) => sum + (s.receivablesTotal || 0), 0),
+    payablesTotal: valid.reduce((sum, s) => sum + (s.payablesTotal || 0), 0),
+    overdueTotal: valid.reduce((sum, s) => sum + (s.overdueTotal || 0), 0),
+  };
 }

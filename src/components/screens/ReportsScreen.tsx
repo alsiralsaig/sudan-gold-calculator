@@ -34,6 +34,7 @@ import {
 import { purityLabel } from '../../core/purity';
 import { buildReportText, buildReminderText, openWhatsApp } from '../../core/share';
 import { branchShare, branchStats } from '../../core/branches';
+import { loanStatusLabel } from '../../core/loans';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { Building2 } from 'lucide-react';
 import { MessageCircle, AlertTriangle } from 'lucide-react';
@@ -98,6 +99,8 @@ export const ReportsScreen: React.FC = () => {
     allSales,
     allExpenses,
     activeBranchName,
+    loans,
+    loanSummary,
   } = useGoldStore();
 
   const [period, setPeriod] = useState<PeriodKey>('today');
@@ -434,6 +437,77 @@ export const ReportsScreen: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* السلف النقدية — خارج حساب الربح */}
+      {loans.length > 0 && (
+        <div className="bg-slate-900 border border-emerald-500/30 rounded-3xl p-5 space-y-3 print:bg-white">
+          <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
+            <HandCoins className="w-4 h-4 text-emerald-400" />
+            السلف النقدية (لا تدخل في الربح)
+          </h3>
+
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800">
+              <span className="block text-[10px] text-slate-400 font-bold">لنا على الآخرين</span>
+              <span className="block font-mono font-black text-emerald-400 text-sm">
+                {fmtNum(loanSummary.lentOutstanding)}
+              </span>
+            </div>
+            <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800">
+              <span className="block text-[10px] text-slate-400 font-bold">علينا للآخرين</span>
+              <span className="block font-mono font-black text-rose-400 text-sm">
+                {fmtNum(loanSummary.borrowedOutstanding)}
+              </span>
+            </div>
+            <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800">
+              <span className="block text-[10px] text-slate-400 font-bold">الصافي</span>
+              <span
+                className={`block font-mono font-black text-sm ${
+                  loanSummary.netOutstanding >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                }`}
+              >
+                {fmtNum(loanSummary.netOutstanding)}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-slate-800">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-950 text-slate-400">
+                <tr>
+                  <th className="text-right py-2 px-3 font-bold">الاسم</th>
+                  <th className="text-right py-2 px-3 font-bold">النوع</th>
+                  <th className="text-right py-2 px-3 font-bold">الأصل</th>
+                  <th className="text-right py-2 px-3 font-bold">مسدَّد</th>
+                  <th className="text-right py-2 px-3 font-bold">المتبقي</th>
+                  <th className="text-right py-2 px-3 font-bold">الحالة</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {loans.slice(0, 12).map((l) => {
+                  const paid = (l.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+                  const pending = Math.max(0, l.amount - paid);
+                  return (
+                    <tr key={l.id}>
+                      <td className="py-2 px-3 text-white font-bold">{l.person}</td>
+                      <td className="py-2 px-3 text-slate-400">
+                        {l.direction === 'lent' ? 'لنا عليه' : 'علينا له'}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-slate-300">{fmtNum(l.amount)}</td>
+                      <td className="py-2 px-3 font-mono text-emerald-300">{fmtNum(paid)}</td>
+                      <td className="py-2 px-3 font-mono text-amber-300">{fmtNum(pending)}</td>
+                      <td className="py-2 px-3 text-slate-400">{loanStatusLabel(l)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-slate-500">
+            السلف أصول وذمم وليست مصروفات — لذلك لا تُخصم من الأرباح ولا تُضاف إليها.
+          </p>
+        </div>
+      )}
 
       {/* ربحية الفروع — لكل الفروع بغض النظر عن الفرع النشط */}
       {branches.filter((b) => !b.archived).length > 0 && (

@@ -20,6 +20,7 @@ import {
   FileBarChart,
   BarChart3,
   BellRing,
+  HandCoins,
   WifiOff,
   CloudUpload,
   Building2
@@ -135,6 +136,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       color: 'text-rose-400 bg-rose-500/10',
     },
     {
+      id: 'loans',
+      label: 'السلف والأمانات',
+      desc: 'من استلف منّا ومن استلفنا منه — سداد ودفعات وتذكيرات',
+      icon: HandCoins,
+      color: 'text-emerald-400 bg-emerald-500/10',
+    },
+    {
       id: 'archive',
       label: 'الأرشيف',
       desc: 'استعادة السجلات المؤرشفة أو حذفها نهائياً',
@@ -179,6 +187,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         return 'التحليلات والرسوم البيانية';
       case 'reminders':
         return 'التنبيهات والمتأخرات';
+      case 'loans':
+        return 'السلف والأمانات';
       case 'archive':
         return 'الأرشيف';
       case 'settings':

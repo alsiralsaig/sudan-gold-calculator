@@ -84,6 +84,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
     forceSync,
     storeName,
     expenses,
+    loans,
+    loanSummary,
   } = useGoldStore();
 
   const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -506,6 +508,57 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
         </div>
       )}
 
+      {/* السلف والأمانات — لا تدخل في الأرباح */}
+      {(loanSummary.openCount > 0 || loanSummary.settledCount > 0) && (
+        <div className="bg-slate-900 border border-emerald-500/30 rounded-3xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 bg-emerald-500/15 text-emerald-400 rounded-2xl border border-emerald-500/40">
+                <HandCoins className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-white">السلف والأمانات</h3>
+                <p className="text-[11px] text-slate-400">
+                  لا تدخل في حساب الربح — ذمم بينك وبين الأشخاص
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => onNavigate('loans')}
+              className="text-xs font-bold text-emerald-300 hover:text-emerald-200 flex items-center gap-1"
+            >
+              إدارة
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-slate-950 rounded-2xl p-2.5 text-center border border-slate-800">
+              <span className="block text-[10px] text-slate-400 font-bold">لنا على الآخرين</span>
+              <span className="block font-mono font-black text-emerald-400 text-sm">
+                {fmtNum(loanSummary.lentOutstanding)}
+              </span>
+            </div>
+            <div className="bg-slate-950 rounded-2xl p-2.5 text-center border border-slate-800">
+              <span className="block text-[10px] text-slate-400 font-bold">علينا للآخرين</span>
+              <span className="block font-mono font-black text-rose-400 text-sm">
+                {fmtNum(loanSummary.borrowedOutstanding)}
+              </span>
+            </div>
+            <div className="bg-slate-950 rounded-2xl p-2.5 text-center border border-slate-800">
+              <span className="block text-[10px] text-slate-400 font-bold">الصافي</span>
+              <span
+                className={`block font-mono font-black text-sm ${
+                  loanSummary.netOutstanding >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                }`}
+              >
+                {fmtNum(loanSummary.netOutstanding)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* التنبيهات والمتأخرات */}
       {(dues.overdue.length > 0 || dues.dueToday.length > 0) && (
         <div className="bg-slate-900 border-2 border-rose-500/40 rounded-3xl p-5 space-y-3">
@@ -518,8 +571,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
                 <h3 className="font-extrabold text-sm sm:text-base text-white">تنبيهات التحصيل</h3>
                 <p className="text-[11px] text-slate-400">
                   {dues.overdue.length > 0
-                    ? `${dues.overdue.length} فاتورة متأخرة بقيمة ${fmtMoney(dues.overdueTotal)}`
-                    : `${dues.dueToday.length} فاتورة تستحق اليوم`}
+                    ? `${dues.overdue.length} مستحق متأخر بقيمة ${fmtMoney(dues.overdueTotal)}`
+                    : `${dues.dueToday.length} مستحق يستحق اليوم`}
                 </p>
               </div>
             </div>
@@ -544,6 +597,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
                     <span className="text-[10px] text-slate-500 font-normal mr-1.5">
                       {item.kind === 'receivable' ? '(لنا)' : '(علينا)'}
                     </span>
+                    {item.source === 'loan' ? (
+                      <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-300 mr-1">
+                        سلفة
+                      </span>
+                    ) : null}
                   </span>
                   <span className="text-[10px] text-rose-300 font-bold">
                     {item.status === 'overdue' ? `متأخر ${item.daysOverdue} يوم` : relativeDays(item.daysOverdue)}

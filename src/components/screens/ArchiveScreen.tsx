@@ -2,11 +2,14 @@
 import React from 'react';
 import { Archive, RotateCcw, Trash2 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
-import { Expense, Partner, Purchase, Sale } from '../../types';
+import { Expense, Loan, Partner, Purchase, Sale } from '../../types';
 import { fmtNum, formatInvoiceDate, unitsToGhJ } from '../../core/format';
 import { StickyActionBar } from '../layout/StickyActionBar';
 
-type ArchivedItem = { kind: 'purchase' | 'sale' | 'expense' | 'partner'; item: Purchase | Sale | Expense | Partner };
+type ArchivedItem = {
+  kind: 'purchase' | 'sale' | 'expense' | 'partner' | 'loan';
+  item: Purchase | Sale | Expense | Partner | Loan;
+};
 export const ArchiveScreen: React.FC = () => {
   const store = useGoldStore();
   const items: ArchivedItem[] = [
@@ -14,16 +17,30 @@ export const ArchiveScreen: React.FC = () => {
     ...store.sales.filter(x => x.archived).map(item => ({ kind: 'sale' as const, item })),
     ...store.expenses.filter(x => x.archived).map(item => ({ kind: 'expense' as const, item })),
     ...store.partners.filter(x => x.archived).map(item => ({ kind: 'partner' as const, item })),
+    ...store.loans.filter(x => x.archived).map(item => ({ kind: 'loan' as const, item })),
   ];
-  const label = (x: ArchivedItem) => x.kind === 'purchase' ? 'مشتريات' : x.kind === 'sale' ? 'مبيعات' : x.kind === 'expense' ? 'مصروفات' : 'شركاء';
+  const label = (x: ArchivedItem) =>
+    x.kind === 'purchase'
+      ? 'مشتريات'
+      : x.kind === 'sale'
+      ? 'مبيعات'
+      : x.kind === 'expense'
+      ? 'مصروفات'
+      : x.kind === 'loan'
+      ? 'سلفة مسددة'
+      : 'شركاء';
   const title = (x: ArchivedItem) => {
     if (x.kind === 'purchase') return `شراء ${fmtNum((x.item as Purchase).amount)} ج.س`;
     if (x.kind === 'sale') return `بيع ${fmtNum((x.item as Sale).sellAmount)} ج.س`;
     if (x.kind === 'expense') return (x.item as Expense).name;
+    if (x.kind === 'loan') {
+      const loan = x.item as Loan;
+      return `${loan.direction === 'lent' ? 'لنا على' : 'علينا لـ'} ${loan.person} — ${fmtNum(loan.amount)} ج.س`;
+    }
     return (x.item as Partner).name;
   };
-  const restore = (x: ArchivedItem) => x.kind === 'purchase' ? store.restorePurchase(x.item.id) : x.kind === 'sale' ? store.restoreSale(x.item.id) : x.kind === 'expense' ? store.restoreExpense(x.item.id) : store.restorePartner(x.item.id);
-  const remove = (x: ArchivedItem) => { if (confirm('حذف نهائي؟ لا يمكن استعادة هذا السجل بعد ذلك.')) { if (x.kind === 'purchase') store.deletePurchase(x.item.id); else if (x.kind === 'sale') store.deleteSale(x.item.id); else if (x.kind === 'expense') store.deleteExpense(x.item.id); else store.deletePartner(x.item.id); } };
+  const restore = (x: ArchivedItem) => x.kind === 'purchase' ? store.restorePurchase(x.item.id) : x.kind === 'sale' ? store.restoreSale(x.item.id) : x.kind === 'expense' ? store.restoreExpense(x.item.id) : x.kind === 'loan' ? store.restoreLoan(x.item.id) : store.restorePartner(x.item.id);
+  const remove = (x: ArchivedItem) => { if (confirm('حذف نهائي؟ لا يمكن استعادة هذا السجل بعد ذلك.')) { if (x.kind === 'purchase') store.deletePurchase(x.item.id); else if (x.kind === 'sale') store.deleteSale(x.item.id); else if (x.kind === 'expense') store.deleteExpense(x.item.id); else if (x.kind === 'loan') store.deleteLoan(x.item.id); else store.deletePartner(x.item.id); } };
   return <div className="space-y-4 pb-24 animate-in fade-in duration-200">
     <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-5 text-center"><Archive className="w-9 h-9 mx-auto text-amber-400 mb-2"/><h2 className="text-lg font-black text-amber-300">الأرشيف</h2><p className="text-xs text-slate-400 mt-1">السجلات المؤرشفة لا تظهر في القوائم وتبقى قابلة للاستعادة</p></div>
     <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">

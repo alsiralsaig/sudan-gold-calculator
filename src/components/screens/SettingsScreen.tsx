@@ -664,7 +664,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
             </div>
             <div>
               <h4 className="font-extrabold text-sm text-white">حاسبة الذهب والشركاء (Sudan Gold Pro)</h4>
-              <p className="text-xs text-slate-400">النسخة v6.3.0 — معتمد لتجارة الذهب بالسودان (أساس عيار 21) + تعدد الفروع وطباعة الفواتير</p>
+              <p className="text-xs text-slate-400">النسخة v6.4.0 — معتمد لتجارة الذهب بالسودان (أساس عيار 21) + الفروع وطباعة الفواتير والسلف النقدية</p>
             </div>
           </div>
         </div>

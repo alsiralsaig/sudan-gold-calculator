@@ -1,7 +1,18 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { AppTombstones, Branch, Expense, GoldRates, Partner, Payment, Purchase, RatesMeta, Sale } from '../types';
+import {
+  AppTombstones,
+  Branch,
+  Expense,
+  GoldRates,
+  Loan,
+  Partner,
+  Payment,
+  Purchase,
+  RatesMeta,
+  Sale,
+} from '../types';
 import { mergeRecordsWithTombstones } from '../core/merge';
 import {
   Financials,
@@ -13,7 +24,8 @@ import {
   salePending,
 } from '../core/accounting';
 import { K21_FINENESS } from '../core/purity';
-import { DueSummary, computeDues } from '../core/reminders';
+import { DueSummary, computeDues, mergeDueSummaries } from '../core/reminders';
+import { LoanSummary, computeLoanDues, isLoanSettled, loanPending, summarizeLoans } from '../core/loans';
 import {
   ALL_BRANCHES,
   UNASSIGNED_BRANCH,
@@ -59,6 +71,17 @@ interface GoldStoreContextType {
   numberLegacyInvoices: () => number;
   /** مرآة الفروع إلى جدول Supabase المستقل (best-effort) */
   syncBranchesTable: (branches: Branch[]) => Promise<boolean>;
+  /** سلف نقدية (دين) — غير مؤثرة على الربح */
+  loans: Loan[];
+  allLoans: Loan[];
+  loanSummary: LoanSummary;
+  addLoan: (l: Omit<Loan, 'id' | 'payments' | 'updatedAt'>) => void;
+  updateLoan: (l: Loan) => void;
+  archiveLoan: (id: string) => void;
+  restoreLoan: (id: string) => void;
+  deleteLoan: (id: string) => void;
+  /** إضافة دفعة سداد — تُؤرشف السلفة تلقائياً عند اكتمال المبلغ */
+  addPaymentToLoan: (loanId: string, payment: Omit<Payment, 'id'>) => void;
   /** عدد العمليات غير المسندة لأي فرع */
   unassignedOperations: number;
   /** إسناد العمليات القديمة إلى فرع محدد (يعيد العدد) */
@@ -267,6 +290,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [ratesHistory, setRatesHistory] = useState<{ t: string; v: number }[]>([]);
   const [pendingSync, setPendingSync] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [allLoans, setAllLoans] = useState<Loan[]>([]);
   const [activeBranchId, setActiveBranchIdState] = useState<string>(ALL_BRANCHES);
   const [invoiceCounters, setInvoiceCounters] = useState<InvoiceCounters>({ sale: 0, purchase: 0 });
   const [syncError, setSyncError] = useState('');
@@ -274,6 +298,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   /* ------------------------- تقييد البيانات بالفرع النشط ------------------------- */
   const purchases = useMemo(() => scopeToBranch(allPurchases, activeBranchId), [allPurchases, activeBranchId]);
+  const loans = useMemo(() => scopeToBranch(allLoans, activeBranchId), [allLoans, activeBranchId]);
   const sales = useMemo(() => scopeToBranch(allSales, activeBranchId), [allSales, activeBranchId]);
   const expenses = useMemo(() => scopeToBranch(allExpenses, activeBranchId), [allExpenses, activeBranchId]);
 
@@ -341,6 +366,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
         if (Array.isArray(data.ratesHistory)) setRatesHistory(data.ratesHistory.slice(-200));
         if (Array.isArray(data.branches)) setBranches(data.branches.filter((b: Branch) => b && b.id && b.name));
+        if (Array.isArray(data.loans)) setAllLoans(safeArray<Loan>(data.loans));
         if (typeof data.activeBranchId === 'string' && data.activeBranchId) {
           setActiveBranchIdState(data.activeBranchId);
         }
@@ -412,6 +438,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           sales: allSales,
           expenses: allExpenses,
           branches,
+          loans: allLoans,
           activeBranchId,
           invoiceCounters,
           partners,
@@ -437,6 +464,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     allSales,
     allExpenses,
     branches,
+    allLoans,
     activeBranchId,
     invoiceCounters,
     partners,
@@ -615,7 +643,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     [partners, expenses, financials.netProfit, financials.totalCapital]
   );
 
-  const dues = useMemo(() => computeDues(sales, purchases), [sales, purchases]);
+  const dues = useMemo(
+    () => mergeDueSummaries(computeDues(sales, purchases), computeLoanDues(loans)),
+    [sales, purchases, loans]
+  );
+
+  /** ملخص السلف: لنا، علينا، والصافي */
+  const loanSummary = useMemo<LoanSummary>(() => summarizeLoans(loans), [loans]);
 
   const totalProfitPercent = useMemo(
     () => partners.filter((p) => !p.archived).reduce((sum, p) => sum + (p.profitPercent || 0), 0),
@@ -923,11 +957,24 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       expenses: allExpenses,
       partners,
       branches,
+      loans: allLoans,
       invoiceCounters,
       rates,
       tombstones,
     }),
-    [storeName, userEmail, allPurchases, allSales, allExpenses, partners, branches, invoiceCounters, rates, tombstones]
+    [
+      storeName,
+      userEmail,
+      allPurchases,
+      allSales,
+      allExpenses,
+      partners,
+      branches,
+      allLoans,
+      invoiceCounters,
+      rates,
+      tombstones,
+    ]
   );
 
   const mergePayloads = useCallback(
@@ -956,6 +1003,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         local?.tombstones,
         cloud?.tombstones
       );
+      const loansMerge = mergeRecordsWithTombstones<Loan>(
+        local?.loans,
+        cloud?.loans,
+        local?.tombstones,
+        cloud?.tombstones
+      );
       const branchesMerge = mergeRecordsWithTombstones<Branch>(
         local?.branches,
         cloud?.branches,
@@ -971,6 +1024,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         ...expensesMerge.tombstones,
         ...partnersMerge.tombstones,
         ...branchesMerge.tombstones,
+        ...loansMerge.tombstones,
       };
 
       return {
@@ -982,6 +1036,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         expenses: expensesMerge.items,
         partners: partnersMerge.items,
         branches: branchesMerge.items,
+        loans: loansMerge.items,
         invoiceCounters: {
           sale: Math.max(
             Number(local?.invoiceCounters?.sale) || 0,
@@ -1014,12 +1069,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const nextExpenses = safeArray<Expense>(payload.expenses);
     const nextPartners = safeArray<Partner>(payload.partners);
     const nextBranches = safeArray<Branch>(payload.branches);
+    const nextLoans = safeArray<Loan>(payload.loans);
 
     setAllPurchases((prev) => (sameRecords(prev, nextPurchases) ? prev : nextPurchases));
     setAllSales((prev) => (sameRecords(prev, nextSales) ? prev : nextSales));
     setAllExpenses((prev) => (sameRecords(prev, nextExpenses) ? prev : nextExpenses));
     setPartners((prev) => (sameRecords(prev, nextPartners) ? prev : nextPartners));
     setBranches((prev) => (sameRecords(prev, nextBranches) ? prev : nextBranches));
+    setAllLoans((prev) => (sameRecords(prev, nextLoans) ? prev : nextLoans));
     if (payload.invoiceCounters && typeof payload.invoiceCounters === 'object') {
       setInvoiceCounters((prev) => ({
         sale: Math.max(prev.sale, Number(payload.invoiceCounters.sale) || 0),
@@ -1169,10 +1226,11 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         allPurchases.map((p) => `${p.id}:${p.updatedAt || ''}:${p.archived ? 1 : 0}:${p.branchId || ''}`),
         allSales.map((s) => `${s.id}:${s.updatedAt || ''}:${s.archived ? 1 : 0}:${s.branchId || ''}`),
         allExpenses.map((e) => `${e.id}:${e.updatedAt || ''}:${e.archived ? 1 : 0}:${e.branchId || ''}`),
+        allLoans.map((l) => `${l.id}:${l.updatedAt || ''}:${l.archived ? 1 : 0}:${(l.payments || []).length}`),
         partners.map((p) => `${p.id}:${p.updatedAt || ''}:${p.archived ? 1 : 0}`),
         Object.keys(tombstones).length,
       ]),
-    [allPurchases, allSales, allExpenses, partners, branches, tombstones]
+    [allPurchases, allSales, allExpenses, partners, branches, allLoans, tombstones]
   );
 
   useEffect(() => {
@@ -1305,6 +1363,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       expenses: allExpenses,
       partners,
       branches,
+      loans: allLoans,
       invoiceCounters,
       rates,
       tombstones,
@@ -1356,6 +1415,20 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         (s.notes || '').replace(/[\n,]/g, ' '),
       ])
     );
+    allLoans.forEach((l) =>
+      rows.push([
+        l.direction === 'lent' ? 'سلفة لنا' : 'سلفة علينا',
+        new Date(l.date).toLocaleDateString('en-GB'),
+        branchName(branches, l.branchId),
+        '',
+        '',
+        '',
+        String(l.amount || 0),
+        String(loanPending(l)),
+        l.person || '',
+        (l.notes || '').replace(/[\n,]/g, ' '),
+      ])
+    );
     allExpenses.forEach((e) =>
       rows.push([
         'مصروف',
@@ -1397,6 +1470,11 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (Array.isArray(data.branches)) {
         setBranches(data.branches.filter((b: Branch) => b && b.id && b.name));
       }
+      if (Array.isArray(data.loans)) {
+        setAllLoans(
+          safeArray<Loan>(data.loans).filter((l) => l && l.id && l.person && typeof l.amount === 'number')
+        );
+      }
       if (data.invoiceCounters && typeof data.invoiceCounters === 'object') {
         setInvoiceCounters({
           sale: Math.max(0, Number(data.invoiceCounters.sale) || 0),
@@ -1419,6 +1497,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setAllExpenses([]);
     setPartners([]);
     setBranches([]);
+    setAllLoans([]);
     setActiveBranchIdState(ALL_BRANCHES);
     setInvoiceCounters({ sale: 0, purchase: 0 });
     setTombstones({});
@@ -1488,7 +1567,68 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return count;
   };
 
-  /** ترقيم الفواتير القديمة (التي أُنشئت قبل إضافة نظام الأرقام) */
+  /* ------------------------- السلف النقدية ------------------------- */
+
+  const addLoan = (l: Omit<Loan, 'id' | 'payments' | 'updatedAt'>) => {
+    const newLoan: Loan = {
+      ...l,
+      branchId:
+        l.branchId ||
+        (activeBranchId === ALL_BRANCHES || activeBranchId === UNASSIGNED_BRANCH ? undefined : activeBranchId),
+      id: makeId('lon'),
+      payments: [],
+      updatedAt: new Date().toISOString(),
+    };
+    setAllLoans((prev) => [newLoan, ...prev]);
+  };
+
+  const updateLoan = (l: Loan) => {
+    setAllLoans((prev) =>
+      prev.map((item) => (item.id === l.id ? { ...l, updatedAt: new Date().toISOString() } : item))
+    );
+  };
+
+  const archiveLoan = (id: string) =>
+    setAllLoans((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, archived: true, updatedAt: new Date().toISOString() } : item
+      )
+    );
+
+  const restoreLoan = (id: string) =>
+    setAllLoans((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, archived: false, updatedAt: new Date().toISOString() } : item
+      )
+    );
+
+  const deleteLoan = (id: string) => {
+    setAllLoans((prev) => prev.filter((item) => item.id !== id));
+    markDeleted([id]);
+  };
+
+  /**
+   * تسجيل دفعة سداد.
+   * عند اكتمال المبلغ: تُؤرشف السلفة تلقائياً (تبقى في الأرشيف قابلة للاستعادة)
+   * ولا يتأثر الربح إطلاقاً لأن السلفة ليست مصروفاً ولا إيراداً.
+   */
+  const addPaymentToLoan = (loanId: string, payment: Omit<Payment, 'id'>) => {
+    setAllLoans((prev) =>
+      prev.map((loanItem) => {
+        if (loanItem.id !== loanId) return loanItem;
+        const remaining = loanPending(loanItem);
+        const applied = Math.min(remaining, Math.max(0, payment.amount || 0));
+        const newPay: Payment = { ...payment, amount: applied, id: makeId('rcv') };
+        const updated: Loan = {
+          ...loanItem,
+          payments: [...(loanItem.payments || []), newPay],
+          updatedAt: new Date().toISOString(),
+        };
+        return isLoanSettled(updated) ? { ...updated, archived: true } : updated;
+      })
+    );
+  };
+
   const numberLegacyInvoices = (): number => {
     const saleRes = assignMissingInvoiceNumbersByBranch(allSales, 'sale', {
       branches,
@@ -1514,6 +1654,15 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     allPurchases,
     allSales,
     allExpenses,
+    loans,
+    allLoans,
+    loanSummary,
+    addLoan,
+    updateLoan,
+    archiveLoan,
+    restoreLoan,
+    deleteLoan,
+    addPaymentToLoan,
     partners,
     branches,
     activeBranchList,

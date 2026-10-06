@@ -15,6 +15,7 @@ import { SettingsScreen } from '../components/screens/SettingsScreen';
 import { ReportsScreen } from '../components/screens/ReportsScreen';
 import { AnalyticsScreen } from '../components/screens/AnalyticsScreen';
 import { RemindersScreen } from '../components/screens/RemindersScreen';
+import { LoansScreen } from '../components/screens/LoansScreen';
 import { LockScreen } from '../components/common/LockScreen';
 import { PwaInstallPrompt } from '../components/common/PwaInstallPrompt';
 
@@ -52,6 +53,7 @@ function MainAppContent() {
         {activeTab === 'reports' && <ReportsScreen />}
         {activeTab === 'analytics' && <AnalyticsScreen />}
         {activeTab === 'reminders' && <RemindersScreen />}
+        {activeTab === 'loans' && <LoansScreen />}
         {activeTab === 'archive' && <ArchiveScreen />}
         {activeTab === 'settings' && <SettingsScreen onOpenInstallModal={() => setShowInstallModal(true)} />}
       </main>
