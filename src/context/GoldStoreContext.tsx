@@ -1258,6 +1258,11 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, []);
 
+  /** الخادم غير مهيّأ (نقص AUTH_SECRET) — رسالة واضحة للمستخدم */
+  const handleServerNotConfigured = useCallback(() => {
+    setSyncError('المزامنة متوقفة: الخادم يحتاج إعداد مفتاح AUTH_SECRET في Vercel ثم إعادة النشر');
+  }, []);
+
   /** انتهت جلسة الدخول على السيرفر (كوكي منتهي أو مُسح) */
   const handleSessionExpired = useCallback(() => {
     setIsCloudSignedIn(false);
@@ -1270,6 +1275,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setIsSyncing(true);
       try {
         const response = await fetch('/api/sync', { cache: 'no-store' });
+        if (response.status === 503) {
+          handleServerNotConfigured();
+          return false;
+        }
         if (response.status === 401) {
           handleSessionExpired();
           return false;
@@ -1286,6 +1295,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(merged),
         });
+        if (put.status === 503) {
+          handleServerNotConfigured();
+          return false;
+        }
         if (put.status === 401) {
           handleSessionExpired();
           return false;
@@ -1311,7 +1324,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setIsSyncing(false);
       }
     },
-    [isCloudSignedIn, mergePayloads, syncPayload, syncBranchesTable, handleSessionExpired]
+    [isCloudSignedIn, mergePayloads, syncPayload, syncBranchesTable, handleSessionExpired, handleServerNotConfigured]
   );
 
   /**
@@ -1329,6 +1342,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       pullInFlight.current = true;
       try {
         const response = await fetch('/api/sync', { cache: 'no-store' });
+        if (response.status === 503) {
+          handleServerNotConfigured();
+          return { ok: false, changed: false };
+        }
         if (response.status === 401) {
           handleSessionExpired();
           return { ok: false, changed: false };
@@ -1354,7 +1371,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isCloudSignedIn, isOnline, mergePayloads, syncPayload, handleSessionExpired]
+    [isCloudSignedIn, isOnline, mergePayloads, syncPayload, handleSessionExpired, handleServerNotConfigured]
   );
 
   /**
@@ -1494,6 +1511,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const res = await fetch('/api/auth/me', { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
+        if (data && data.configured === false) {
+          handleServerNotConfigured();
+          return;
+        }
         if (data && data.authenticated === false) handleSessionExpired();
       } catch {
         /* تجاهل — سنكتشفها عند أول مزامنة */

@@ -1,8 +1,26 @@
 import { NextResponse } from 'next/server';
-import { currentUserId } from '../../../lib/auth';
+import { currentUserId, isAuthConfigured } from '../../../lib/auth';
 import { ensureSchema, getDb } from '../../../lib/db';
 
+/** رد موحّد عندما ينقص مفتاح الجلسة على الخادم */
+function notConfigured() {
+  return NextResponse.json(
+    {
+      ok: false,
+      code: 'server-not-configured',
+      message: 'الخادم غير مهيّأ للمزامنة: مفتاح AUTH_SECRET ناقص في إعدادات Vercel',
+    },
+    { status: 503 }
+  );
+}
+
+function guard() {
+  return isAuthConfigured() ? null : notConfigured();
+}
+
 export async function GET() {
+  const blocked = guard();
+  if (blocked) return blocked;
   const userId = await currentUserId();
   if (!userId) return NextResponse.json({ message: 'غير مسجل الدخول' }, { status: 401 });
   await ensureSchema();
@@ -13,6 +31,8 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const blocked = guard();
+  if (blocked) return blocked;
   const userId = await currentUserId();
   if (!userId) return NextResponse.json({ message: 'غير مسجل الدخول' }, { status: 401 });
   const payload = await request.json();

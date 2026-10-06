@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ensureSchema, getDb } from '../../../../lib/db';
-import { setSession, verifyPassword } from '../../../../lib/auth';
+import { AuthConfigError, isAuthConfigured, setSession, verifyPassword } from '../../../../lib/auth';
 import { checkRateLimit, clientIp, registerFailure, registerSuccess } from '../../../../lib/rateLimit';
 
 export async function POST(request: Request) {
@@ -49,6 +49,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, email: data.email });
   } catch (error: any) {
     console.error('Login error:', error?.message || error);
+    if (error instanceof AuthConfigError || !isAuthConfigured()) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'server-not-configured',
+          message: 'الخادم غير مهيّأ للمزامنة: مفتاح AUTH_SECRET ناقص في إعدادات Vercel',
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, message: 'تعذر تسجيل الدخول. تحقق من إعدادات الخادم.' },
       { status: 500 }

@@ -184,6 +184,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     setIsSyncing(true);
     setSyncToast('جاري المزامنة مع سحابة المتجر...');
     const ok = await syncWithCloud();
+    // syncError يُحدَّث من المتجر عند فشل الإعداد/الجلسة — نتركه ظاهراً
     setIsSyncing(false);
     setSyncToast(
       ok

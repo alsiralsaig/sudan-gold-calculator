@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { ensureSchema, getDb } from '../../../../lib/db';
-import { hashPassword, setSession } from '../../../../lib/auth';
+import { AuthConfigError, hashPassword, isAuthConfigured, setSession } from '../../../../lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -17,6 +17,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, email: normalized });
   } catch (e: any) {
     console.error('Supabase signup error:', e);
+    if (e instanceof AuthConfigError || !isAuthConfigured()) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'server-not-configured',
+          message: 'الخادم غير مهيّأ للمزامنة: مفتاح AUTH_SECRET ناقص في إعدادات Vercel',
+        },
+        { status: 503 }
+      );
+    }
     const duplicate = String(e?.message || '').toLowerCase().includes('duplicate') || String(e?.code || '') === '23505';
     const diagnostic = duplicate ? 'البريد مستخدم بالفعل' : `تعذر إنشاء الحساب: ${e?.message || 'خطأ في الاتصال بقاعدة البيانات'}`;
     return NextResponse.json({ success: false, message: diagnostic }, { status: duplicate ? 409 : 500 });
