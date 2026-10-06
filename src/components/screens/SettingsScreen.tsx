@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { BranchesSection } from '../settings/BranchesSection';
+import { NotificationsSection } from '../settings/NotificationsSection';
 import { fmtNum } from '../../core/format';
 
 interface SettingsScreenProps {
@@ -579,6 +580,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
         </div>
       </div>
 
+      {/* 3.b SECTION: الإشعارات */}
+      <NotificationsSection />
+
       {/* 3.c SECTION: الفروع */}
       <BranchesSection />
 
@@ -664,7 +668,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
             </div>
             <div>
               <h4 className="font-extrabold text-sm text-white">حاسبة الذهب والشركاء (Sudan Gold Pro)</h4>
-              <p className="text-xs text-slate-400">النسخة v6.4.0 — معتمد لتجارة الذهب بالسودان (أساس عيار 21) + الفروع وطباعة الفواتير والسلف النقدية</p>
+              <p className="text-xs text-slate-400">النسخة v6.5.0 — معتمد لتجارة الذهب بالسودان (أساس عيار 21) + الفروع وطباعة الفواتير والسلف النقدية والإشعارات</p>
             </div>
           </div>
         </div>

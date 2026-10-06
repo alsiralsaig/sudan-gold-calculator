@@ -21,11 +21,30 @@ import {
   computeFinancials,
   computeInventory,
   partnerShares,
+  purchasePending,
   salePending,
 } from '../core/accounting';
 import { K21_FINENESS } from '../core/purity';
 import { DueSummary, computeDues, mergeDueSummaries } from '../core/reminders';
 import { LoanSummary, computeLoanDues, isLoanSettled, loanPending, summarizeLoans } from '../core/loans';
+import {
+  AppNotification,
+  DEFAULT_NOTIFICATION_PREFS,
+  NotificationPrefs,
+  dueNotifications,
+  expenseNotification,
+  loanNotification,
+  loanSettledNotification,
+  markAllRead,
+  markRead,
+  paymentNotification,
+  priceNotification,
+  purchaseNotification,
+  pushNotification,
+  saleNotification,
+  unreadCount,
+} from '../core/notifications';
+import { showSystemNotification } from '../core/systemNotify';
 import {
   ALL_BRANCHES,
   UNASSIGNED_BRANCH,
@@ -86,6 +105,21 @@ interface GoldStoreContextType {
   unassignedOperations: number;
   /** إسناد العمليات القديمة إلى فرع محدد (يعيد العدد) */
   assignUnbranchedTo: (branchId: string) => number;
+
+  /* ------------------------- الإشعارات ------------------------- */
+  /** كل الإشعارات (الأحدث أولاً) */
+  notifications: AppNotification[];
+  /** عدد غير المقروء */
+  unreadNotifications: number;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+  clearNotifications: () => void;
+  deleteNotification: (id: string) => void;
+  /** إنشاء إشعار (ودفعه لنظام التشغيل إن كان مفعّلاً) */
+  notify: (notification: AppNotification, options?: { system?: boolean }) => void;
+  notificationPrefs: NotificationPrefs;
+  setNotificationPrefs: (prefs: Partial<NotificationPrefs>) => void;
+  /** مزامنة الإشعارات على السيرفر تتم قراءتها من /api/push/subscribe */
   rates: GoldRates;
   /** كاش الـ PIN (مُجزّأ). وجوده يعني أن القفل مُفعّل */
   pinCode: string;
@@ -193,6 +227,8 @@ const GoldStoreContext = createContext<GoldStoreContextType | undefined>(undefin
 const STORAGE_KEY = 'golden_calculator_db_v6';
 const LEGACY_KEYS = ['golden_calculator_db_v5', 'golden_calculator_db_v4'];
 const LOCKOUT_KEY = 'gold_pin_lockout';
+const NOTIFICATIONS_KEY = 'gold_notifications_v1';
+const NOTIFICATION_PREFS_KEY = 'gold_notification_prefs_v1';
 const PENDING_SYNC_KEY = 'gold_pending_sync';
 
 const GRAMS_PER_OUNCE = 31.1034768;
@@ -291,6 +327,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [pendingSync, setPendingSync] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [allLoans, setAllLoans] = useState<Loan[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notificationPrefs, setNotificationPrefsState] =
+    useState<NotificationPrefs>(DEFAULT_NOTIFICATION_PREFS);
   const [activeBranchId, setActiveBranchIdState] = useState<string>(ALL_BRANCHES);
   const [invoiceCounters, setInvoiceCounters] = useState<InvoiceCounters>({ sale: 0, purchase: 0 });
   const [syncError, setSyncError] = useState('');
@@ -387,6 +426,19 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (savedLockout) setLockout(JSON.parse(savedLockout));
 
       if (localStorage.getItem(PENDING_SYNC_KEY) === '1') setPendingSync(true);
+
+      const savedNotifications = localStorage.getItem(NOTIFICATIONS_KEY);
+      if (savedNotifications) {
+        const parsed = JSON.parse(savedNotifications);
+        if (Array.isArray(parsed)) setNotifications(parsed.slice(0, 120));
+      }
+      const savedPrefs = localStorage.getItem(NOTIFICATION_PREFS_KEY);
+      if (savedPrefs) {
+        const parsed = JSON.parse(savedPrefs);
+        if (parsed && typeof parsed === 'object') {
+          setNotificationPrefsState({ ...DEFAULT_NOTIFICATION_PREFS, ...parsed });
+        }
+      }
     } catch (e) {
       console.warn('Failed to load storage:', e);
     } finally {
@@ -455,6 +507,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       );
       if (pendingSync) localStorage.setItem(PENDING_SYNC_KEY, '1');
       else localStorage.removeItem(PENDING_SYNC_KEY);
+
+      localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifications.slice(0, 120)));
+      localStorage.setItem(NOTIFICATION_PREFS_KEY, JSON.stringify(notificationPrefs));
       LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
     } catch (e) {
       console.warn('Failed to save storage:', e);
@@ -478,6 +533,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     isCloudSignedIn,
     ratesHistory,
     pendingSync,
+    notifications,
+    notificationPrefs,
   ]);
 
   /* ------------------------- تطبيق القفل التلقائي ------------------------- */
@@ -720,6 +777,15 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     );
 
   const addPaymentToPurchase = (purchaseId: string, payment: Omit<Payment, 'id'>) => {
+    const targetPurchase = allPurchases.find((x) => x.id === purchaseId);
+    if (targetPurchase && notificationPrefs.paymentsEnabled) {
+      const appliedNow = Math.min(purchasePending(targetPurchase), Math.max(0, payment.amount || 0));
+      if (appliedNow > 0) {
+        notify(
+          paymentNotification('purchase', targetPurchase.seller || 'مورد عام', appliedNow, payment.date)
+        );
+      }
+    }
     setAllPurchases((prev) =>
       prev.map((pch) => {
         if (pch.id !== purchaseId) return pch;
@@ -779,6 +845,15 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     );
 
   const addPaymentToSale = (saleId: string, payment: Omit<Payment, 'id'>) => {
+    const targetSale = allSales.find((x) => x.id === saleId);
+    if (targetSale && notificationPrefs.paymentsEnabled) {
+      const appliedNow = Math.min(salePending(targetSale), Math.max(0, payment.amount || 0));
+      if (appliedNow > 0) {
+        notify(
+          paymentNotification('sale', targetSale.buyer || 'زبون عام', appliedNow, payment.date)
+        );
+      }
+    }
     setAllSales((prev) =>
       prev.map((sale) => {
         if (sale.id !== saleId) return sale;
@@ -1613,6 +1688,17 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
    * ولا يتأثر الربح إطلاقاً لأن السلفة ليست مصروفاً ولا إيراداً.
    */
   const addPaymentToLoan = (loanId: string, payment: Omit<Payment, 'id'>) => {
+    const targetLoan = allLoans.find((x) => x.id === loanId);
+    if (targetLoan && notificationPrefs.paymentsEnabled) {
+      const remainingBefore = loanPending(targetLoan);
+      const appliedNow = Math.min(remainingBefore, Math.max(0, payment.amount || 0));
+      if (appliedNow > 0) {
+        notify(paymentNotification('loan', targetLoan.person, appliedNow, payment.date));
+        if (appliedNow >= remainingBefore - 0.5) {
+          notify(loanSettledNotification(targetLoan, payment.date));
+        }
+      }
+    }
     setAllLoans((prev) =>
       prev.map((loanItem) => {
         if (loanItem.id !== loanId) return loanItem;
@@ -1647,6 +1733,134 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return saleRes.assigned + purchaseRes.assigned;
   };
 
+  /* ------------------------- الإشعارات ------------------------- */
+
+  const unreadNotifications = useMemo(() => unreadCount(notifications), [notifications]);
+
+  const notify = useCallback(
+    (notification: AppNotification, options: { system?: boolean } = {}) => {
+      if (!notification) return;
+      setNotifications((prev) => pushNotification(prev, notification, notificationPrefs.keepMax));
+      const wantSystem = options.system !== false && notificationPrefs.enabled;
+      if (wantSystem) {
+        void showSystemNotification(notification.title, notification.body, {
+          tab: notification.tab,
+          tag: notification.kind,
+        });
+      }
+    },
+    [notificationPrefs.enabled, notificationPrefs.keepMax]
+  );
+
+  const markNotificationRead = useCallback((id: string) => {
+    setNotifications((prev) => markRead(prev, id));
+  }, []);
+
+  const markAllNotificationsRead = useCallback(() => {
+    setNotifications((prev) => markAllRead(prev));
+  }, []);
+
+  const clearNotifications = useCallback(() => setNotifications([]), []);
+
+  const deleteNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  const setNotificationPrefs = useCallback((prefs: Partial<NotificationPrefs>) => {
+    setNotificationPrefsState((prev) => ({ ...DEFAULT_NOTIFICATION_PREFS, ...prev, ...prefs }));
+  }, []);
+
+  /* ---------------- الكشف التلقائي عن الأحداث الجديدة ---------------- */
+
+  const seenIdsRef = useRef<{ sales: Set<string>; purchases: Set<string>; expenses: Set<string>; loans: Set<string> }>(
+    { sales: new Set(), purchases: new Set(), expenses: new Set(), loans: new Set() }
+  );
+  const lastPriceRef = useRef<number>(0);
+  const notificationsBootRef = useRef(false);
+
+  /** كشف العمليات الجديدة (محلياً أو من جهاز آخر بعد المزامنة) */
+  useEffect(() => {
+    if (!hydrated.current) return;
+
+    const seen = seenIdsRef.current;
+    const first = !notificationsBootRef.current;
+    const fresh: AppNotification[] = [];
+    const minAmount = notificationPrefs.minAmount || 0;
+    const passes = (amount: number) => !minAmount || (amount || 0) >= minAmount;
+
+    if (notificationPrefs.operationsEnabled) {
+      allSales.forEach((sale) => {
+        if (seen.sales.has(sale.id)) return;
+        if (!first && passes(sale.sellAmount || 0)) {
+          const n = saleNotification(sale, sale.updatedAt || sale.date);
+          if (n) fresh.push(n);
+        }
+      });
+      allPurchases.forEach((p) => {
+        if (seen.purchases.has(p.id)) return;
+        if (!first && passes(p.amount || 0)) {
+          const n = purchaseNotification(p, p.updatedAt || p.date);
+          if (n) fresh.push(n);
+        }
+      });
+      allExpenses.forEach((e) => {
+        if (seen.expenses.has(e.id)) return;
+        if (!first && passes(e.amount || 0)) fresh.push(expenseNotification(e, e.updatedAt || e.date));
+      });
+    }
+
+    if (notificationPrefs.loansEnabled) {
+      allLoans.forEach((loan) => {
+        if (seen.loans.has(loan.id)) return;
+        if (!first) fresh.push(loanNotification(loan, loan.updatedAt || loan.date));
+      });
+    }
+
+    seen.sales = new Set(allSales.map((x) => x.id));
+    seen.purchases = new Set(allPurchases.map((x) => x.id));
+    seen.expenses = new Set(allExpenses.map((x) => x.id));
+    seen.loans = new Set(allLoans.map((x) => x.id));
+
+    if (first) {
+      notificationsBootRef.current = true;
+      return;
+    }
+    fresh.forEach((n) => notify(n));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allSales, allPurchases, allExpenses, allLoans]);
+
+  /** تغيّر سعر عيار 21 — أهم إشعار */
+  useEffect(() => {
+    if (!hydrated.current) return;
+    const current = rates.karat21 || 0;
+    if (!current) return;
+
+    const previous = lastPriceRef.current;
+    lastPriceRef.current = current;
+    if (!previous) return;
+    if (!notificationPrefs.priceEnabled) return;
+
+    const n = priceNotification(previous, current, notificationPrefs.priceChangePercent);
+    if (n) notify(n, { system: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rates.karat21]);
+
+  /** المتأخرات والمستحقات — إشعار مرة واحدة لكل مستحق في اليوم */
+  useEffect(() => {
+    if (!hydrated.current) return;
+    if (!notificationPrefs.duesEnabled) return;
+    const list = dueNotifications(dues, new Date());
+    if (list.length === 0) return;
+    setNotifications((prev) => {
+      let next = prev;
+      list.forEach((n) => {
+        next = pushNotification(next, n, notificationPrefs.keepMax);
+      });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dues.overdue.length, dues.dueToday.length, notificationPrefs.duesEnabled]);
+
   const value: GoldStoreContextType = {
     purchases,
     sales,
@@ -1680,6 +1894,15 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     syncBranchesTable,
     unassignedOperations,
     assignUnbranchedTo,
+    notifications,
+    unreadNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+    clearNotifications,
+    deleteNotification,
+    notify,
+    notificationPrefs,
+    setNotificationPrefs,
     rates,
     pinCode,
     isLocked,

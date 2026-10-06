@@ -7,7 +7,7 @@
  *  - ملفات ثابتة (_next/static، صور): cache-first مع تحديث بالخلفية.
  */
 
-const VERSION = 'sgc-v6.2';
+const VERSION = 'sgc-v6.5';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const API_CACHE = `${VERSION}-api`;
@@ -111,4 +111,74 @@ self.addEventListener('fetch', (event) => {
 /** رسالة من التطبيق لمسح الكاش عند الحاجة */
 self.addEventListener('message', (event) => {
   if (event.data === 'skip-waiting') self.skipWaiting();
+});
+
+/* =========================================================
+   الإشعارات (Web Push + إشعارات النظام)
+   - push: استقبال إشعار من السيرفر (يعمل حتى لو التطبيق مقفول)
+   - notificationclick: فتح التطبيق على الشاشة المعنية
+   - message: إشعار محلي يطلبه التطبيق أثناء التشغيل
+   ========================================================= */
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (_) {
+    data = { title: 'حاسبة الذهب', body: event.data ? event.data.text() : 'لديك تحديث جديد' };
+  }
+
+  const title = data.title || 'حاسبة الذهب';
+  const options = {
+    body: data.body || '',
+    icon: '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
+    dir: 'rtl',
+    lang: 'ar',
+    tag: data.tag || undefined,
+    renotify: Boolean(data.tag),
+    vibrate: [80, 40, 80],
+    data: { tab: data.tab || 'dashboard', url: data.url || '/' },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.tab) || 'dashboard';
+  const url = `/?tab=${encodeURIComponent(target)}`;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          try {
+            client.postMessage({ type: 'notification-click', tab: target });
+          } catch (_) {
+            /* تجاهل */
+          }
+          return client.focus().then((c) => (c && 'navigate' in c ? c.navigate(url).catch(() => c) : c));
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});
+
+// إشعار محلي من التطبيق نفسه (بدون سيرفر) — يُستخدم للتنبيه الفوري
+self.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type !== 'show-notification') return;
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'حاسبة الذهب', {
+      body: data.body || '',
+      icon: '/pwa-192x192.png',
+      badge: '/pwa-192x192.png',
+      dir: 'rtl',
+      lang: 'ar',
+      tag: data.tag || 'sgc-local',
+      data: { tab: data.tab || 'dashboard' },
+    })
+  );
 });

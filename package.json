@@ -1,6 +1,6 @@
 {
   "name": "gold-calculator-nextjs",
-  "version": "6.4.0",
+  "version": "6.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001 -H 0.0.0.0",
@@ -18,12 +18,14 @@
     "next": "^15.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^2.6.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
+    "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",

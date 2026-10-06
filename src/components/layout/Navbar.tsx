@@ -28,6 +28,7 @@ import {
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum } from '../../core/format';
 import { ALL_BRANCHES, UNASSIGNED_BRANCH } from '../../core/branches';
+import { NotificationsSheet } from '../common/NotificationsSheet';
 
 interface NavbarProps {
   activeTab: string;
@@ -60,9 +61,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     setActiveBranchId,
     storeName,
     unassignedOperations,
+    unreadNotifications,
   } = useGoldStore();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const navMenuItems = [
     {
@@ -331,22 +334,27 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden sm:inline">تثبيت</span>
             </button>
 
-            {/* Alerts (المتأخرات) */}
+            {/* مركز الإشعارات */}
             <button
-              onClick={() => onNavigate('reminders')}
+              onClick={() => setIsNotificationsOpen(true)}
               className={`relative p-2 sm:p-2.5 rounded-2xl border transition-colors ${
-                dues.overdue.length > 0
-                  ? 'bg-rose-500/15 hover:bg-rose-500/25 border-rose-500/50 text-rose-300'
+                unreadNotifications > 0
+                  ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/50 text-amber-300'
                   : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-300'
               }`}
               title={
-                dues.overdue.length > 0
-                  ? `${dues.overdue.length} فاتورة متأخرة`
-                  : 'التنبيهات والمتأخرات'
+                unreadNotifications > 0
+                  ? `${unreadNotifications} إشعار غير مقروء`
+                  : 'الإشعارات'
               }
             >
               <BellRing className="w-4 h-4" />
-              {dues.overdue.length > 0 && (
+              {unreadNotifications > 0 && (
+                <span className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
+                  {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                </span>
+              )}
+              {dues.overdue.length > 0 && unreadNotifications === 0 && (
                 <span className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
                   {dues.overdue.length > 9 ? '9+' : dues.overdue.length}
                 </span>
@@ -517,6 +525,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
       )}
+      {/* لوحة الإشعارات */}
+      <NotificationsSheet
+        open={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        onNavigate={onNavigate}
+      />
     </>
   );
 };

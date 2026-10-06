@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GoldStoreProvider, useGoldStore } from '../context/GoldStoreContext';
 import { Navbar } from '../components/layout/Navbar';
 import { DashboardScreen } from '../components/screens/DashboardScreen';
@@ -19,11 +19,50 @@ import { LoansScreen } from '../components/screens/LoansScreen';
 import { LockScreen } from '../components/common/LockScreen';
 import { PwaInstallPrompt } from '../components/common/PwaInstallPrompt';
 
+const KNOWN_TABS = [
+  'dashboard',
+  'calculator',
+  'partners',
+  'purchases',
+  'sales',
+  'expenses',
+  'gold_price',
+  'reports',
+  'analytics',
+  'reminders',
+  'loans',
+  'archive',
+  'settings',
+];
+
 function MainAppContent() {
   const { isLocked } = useGoldStore();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  /**
+   * فتح الشاشة المطلوبة عند الضغط على إشعار النظام:
+   * Service Worker يفتح الرابط /?tab=loans أو يرسل رسالة notification-click.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const applyTab = (tab?: string | null) => {
+      if (tab && KNOWN_TABS.includes(tab)) setActiveTab(tab);
+    };
+
+    const params = new URLSearchParams(window.location.search);
+    applyTab(params.get('tab'));
+
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data || {};
+      if (data.type === 'notification-click') applyTab(data.tab);
+    };
+
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
+  }, []);
 
   if (isLocked) {
     return <LockScreen />;
