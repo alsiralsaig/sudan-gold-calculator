@@ -5,6 +5,27 @@ export interface Payment {
   note: string;
 }
 
+/**
+ * فرع من فروع النشاط.
+ * الفروع تُحفظ داخل نفس بيانات الحساب وتُزامن مع Supabase،
+ * فيمكن لكل جهاز أن يعمل على فرعه ويرى فروع بقية الأجهزة.
+ */
+export interface Branch {
+  id: string;
+  name: string;
+  /** رمز قصير يظهر في أرقام فواتير الفرع مثل KH1 */
+  code?: string;
+  /** هاتف الفرع/المسؤول عنه */
+  phone?: string;
+  address?: string;
+  /** الاسم المطبوع على الفواتير إن اختلف عن اسم الفرع */
+  receiptName?: string;
+  notes?: string;
+  archived?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Purchase {
   id: string;
   date: string;
@@ -20,6 +41,10 @@ export interface Purchase {
   dueDate?: string;
   notes: string;
   payments: Payment[];
+  /** الفرع الذي تم فيه الشراء */
+  branchId?: string;
+  /** رقم الفاتورة المطبوع */
+  invoiceNo?: string;
   archived?: boolean;
   updatedAt?: string;
 }
@@ -42,6 +67,10 @@ export interface Sale {
   pendingAmount?: number;
   payments?: Payment[];
   dueDate?: string;
+  /** الفرع الذي تم فيه البيع */
+  branchId?: string;
+  /** رقم الفاتورة المطبوع */
+  invoiceNo?: string;
   archived?: boolean;
   updatedAt?: string;
 }
@@ -54,6 +83,8 @@ export interface Expense {
   target: string; // 'عام' or partner name
   name: string;
   notes: string;
+  /** الفرع الذي صُرف فيه المبلغ */
+  branchId?: string;
   archived?: boolean;
   updatedAt?: string;
 }
@@ -128,6 +159,7 @@ export interface BackupFile {
   sales: Sale[];
   expenses: Expense[];
   partners: Partner[];
+  branches?: Branch[];
   rates: GoldRates;
   tombstones?: AppTombstones;
 }

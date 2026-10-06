@@ -21,10 +21,12 @@ import {
   BarChart3,
   BellRing,
   WifiOff,
-  CloudUpload
+  CloudUpload,
+  Building2
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum } from '../../core/format';
+import { ALL_BRANCHES, UNASSIGNED_BRANCH } from '../../core/branches';
 
 interface NavbarProps {
   activeTab: string;
@@ -41,8 +43,23 @@ export const Navbar: React.FC<NavbarProps> = ({
   isMenuOpen,
   setIsMenuOpen,
 }) => {
-  const { pinCode, lockApp, rates, updateRates, userEmail, dues, isOnline, pendingSync, forceSync } =
-    useGoldStore();
+  const {
+    pinCode,
+    lockApp,
+    rates,
+    updateRates,
+    userEmail,
+    dues,
+    isOnline,
+    pendingSync,
+    forceSync,
+    branches,
+    activeBranchList,
+    activeBranchId,
+    setActiveBranchId,
+    storeName,
+    unassignedOperations,
+  } = useGoldStore();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
@@ -221,6 +238,31 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       <header className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 px-3 sm:px-4 py-2.5">
+        {/* شريط الفرع النشط — يظهر عند وجود فروع */}
+        {branches.length > 0 && (
+          <div className="max-w-4xl mx-auto mb-2 flex items-center gap-2 bg-slate-900/80 border border-amber-500/25 rounded-2xl px-2.5 py-1.5">
+            <Building2 className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-[10px] text-slate-400 shrink-0 hidden sm:inline">الفرع النشط</span>
+            <select
+              value={activeBranchId}
+              onChange={(e) => setActiveBranchId(e.target.value)}
+              className="flex-1 min-w-0 bg-slate-950 border border-slate-700 text-amber-300 font-bold text-[11px] rounded-xl px-2 py-1.5 focus:outline-none focus:border-amber-500"
+              title="اختر الفرع — تُسجَّل العمليات الجديدة باسمه، وتُقيَّد القوائم والتقارير به"
+            >
+              <option value={ALL_BRANCHES}>كل الفروع (عرض مجمّع)</option>
+              {activeBranchList.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                  {b.code ? ` — ${b.code}` : ''}
+                </option>
+              ))}
+              {unassignedOperations > 0 ? (
+                <option value={UNASSIGNED_BRANCH}>بدون فرع ({unassignedOperations} عملية قديمة)</option>
+              ) : null}
+            </select>
+            <span className="text-[10px] text-slate-500 shrink-0 hidden xs:inline">{storeName}</span>
+          </div>
+        )}
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
           
           {/* Right Side: Single Clean Menu Button (☰ القائمة) */}

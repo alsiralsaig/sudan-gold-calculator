@@ -18,6 +18,7 @@ import { BarChart, LineChart } from '../charts/Charts';
 import { fmtNum, unitsToGramsDecimal, kCurrency } from '../../core/format';
 import { summarizeRange, startOfDay, startOfMonth, endOfDay } from '../../core/accounting';
 import { shortLabel, arabicDate, arabicDayName, addDays } from '../../core/dates';
+import { StickyActionBar } from '../layout/StickyActionBar';
 
 type RangeKey = 7 | 14 | 30;
 
@@ -34,6 +35,16 @@ export const AnalyticsScreen: React.FC = () => {
   const today = startOfDay(new Date());
 
   /* ---------------------- السلسلة اليومية (أرباح/وزن) ---------------------- */
+  /** ملخص كل المدى المختار — يُستخدم في الشريط الثابت أسفل الشاشة */
+  const rangeSummary = useMemo(() => {
+    const activeSales = sales.filter((s) => !s.archived);
+    const activePurchases = purchases.filter((p) => !p.archived);
+    const activeExpenses = expenses.filter((e) => !e.archived);
+    const from = startOfDay(addDays(today, -(rangeDays - 1)));
+    const to = endOfDay(today);
+    return summarizeRange(activePurchases, activeSales, activeExpenses, from, to);
+  }, [purchases, sales, expenses, rangeDays]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const dailySeries = useMemo(() => {
     const activeSales = sales.filter((s) => !s.archived);
     const activePurchases = purchases.filter((p) => !p.archived);
@@ -411,6 +422,17 @@ export const AnalyticsScreen: React.FC = () => {
           </div>
         )}
       </div>
+      {/* شريط ثابت: ملخص المدى المختار */}
+      <StickyActionBar
+        stats={[
+          { label: 'مبيعات الفترة', value: fmtNum(rangeSummary.salesAmount), tone: 'emerald' },
+          { label: 'أرباح الفترة', value: fmtNum(rangeSummary.profit), tone: rangeSummary.profit >= 0 ? 'emerald' : 'rose' },
+          { label: 'مصروفات', value: fmtNum(rangeSummary.expenses), tone: 'rose' },
+          { label: 'صافي', value: fmtNum(rangeSummary.net), tone: rangeSummary.net >= 0 ? 'amber' : 'rose' },
+        ]}
+        columns={4}
+        hint={`آخر ${rangeDays} يوماً — عيار 21 هو أساس التسعير (${fmtNum(rates.karat21)} ${kCurrency})`}
+      />
     </div>
   );
 };

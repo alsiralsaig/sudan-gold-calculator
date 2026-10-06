@@ -182,3 +182,64 @@ html.light .bg-gradient-to-br.from-amber-500\/20 {
   tr { page-break-inside: avoid; }
   .rounded-3xl, .rounded-2xl { border-radius: 6px !important; }
 }
+
+/* =========================================================
+   طباعة الفواتير (Invoice printing)
+   ========================================================= */
+#print-area { display: none; }
+
+/* ورقة الفاتورة — مستقلة عن الوضع الليلي/الفاتح لأنها تُطبع على ورق أبيض */
+.inv-sheet {
+  direction: rtl;
+  background: #ffffff;
+  color: #0f172a;
+  font-family: 'Cairo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  padding: 18px 20px 14px;
+  border-radius: 10px;
+  line-height: 1.55;
+}
+.inv-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-bottom: 3px solid #b45309; padding-bottom: 10px; }
+.inv-store { font-size: 20px; font-weight: 900; color: #0f172a; }
+.inv-store-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+.inv-kind { text-align: left; }
+.inv-kind-title { display: inline-block; background: #b45309; color: #fff; font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: 999px; }
+.inv-no { font-size: 13px; font-weight: 900; color: #b45309; margin-top: 6px; font-family: ui-monospace, 'Courier New', monospace; }
+.inv-no-sub { font-size: 10px; color: #64748b; }
+.inv-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px; }
+.inv-meta-cell { flex: 1 1 45%; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; }
+.inv-meta-label { font-size: 10px; color: #64748b; }
+.inv-meta-value { font-size: 13px; font-weight: 800; color: #0f172a; }
+.inv-lines { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+.inv-lines th { background: #0f172a; color: #fff; font-size: 11px; font-weight: 700; padding: 7px 8px; text-align: right; }
+.inv-lines td { border-bottom: 1px solid #e2e8f0; font-size: 12px; padding: 7px 8px; text-align: right; color: #1e293b; }
+.inv-lines .num { font-family: ui-monospace, 'Courier New', monospace; font-weight: 700; }
+.inv-totals { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.inv-total-cell { flex: 1 1 30%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; background: #fff; }
+.inv-total-cell.grand { background: #b45309; border-color: #b45309; color: #fff; }
+.inv-total-cell.due { background: #fff1f2; border-color: #fecdd3; }
+.inv-total-label { font-size: 10px; opacity: 0.75; }
+.inv-total-value { font-size: 15px; font-weight: 900; font-family: ui-monospace, 'Courier New', monospace; }
+.inv-notes { margin-top: 10px; font-size: 11px; color: #334155; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 7px 10px; }
+.inv-foot { margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; font-size: 10px; color: #64748b; }
+.inv-sign { margin-top: 14px; display: flex; justify-content: space-between; font-size: 11px; color: #334155; }
+.inv-sign span { border-top: 1px dotted #94a3b8; padding-top: 4px; width: 40%; text-align: center; }
+
+@media print {
+  html, body { background: #ffffff !important; }
+  body * { visibility: hidden !important; }
+  #print-area, #print-area * { visibility: visible !important; }
+  #print-area {
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    z-index: 9999 !important;
+  }
+  .inv-sheet { border-radius: 0 !important; padding: 0 !important; }
+  .no-print, header, nav, button, .print\:hidden { display: none !important; }
+  @page { size: A4; margin: 12mm; }
+}

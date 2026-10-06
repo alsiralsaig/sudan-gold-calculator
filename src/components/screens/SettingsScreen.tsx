@@ -22,6 +22,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
+import { BranchesSection } from '../settings/BranchesSection';
 import { fmtNum } from '../../core/format';
 
 interface SettingsScreenProps {
@@ -578,6 +579,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
         </div>
       </div>
 
+      {/* 3.c SECTION: الفروع */}
+      <BranchesSection />
+
       {/* 4. SECTION: cloud backup only */}
       <div className="space-y-2">
         <div className="flex items-center gap-2 px-1 text-amber-400 font-black text-sm border-r-4 border-amber-500 pr-2">
@@ -660,7 +664,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
             </div>
             <div>
               <h4 className="font-extrabold text-sm text-white">حاسبة الذهب والشركاء (Sudan Gold Pro)</h4>
-              <p className="text-xs text-slate-400">النسخة v6.2.0 — معتمد لتجارة الذهب بالسودان (أساس عيار 21)</p>
+              <p className="text-xs text-slate-400">النسخة v6.3.0 — معتمد لتجارة الذهب بالسودان (أساس عيار 21) + تعدد الفروع وطباعة الفواتير</p>
             </div>
           </div>
         </div>

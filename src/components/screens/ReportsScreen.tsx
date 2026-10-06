@@ -33,6 +33,9 @@ import {
 } from '../../core/format';
 import { purityLabel } from '../../core/purity';
 import { buildReportText, buildReminderText, openWhatsApp } from '../../core/share';
+import { branchShare, branchStats } from '../../core/branches';
+import { StickyActionBar } from '../layout/StickyActionBar';
+import { Building2 } from 'lucide-react';
 import { MessageCircle, AlertTriangle } from 'lucide-react';
 
 type PeriodKey = 'today' | 'yesterday' | 'week' | 'month' | 'all';
@@ -90,6 +93,11 @@ export const ReportsScreen: React.FC = () => {
     exportCsv,
     storeName,
     dues,
+    branches,
+    allPurchases,
+    allSales,
+    allExpenses,
+    activeBranchName,
   } = useGoldStore();
 
   const [period, setPeriod] = useState<PeriodKey>('today');
@@ -426,6 +434,65 @@ export const ReportsScreen: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ربحية الفروع — لكل الفروع بغض النظر عن الفرع النشط */}
+      {branches.filter((b) => !b.archived).length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3 print:bg-white">
+          <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-amber-400" />
+            ربحية الفروع
+            <span className="text-[10px] font-bold text-slate-500">(الفرع النشط: {activeBranchName})</span>
+          </h3>
+          <div className="overflow-x-auto no-scrollbar">
+            <table className="w-full text-xs min-w-[520px]">
+              <thead className="bg-slate-950 text-slate-400">
+                <tr>
+                  <th className="text-right py-2 px-3 font-bold">الفرع</th>
+                  <th className="text-right py-2 px-3 font-bold">مبيعات</th>
+                  <th className="text-right py-2 px-3 font-bold">مشتريات</th>
+                  <th className="text-right py-2 px-3 font-bold">مصروفات</th>
+                  <th className="text-right py-2 px-3 font-bold">ربح البيع</th>
+                  <th className="text-right py-2 px-3 font-bold">ذمم</th>
+                  <th className="text-right py-2 px-3 font-bold">الحصة</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {(() => {
+                  const rows = branchStats(
+                    branches.filter((b) => !b.archived),
+                    allPurchases,
+                    allSales,
+                    allExpenses
+                  );
+                  const shares = branchShare(rows);
+                  return rows.map((row) => (
+                    <tr key={row.branchId || 'none'}>
+                      <td className="py-2 px-3 text-white font-bold whitespace-nowrap">{row.name}</td>
+                      <td className="py-2 px-3 font-mono text-emerald-300">{fmtNum(row.salesAmount)}</td>
+                      <td className="py-2 px-3 font-mono text-amber-300">{fmtNum(row.purchasesAmount)}</td>
+                      <td className="py-2 px-3 font-mono text-rose-300">{fmtNum(row.expensesAmount)}</td>
+                      <td
+                        className={`py-2 px-3 font-mono font-bold ${
+                          row.salesProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'
+                        }`}
+                      >
+                        {fmtNum(row.salesProfit)}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-slate-300">{fmtNum(row.pending)}</td>
+                      <td className="py-2 px-3 font-mono text-amber-300">
+                        {shares.find((x) => x.name === row.name)?.percent ?? 0}%
+                      </td>
+                    </tr>
+                  ));
+                })()}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            الجدول يعرض كل الفروع دائماً — أما بقية أرقام التقرير فتتبع الفرع النشط في الشريط العلوي.
+          </p>
+        </div>
+      )}
 
       {/* أنصبة الشركاء */}
       {partnerSharesList.length > 0 && (
@@ -816,6 +883,18 @@ export const ReportsScreen: React.FC = () => {
         <ChevronLeft className="w-3 h-3" />
         كل القيم بالجنيه السوداني ({kCurrency}) — والأوزان بمعادل عيار 21 عند الإجمال
       </div>
+      {/* شريط ثابت: ملخص الفترة + إجراءات التقرير */}
+      <StickyActionBar
+        stats={[
+          { label: 'مبيعات الفترة', value: fmtNum(summary.salesAmount), tone: 'emerald' },
+          { label: 'ربح الفترة', value: fmtNum(summary.profit), tone: summary.profit >= 0 ? 'emerald' : 'rose' },
+          { label: 'مصروفات', value: fmtNum(summary.expenses), tone: 'rose' },
+          { label: 'صافي', value: fmtNum(summary.net), tone: summary.net >= 0 ? 'amber' : 'rose' },
+        ]}
+        columns={4}
+        hint={range.label}
+        actions={[{ label: 'طباعة / PDF', onClick: () => window.print(), icon: Printer, tone: 'amber' }]}
+      />
     </div>
   );
 };

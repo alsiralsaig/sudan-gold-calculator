@@ -17,6 +17,7 @@ import { DueItem } from '../../core/reminders';
 import { buildReminderText, openWhatsApp } from '../../core/share';
 import { fmtNum, fmtMoney, kCurrency } from '../../core/format';
 import { arabicDate, relativeDays } from '../../core/dates';
+import { StickyActionBar } from '../layout/StickyActionBar';
 
 type Filter = 'all' | 'overdue' | 'today' | 'upcoming' | 'receivable' | 'payable';
 
@@ -118,13 +119,6 @@ export const RemindersScreen: React.FC = () => {
               <p className="text-[11px] text-slate-400">مواعيد التحصيل من الزبائن والسداد للموردين</p>
             </div>
           </div>
-          <button
-            onClick={sendAllReminders}
-            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] rounded-xl flex items-center gap-1.5"
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            إرسال كل التذكيرات
-          </button>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -294,6 +288,21 @@ export const RemindersScreen: React.FC = () => {
           })}
         </div>
       )}
+
+      {/* شريط ثابت: ملخص المتأخرات + إرسال كل التذكيرات */}
+      <StickyActionBar
+        stats={[
+          { label: 'متأخر', value: fmtNum(dues.overdueTotal), tone: 'rose' },
+          { label: 'يستحق اليوم', value: fmtNum(dues.dueToday.reduce((s, i) => s + i.amount, 0)), tone: 'amber' },
+          { label: 'لنا عند الزبائن', value: fmtNum(dues.receivablesTotal), tone: 'emerald' },
+          { label: 'علينا للموردين', value: fmtNum(dues.payablesTotal), tone: 'cyan' },
+        ]}
+        columns={4}
+        hint={search ? 'المبالغ أعلاه لكل الفواتير (لا تتأثر بالبحث)' : undefined}
+        actions={[
+          { label: 'إرسال كل التذكيرات', onClick: sendAllReminders, icon: MessageCircle, tone: 'emerald' },
+        ]}
+      />
 
       {/* ملاحظة إرشادية */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-3.5 text-[11px] text-slate-400 leading-relaxed">

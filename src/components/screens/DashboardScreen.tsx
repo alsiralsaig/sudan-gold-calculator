@@ -22,6 +22,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
+import { StickyActionBar } from '../layout/StickyActionBar';
 import {
   fmtMoney,
   fmtNum,
@@ -104,6 +105,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
   }, [purchases, sales, expenses]);
 
   const weeklyNet = weekly.reduce((s, d) => s + d.value, 0);
+
+  // ملخص اليوم — يُستخدم أيضاً في الشريط الثابت أسفل الشاشة
+  const todaySummary = React.useMemo(() => {
+    const today = startOfDay(new Date());
+    return summarizeRange(purchases, sales, expenses, today, endOfDay(today));
+  }, [purchases, sales, expenses]);
 
   const sendDailyReport = () => {
     const today = startOfDay(new Date());
@@ -644,6 +651,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
           </p>
         </div>
       )}
+      {/* شريط ثابت: آخر حركات اليوم */}
+      <StickyActionBar
+        stats={[
+          { label: 'مبيعات اليوم', value: fmtNum(todaySummary.salesAmount), tone: 'emerald' },
+          { label: 'مشتريات اليوم', value: fmtNum(todaySummary.purchasesAmount), tone: 'amber' },
+          { label: 'مصروفات اليوم', value: fmtNum(todaySummary.expenses), tone: 'rose' },
+          { label: 'ربح اليوم', value: fmtNum(todaySummary.profit), tone: todaySummary.profit >= 0 ? 'emerald' : 'rose' },
+        ]}
+        columns={4}
+        hint="الشريط ثابت أسفل الشاشة — وبيانات الحساب هي التي تتحرك"
+      />
     </div>
   );
 };

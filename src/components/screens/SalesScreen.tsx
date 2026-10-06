@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   DollarSign,
   Plus,
+  Printer,
   Edit2,
   Search,
   Filter,
@@ -27,6 +28,10 @@ import { salePending } from '../../core/accounting';
 import { buildSaleInvoiceText, openWhatsApp, buildReminderText } from '../../core/share';
 import { toDateInputValue, arabicDate, relativeDays } from '../../core/dates';
 import { ShareButtons } from '../common/ShareButtons';
+import { InvoicePrintModal } from '../common/InvoicePrintModal';
+import { PrintableInvoice, buildSaleInvoice } from '../../core/invoice';
+import { branchName } from '../../core/branches';
+import { StickyActionBar } from '../layout/StickyActionBar';
 
 export const SalesScreen: React.FC = () => {
   const {
@@ -38,6 +43,8 @@ export const SalesScreen: React.FC = () => {
     addPaymentToSale,
     rates,
     storeName,
+    branches,
+    activeBranchName,
   } = useGoldStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,6 +53,7 @@ export const SalesScreen: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [printInvoice, setPrintInvoice] = useState<PrintableInvoice | null>(null);
 
   // Form State
   const [grams, setGrams] = useState('');
@@ -258,6 +266,20 @@ export const SalesScreen: React.FC = () => {
     setPayNote('');
   };
 
+  /** تجهيز فاتورة البيع للطباعة */
+  const openPrint = (sale: Sale) => {
+    setPrintInvoice(
+      buildSaleInvoice(sale, {
+        storeName,
+        currency: kCurrency,
+        branch: branches.find((b) => b.id === sale.branchId),
+        purityLabel,
+        weightLabel: (u) => `${unitsToGhJ(u)} (${(u / 100).toFixed(2)} جرام)`,
+        invoiceNo: sale.invoiceNo || 'بدون رقم',
+      })
+    );
+  };
+
   return (
     <div className="space-y-4 pb-24 animate-in fade-in duration-200">
       
@@ -395,52 +417,26 @@ export const SalesScreen: React.FC = () => {
                 })
               )}
             </tbody>
-            {filteredSales.length > 0 && (
-              <tfoot>
-                <tr className="bg-emerald-500/20 border-t-2 border-emerald-500/60 font-black text-xs text-emerald-300">
-                  <td className="py-3.5 px-3 text-right font-black">الإجمالي</td>
-                  <td className="py-3.5 px-3 text-center font-mono text-emerald-400 text-sm whitespace-nowrap">
-                    {unitsToGhJ(totalUnitsSum)}
-                  </td>
-                  <td className="py-3.5 px-3 text-center text-slate-400">—</td>
-                  <td className="py-3.5 px-3 text-center font-mono text-emerald-400 text-sm whitespace-nowrap">
-                    {fmtNum(totalSellSum)}
-                  </td>
-                  <td className="py-3.5 px-3 text-center font-mono text-amber-300 text-sm whitespace-nowrap">
-                    {fmtNum(totalBuySum)}
-                  </td>
-                  <td className="py-3.5 px-3 text-center whitespace-nowrap">
-                    <span
-                      className={`font-mono text-sm font-black ${
-                        totalProfitSum >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    >
-                      {fmtNum(totalProfitSum)}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-3 text-center font-mono text-sm whitespace-nowrap">
-                    <span className={totalPendingSum > 0 ? 'text-amber-300 font-black' : 'text-slate-500'}>
-                      {fmtNum(totalPendingSum)}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-3 text-right text-slate-400">—</td>
-                </tr>
-              </tfoot>
-            )}
           </table>
         </div>
       </div>
 
-      {/* Action Button: + بيع جديد */}
-      <div className="pt-1">
-        <button
-          onClick={handleOpenAdd}
-          className="w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500 hover:from-emerald-400 text-slate-950 font-black py-3 px-4 rounded-2xl shadow-xl shadow-emerald-500/25 flex items-center justify-center gap-2 transition-transform active:scale-95"
-        >
-          <Plus className="w-5 h-5 text-slate-950" />
-          <span className="text-xs font-bold">تسجيل بيع جديد</span>
-        </button>
-      </div>
+      {/* شريط ثابت: إجماليات المبيعات + زر بيع جديد */}
+      <StickyActionBar
+        stats={[
+          { label: 'إجمالي الوزن', value: unitsToGhJ(totalUnitsSum), tone: 'emerald' },
+          { label: 'إجمالي البيع', value: fmtNum(totalSellSum), tone: 'emerald' },
+          { label: 'الربح', value: fmtNum(totalProfitSum), tone: totalProfitSum >= 0 ? 'emerald' : 'rose' },
+          { label: 'متبقي (آجل)', value: fmtNum(totalPendingSum), tone: totalPendingSum > 0 ? 'amber' : 'slate' },
+        ]}
+        columns={4}
+        hint={
+          filterPeriod !== 'all' || searchQuery
+            ? 'الإجماليات للنتائج الظاهرة حالياً فقط'
+            : `تكلفة المبيعات: ${fmtNum(totalBuySum)} ${kCurrency}`
+        }
+        actions={[{ label: 'بيع جديد', onClick: handleOpenAdd, icon: Plus, tone: 'emerald' }]}
+      />
 
       {/* Modal: Add New Sale Invoice */}
       {showAddModal && (
@@ -729,6 +725,13 @@ export const SalesScreen: React.FC = () => {
         </div>
       )}
 
+      {/* نافذة معاينة وطباعة الفاتورة */}
+      <InvoicePrintModal
+        invoice={printInvoice}
+        currency={kCurrency}
+        onClose={() => setPrintInvoice(null)}
+      />
+
       {/* Modal: View Selected Sale Details */}
       {selectedSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4">
@@ -744,6 +747,14 @@ export const SalesScreen: React.FC = () => {
             </div>
 
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">رقم الفاتورة:</span>
+                <span className="font-mono font-black text-amber-400">{selectedSale.invoiceNo || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">الفرع:</span>
+                <span className="text-white">{branchName(branches, selectedSale.branchId)}</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">التاريخ:</span>
                 <span className="font-mono text-white">{formatInvoiceDate(selectedSale.date)}</span>
@@ -816,6 +827,15 @@ export const SalesScreen: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* طباعة الفاتورة */}
+            <button
+              onClick={() => openPrint(selectedSale)}
+              className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2"
+            >
+              <Printer className="w-4 h-4" />
+              طباعة الفاتورة / PDF
+            </button>
 
             {/* مشاركة الفاتورة على واتساب */}
             <ShareButtons

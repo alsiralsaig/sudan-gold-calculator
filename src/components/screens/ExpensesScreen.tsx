@@ -8,6 +8,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
+import { StickyActionBar } from '../layout/StickyActionBar';
 import {
   fmtMoney,
   fmtNum,
@@ -268,34 +269,26 @@ export const ExpensesScreen: React.FC = () => {
                 })
               )}
             </tbody>
-            {filteredExpenses.length > 0 && (
-              <tfoot>
-                <tr className="bg-rose-500/20 border-t-2 border-rose-500/60 font-black text-xs text-rose-300">
-                  <td className="py-3.5 px-3 text-right font-black">الإجمالي</td>
-                  <td className="py-3.5 px-3 text-center font-mono text-rose-400 text-sm whitespace-nowrap">
-                    {fmtNum(totalAmountSum)}
-                  </td>
-                  <td colSpan={2} className="py-3.5 px-3 text-center text-[11px] text-slate-300">
-                    عامة: <b className="text-amber-400 font-mono">{fmtNum(generalSum)}</b> • خاصة: <b className="text-cyan-400 font-mono">{fmtNum(privateSum)}</b>
-                  </td>
-                  <td className="py-3.5 px-3 text-right text-slate-400">—</td>
-                </tr>
-              </tfoot>
-            )}
           </table>
         </div>
       </div>
 
-      {/* Action Button: + تسجيل مصروف */}
-      <div className="pt-1">
-        <button
-          onClick={handleOpenAdd}
-          className="w-full bg-gradient-to-r from-rose-500 via-rose-600 to-rose-500 hover:from-rose-600 text-white font-black py-3 px-4 rounded-2xl shadow-xl shadow-rose-500/25 flex items-center justify-center gap-2 transition-transform active:scale-95"
-        >
-          <Plus className="w-5 h-5 text-white" />
-          <span className="text-xs font-bold">تسجيل مصروف جديد</span>
-        </button>
-      </div>
+      {/* شريط ثابت: إجماليات المصروفات + زر مصروف جديد */}
+      <StickyActionBar
+        stats={[
+          { label: 'الإجمالي', value: fmtNum(totalAmountSum), tone: 'rose' },
+          { label: 'عامة', value: fmtNum(generalSum), tone: 'amber' },
+          { label: 'خاصة', value: fmtNum(privateSum), tone: 'cyan' },
+          { label: 'عدد العمليات', value: String(filteredExpenses.length), tone: 'slate' },
+        ]}
+        columns={4}
+        hint={
+          filterPeriod !== 'all' || filterType !== 'all' || searchQuery
+            ? 'الإجماليات للنتائج الظاهرة حالياً فقط'
+            : 'الإجماليات لكل المصروفات غير المؤرشفة'
+        }
+        actions={[{ label: 'مصروف جديد', onClick: handleOpenAdd, icon: Plus, tone: 'rose' }]}
+      />
 
       {/* Modal: Add New Expense */}
       {showAddModal && (

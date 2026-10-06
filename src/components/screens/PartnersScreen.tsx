@@ -6,6 +6,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
+import { StickyActionBar } from '../layout/StickyActionBar';
 import { fmtMoney, fmtNum, kCurrency } from '../../core/format';
 import { Partner } from '../../types';
 
@@ -173,13 +174,6 @@ export const PartnersScreen: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 font-black text-xs rounded-2xl shadow-lg flex items-center gap-1.5 transition-transform active:scale-95"
-        >
-          <Plus className="w-4 h-4" />
-          <span>إضافة شريك</span>
-        </button>
       </div>
 
       {/* Partners Cards List */}
@@ -368,6 +362,22 @@ export const PartnersScreen: React.FC = () => {
         </div>
       )}
 
+      {/* شريط ثابت: ملخص الشركاء + زر إضافة شريك */}
+      <StickyActionBar
+        stats={[
+          { label: 'رأس المال', value: fmtNum(totalCapital), tone: 'amber' },
+          { label: 'صافي الأرباح', value: fmtNum(netProfit), tone: netProfit >= 0 ? 'emerald' : 'rose' },
+          { label: 'مجموع النسب', value: `${totalProfitPercent}%`, tone: totalProfitPercent === 100 ? 'emerald' : 'amber' },
+          { label: 'الشركاء', value: String(visiblePartners.length), tone: 'slate' },
+        ]}
+        columns={4}
+        hint={
+          totalProfitPercent !== 100 && visiblePartners.length > 0
+            ? `تنبيه: مجموع نسب الشركاء ${totalProfitPercent}% وليس 100%`
+            : undefined
+        }
+        actions={[{ label: 'إضافة شريك', onClick: handleOpenAdd, icon: Plus, tone: 'amber' }]}
+      />
     </div>
   );
 };

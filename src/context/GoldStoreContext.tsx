@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { AppTombstones, Expense, GoldRates, Partner, Payment, Purchase, RatesMeta, Sale } from '../types';
+import { AppTombstones, Branch, Expense, GoldRates, Partner, Payment, Purchase, RatesMeta, Sale } from '../types';
 import { mergeRecordsWithTombstones } from '../core/merge';
 import {
   Financials,
@@ -14,15 +14,55 @@ import {
 } from '../core/accounting';
 import { K21_FINENESS } from '../core/purity';
 import { DueSummary, computeDues } from '../core/reminders';
+import {
+  ALL_BRANCHES,
+  UNASSIGNED_BRANCH,
+  activeBranches,
+  branchCode,
+  branchName,
+  scopeToBranch,
+} from '../core/branches';
+import { assignMissingInvoiceNumbersByBranch, nextInvoiceNo } from '../core/invoice';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
+export type InvoiceCounters = { sale: number; purchase: number };
+
 interface GoldStoreContextType {
+  /** السجلات بعد تقييدها بالفرع النشط (كل الفروع = الكل) */
   purchases: Purchase[];
   sales: Sale[];
   expenses: Expense[];
+  /** كل السجلات بغض النظر عن الفرع النشط (للتقارير المقارنة والنسخ الاحتياطي) */
+  allPurchases: Purchase[];
+  allSales: Sale[];
+  allExpenses: Expense[];
   partners: Partner[];
+  /** فروع النشاط (مزامَنة عبر Supabase) */
+  branches: Branch[];
+  /** الفروع غير المؤرشفة فقط — للاختيار في الواجهة */
+  activeBranchList: Branch[];
+  /** الفرع النشط: معرّف فرع أو ALL_BRANCHES */
+  activeBranchId: string;
+  activeBranch: Branch | null;
+  activeBranchName: string;
+  setActiveBranchId: (id: string) => void;
+  addBranch: (b: Omit<Branch, 'id' | 'createdAt' | 'updatedAt'>) => Branch;
+  updateBranch: (b: Branch) => void;
+  archiveBranch: (id: string) => void;
+  restoreBranch: (id: string) => void;
+  deleteBranch: (id: string) => void;
+  /** عدّادات أرقام الفواتير */
+  invoiceCounters: InvoiceCounters;
+  /** يرقّم كل الفواتير القديمة التي بلا رقم ويعيد عددها */
+  numberLegacyInvoices: () => number;
+  /** مرآة الفروع إلى جدول Supabase المستقل (best-effort) */
+  syncBranchesTable: (branches: Branch[]) => Promise<boolean>;
+  /** عدد العمليات غير المسندة لأي فرع */
+  unassignedOperations: number;
+  /** إسناد العمليات القديمة إلى فرع محدد (يعيد العدد) */
+  assignUnbranchedTo: (branchId: string) => number;
   rates: GoldRates;
   /** كاش الـ PIN (مُجزّأ). وجوده يعني أن القفل مُفعّل */
   pinCode: string;
@@ -203,9 +243,9 @@ function safeArray<T>(value: unknown): T[] {
 }
 
 export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [allPurchases, setAllPurchases] = useState<Purchase[]>([]);
+  const [allSales, setAllSales] = useState<Sale[]>([]);
+  const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [tombstones, setTombstones] = useState<AppTombstones>({});
   const [rates, setRates] = useState<GoldRates>(INITIAL_RATES);
@@ -226,8 +266,28 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lockout, setLockout] = useState<{ attempts: number; until: number }>({ attempts: 0, until: 0 });
   const [ratesHistory, setRatesHistory] = useState<{ t: string; v: number }[]>([]);
   const [pendingSync, setPendingSync] = useState(false);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [activeBranchId, setActiveBranchIdState] = useState<string>(ALL_BRANCHES);
+  const [invoiceCounters, setInvoiceCounters] = useState<InvoiceCounters>({ sale: 0, purchase: 0 });
   const [syncError, setSyncError] = useState('');
   const { isOnline } = useOnlineStatus();
+
+  /* ------------------------- تقييد البيانات بالفرع النشط ------------------------- */
+  const purchases = useMemo(() => scopeToBranch(allPurchases, activeBranchId), [allPurchases, activeBranchId]);
+  const sales = useMemo(() => scopeToBranch(allSales, activeBranchId), [allSales, activeBranchId]);
+  const expenses = useMemo(() => scopeToBranch(allExpenses, activeBranchId), [allExpenses, activeBranchId]);
+
+  const activeBranchList = useMemo(() => activeBranches(branches), [branches]);
+  const activeBranch = useMemo(
+    () =>
+      activeBranchId === ALL_BRANCHES || activeBranchId === UNASSIGNED_BRANCH
+        ? null
+        : branches.find((b) => b.id === activeBranchId) || null,
+    [branches, activeBranchId]
+  );
+  const activeBranchName = useMemo(() => branchName(branches, activeBranchId), [branches, activeBranchId]);
+
+  const setActiveBranchId = useCallback((id: string) => setActiveBranchIdState(id || ALL_BRANCHES), []);
 
   const hydrated = useRef(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -256,9 +316,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           (Array.isArray(data.partners) &&
             data.partners.some((p: Partner) => legacySampleNames.has(p?.name)));
 
-        setPurchases(safeArray<Purchase>(data.purchases));
-        setSales(safeArray<Sale>(data.sales));
-        setExpenses(safeArray<Expense>(data.expenses));
+        setAllPurchases(safeArray<Purchase>(data.purchases));
+        setAllSales(safeArray<Sale>(data.sales));
+        setAllExpenses(safeArray<Expense>(data.expenses));
         setPartners(
           safeArray<Partner>(data.partners).filter((p) => p && !legacySampleNames.has(p.name))
         );
@@ -280,6 +340,16 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           setIsCloudSignedIn(false);
         }
         if (Array.isArray(data.ratesHistory)) setRatesHistory(data.ratesHistory.slice(-200));
+        if (Array.isArray(data.branches)) setBranches(data.branches.filter((b: Branch) => b && b.id && b.name));
+        if (typeof data.activeBranchId === 'string' && data.activeBranchId) {
+          setActiveBranchIdState(data.activeBranchId);
+        }
+        if (data.invoiceCounters && typeof data.invoiceCounters === 'object') {
+          setInvoiceCounters({
+            sale: Math.max(0, Number(data.invoiceCounters.sale) || 0),
+            purchase: Math.max(0, Number(data.invoiceCounters.purchase) || 0),
+          });
+        }
         if (data.themeMode) setThemeModeState(data.themeMode);
         if (data.lastSyncTime) setLastSyncTime(data.lastSyncTime);
         if (!hadSampleAccount && data.isCloudSignedIn !== undefined) {
@@ -297,6 +367,27 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       hydrated.current = true;
     }
   }, []);
+
+  /* ------------------------- ترقيم الفواتير القديمة مرة واحدة ------------------------- */
+
+  useEffect(() => {
+    if (!hydrated.current) return;
+    const missing =
+      allSales.some((x) => !x.invoiceNo) || allPurchases.some((x) => !x.invoiceNo);
+    if (!missing) return;
+    numberLegacyInvoices();
+    // numberLegacyInvoices آمنة للتكرار: تُرقّم الناقص فقط ثم تتوقف
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allSales, allPurchases]);
+
+  /* ------------------------- حماية الفرع النشط من الحذف ------------------------- */
+
+  useEffect(() => {
+    if (activeBranchId === ALL_BRANCHES || activeBranchId === UNASSIGNED_BRANCH) return;
+    if (branches.some((b) => b.id === activeBranchId)) return;
+    // الفرع لم يعد موجوداً (حُذف من جهاز آخر) → نعود لعرض كل الفروع
+    if (hydrated.current) setActiveBranchIdState(ALL_BRANCHES);
+  }, [branches, activeBranchId]);
 
   /* ------------------------- الترقية: تجزئة الـ PIN القديم ------------------------- */
 
@@ -317,9 +408,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         STORAGE_KEY,
         JSON.stringify({
           version: 6,
-          purchases,
-          sales,
-          expenses,
+          purchases: allPurchases,
+          sales: allSales,
+          expenses: allExpenses,
+          branches,
+          activeBranchId,
+          invoiceCounters,
           partners,
           tombstones,
           rates,
@@ -339,9 +433,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       console.warn('Failed to save storage:', e);
     }
   }, [
-    purchases,
-    sales,
-    expenses,
+    allPurchases,
+    allSales,
+    allExpenses,
+    branches,
+    activeBranchId,
+    invoiceCounters,
     partners,
     tombstones,
     rates,
@@ -544,40 +641,52 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const addPurchase = (p: Omit<Purchase, 'id' | 'payments' | 'updatedAt'>) => {
+    const branchId =
+      p.branchId ||
+      (activeBranchId === ALL_BRANCHES || activeBranchId === UNASSIGNED_BRANCH ? undefined : activeBranchId);
+    const code = branchCode(branches, branchId);
+    const invoiceNo =
+      p.invoiceNo ||
+      nextInvoiceNo(allPurchases, 'purchase', { branchCode: code, counter: invoiceCounters.purchase });
     const newP: Purchase = {
       ...p,
+      branchId,
+      invoiceNo,
       id: makeId('pch'),
       payments: [],
       updatedAt: new Date().toISOString(),
     };
-    setPurchases((prev) => [newP, ...prev]);
+    if (!p.invoiceNo) {
+      setInvoiceCounters((prev) => ({ ...prev, purchase: prev.purchase + 1 }));
+    }
+    setAllPurchases((prev) => [newP, ...prev]);
   };
 
   const updatePurchase = (p: Purchase) => {
-    setPurchases((prev) =>
+    setAllPurchases((prev) =>
       prev.map((item) => (item.id === p.id ? { ...p, updatedAt: new Date().toISOString() } : item))
     );
   };
 
   const deletePurchase = (id: string) => {
-    setPurchases((prev) => prev.filter((item) => item.id !== id));
+    setAllPurchases((prev) => prev.filter((item) => item.id !== id));
     markDeleted([id]);
   };
   const archivePurchase = (id: string) =>
-    setPurchases((prev) =>
+    setAllPurchases((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, archived: true, updatedAt: new Date().toISOString() } : item
       )
     );
   const restorePurchase = (id: string) =>
-    setPurchases((prev) =>
+    setAllPurchases((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, archived: false, updatedAt: new Date().toISOString() } : item
       )
     );
 
   const addPaymentToPurchase = (purchaseId: string, payment: Omit<Payment, 'id'>) => {
-    setPurchases((prev) =>
+    setAllPurchases((prev) =>
       prev.map((pch) => {
         if (pch.id !== purchaseId) return pch;
         const newPay: Payment = { ...payment, id: makeId('pay') };
@@ -593,39 +702,50 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const addSale = (s: Omit<Sale, 'id' | 'updatedAt'>) => {
+    const branchId =
+      s.branchId ||
+      (activeBranchId === ALL_BRANCHES || activeBranchId === UNASSIGNED_BRANCH ? undefined : activeBranchId);
+    const code = branchCode(branches, branchId);
+    const invoiceNo =
+      s.invoiceNo || nextInvoiceNo(allSales, 'sale', { branchCode: code, counter: invoiceCounters.sale });
     const newS: Sale = {
       ...s,
+      branchId,
+      invoiceNo,
       id: makeId('sal'),
       updatedAt: new Date().toISOString(),
     };
-    setSales((prev) => [newS, ...prev]);
+    if (!s.invoiceNo) {
+      setInvoiceCounters((prev) => ({ ...prev, sale: prev.sale + 1 }));
+    }
+    setAllSales((prev) => [newS, ...prev]);
   };
 
   const updateSale = (s: Sale) => {
-    setSales((prev) =>
+    setAllSales((prev) =>
       prev.map((item) => (item.id === s.id ? { ...s, updatedAt: new Date().toISOString() } : item))
     );
   };
 
   const deleteSale = (id: string) => {
-    setSales((prev) => prev.filter((item) => item.id !== id));
+    setAllSales((prev) => prev.filter((item) => item.id !== id));
     markDeleted([id]);
   };
   const archiveSale = (id: string) =>
-    setSales((prev) =>
+    setAllSales((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, archived: true, updatedAt: new Date().toISOString() } : item
       )
     );
   const restoreSale = (id: string) =>
-    setSales((prev) =>
+    setAllSales((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, archived: false, updatedAt: new Date().toISOString() } : item
       )
     );
 
   const addPaymentToSale = (saleId: string, payment: Omit<Payment, 'id'>) => {
-    setSales((prev) =>
+    setAllSales((prev) =>
       prev.map((sale) => {
         if (sale.id !== saleId) return sale;
         const remaining = salePending(sale);
@@ -646,29 +766,32 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const newE: Expense = {
       ...e,
       id: makeId('exp'),
+      branchId:
+        e.branchId ||
+        (activeBranchId === ALL_BRANCHES || activeBranchId === UNASSIGNED_BRANCH ? undefined : activeBranchId),
       updatedAt: new Date().toISOString(),
     };
-    setExpenses((prev) => [newE, ...prev]);
+    setAllExpenses((prev) => [newE, ...prev]);
   };
 
   const updateExpense = (e: Expense) => {
-    setExpenses((prev) =>
+    setAllExpenses((prev) =>
       prev.map((item) => (item.id === e.id ? { ...e, updatedAt: new Date().toISOString() } : item))
     );
   };
 
   const deleteExpense = (id: string) => {
-    setExpenses((prev) => prev.filter((item) => item.id !== id));
+    setAllExpenses((prev) => prev.filter((item) => item.id !== id));
     markDeleted([id]);
   };
   const archiveExpense = (id: string) =>
-    setExpenses((prev) =>
+    setAllExpenses((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, archived: true, updatedAt: new Date().toISOString() } : item
       )
     );
   const restoreExpense = (id: string) =>
-    setExpenses((prev) =>
+    setAllExpenses((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, archived: false, updatedAt: new Date().toISOString() } : item
       )
@@ -791,8 +914,20 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   /* ------------------------- المزامنة السحابية ------------------------- */
 
   const syncPayload = useCallback(
-    () => ({ version: 6, storeName, userEmail, purchases, sales, expenses, partners, rates, tombstones }),
-    [storeName, userEmail, purchases, sales, expenses, partners, rates, tombstones]
+    () => ({
+      version: 6,
+      storeName,
+      userEmail,
+      purchases: allPurchases,
+      sales: allSales,
+      expenses: allExpenses,
+      partners,
+      branches,
+      invoiceCounters,
+      rates,
+      tombstones,
+    }),
+    [storeName, userEmail, allPurchases, allSales, allExpenses, partners, branches, invoiceCounters, rates, tombstones]
   );
 
   const mergePayloads = useCallback(
@@ -821,6 +956,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         local?.tombstones,
         cloud?.tombstones
       );
+      const branchesMerge = mergeRecordsWithTombstones<Branch>(
+        local?.branches,
+        cloud?.branches,
+        local?.tombstones,
+        cloud?.tombstones
+      );
 
       const mergedTombstones: AppTombstones = {
         ...(cloud?.tombstones || {}),
@@ -829,6 +970,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         ...salesMerge.tombstones,
         ...expensesMerge.tombstones,
         ...partnersMerge.tombstones,
+        ...branchesMerge.tombstones,
       };
 
       return {
@@ -839,6 +981,17 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         sales: salesMerge.items,
         expenses: expensesMerge.items,
         partners: partnersMerge.items,
+        branches: branchesMerge.items,
+        invoiceCounters: {
+          sale: Math.max(
+            Number(local?.invoiceCounters?.sale) || 0,
+            Number(cloud?.invoiceCounters?.sale) || 0
+          ),
+          purchase: Math.max(
+            Number(local?.invoiceCounters?.purchase) || 0,
+            Number(cloud?.invoiceCounters?.purchase) || 0
+          ),
+        },
         rates: cloud?.rates && !local?.rates?.manualOverride ? { ...local?.rates, ...cloud?.rates, karat21: local?.rates?.karat21 } : local?.rates || cloud?.rates,
         tombstones: mergedTombstones,
       };
@@ -860,11 +1013,19 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const nextSales = safeArray<Sale>(payload.sales);
     const nextExpenses = safeArray<Expense>(payload.expenses);
     const nextPartners = safeArray<Partner>(payload.partners);
+    const nextBranches = safeArray<Branch>(payload.branches);
 
-    setPurchases((prev) => (sameRecords(prev, nextPurchases) ? prev : nextPurchases));
-    setSales((prev) => (sameRecords(prev, nextSales) ? prev : nextSales));
-    setExpenses((prev) => (sameRecords(prev, nextExpenses) ? prev : nextExpenses));
+    setAllPurchases((prev) => (sameRecords(prev, nextPurchases) ? prev : nextPurchases));
+    setAllSales((prev) => (sameRecords(prev, nextSales) ? prev : nextSales));
+    setAllExpenses((prev) => (sameRecords(prev, nextExpenses) ? prev : nextExpenses));
     setPartners((prev) => (sameRecords(prev, nextPartners) ? prev : nextPartners));
+    setBranches((prev) => (sameRecords(prev, nextBranches) ? prev : nextBranches));
+    if (payload.invoiceCounters && typeof payload.invoiceCounters === 'object') {
+      setInvoiceCounters((prev) => ({
+        sale: Math.max(prev.sale, Number(payload.invoiceCounters.sale) || 0),
+        purchase: Math.max(prev.purchase, Number(payload.invoiceCounters.purchase) || 0),
+      }));
+    }
     if (payload.tombstones && typeof payload.tombstones === 'object') {
       setTombstones((prev) => ({ ...prev, ...payload.tombstones }));
     }
@@ -880,6 +1041,52 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       .toString()
       .padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
   };
+
+  /**
+   * مزامنة الفروع مع جدول Supabase المستقل (`branches`).
+   * الحِمل الكامل يُزامَن عبر /api/sync، وهذه مرآة إضافية:
+   * ترفع الفروع للجدول وتدمج ما وُجد هناك (الأحدث يفوز) حتى يرى كل جهاز فروع بقية الأجهزة.
+   * تفشل بهدوء إن لم يكن الجدول منشأً بعد (راجع supabase/branches.sql).
+   */
+  const syncBranchesTable = useCallback(async (localBranches: Branch[]): Promise<boolean> => {
+    try {
+      if (localBranches.length > 0) {
+        await fetch('/api/branches', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ branches: localBranches }),
+        });
+      }
+      const res = await fetch('/api/branches', { cache: 'no-store' });
+      if (!res.ok) return false;
+      const data = await res.json();
+      const remote: Branch[] = Array.isArray(data?.branches) ? data.branches : [];
+      if (remote.length === 0) return Boolean(data?.ok);
+
+      setBranches((prev) => {
+        const byId = new Map<string, Branch>();
+        prev.forEach((b) => byId.set(b.id, b));
+        for (const rb of remote) {
+          const existing = byId.get(rb.id);
+          if (!existing) {
+            byId.set(rb.id, rb);
+            continue;
+          }
+          const tLocal = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+          const tRemote = rb.updatedAt ? new Date(rb.updatedAt).getTime() : 0;
+          if (tRemote > tLocal) byId.set(rb.id, rb);
+        }
+        const next = Array.from(byId.values());
+        const unchanged =
+          next.length === prev.length &&
+          next.every((b, i) => b.id === prev[i]?.id && b.updatedAt === prev[i]?.updatedAt);
+        return unchanged ? prev : next;
+      });
+      return Boolean(data?.ok);
+    } catch {
+      return false;
+    }
+  }, []);
 
   const syncWithCloud = useCallback(
     async (silent = false): Promise<boolean> => {
@@ -898,6 +1105,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
         if (!put.ok) return false;
         setLastSyncTime(syncTimeLabel());
+        // مرآة الفروع إلى جدول Supabase المستقل (أفضل جهد — لا يعطّل المزامنة)
+        void syncBranchesTable(merged.branches || []);
         return true;
       } catch {
         if (!silent) console.warn('sync failed');
@@ -906,7 +1115,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setIsSyncing(false);
       }
     },
-    [isCloudSignedIn, mergePayloads, syncPayload]
+    [isCloudSignedIn, mergePayloads, syncPayload, syncBranchesTable]
   );
 
   /**
@@ -957,13 +1166,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const dataSignature = useMemo(
     () =>
       JSON.stringify([
-        purchases.map((p) => `${p.id}:${p.updatedAt || ''}:${p.archived ? 1 : 0}`),
-        sales.map((s) => `${s.id}:${s.updatedAt || ''}:${s.archived ? 1 : 0}`),
-        expenses.map((e) => `${e.id}:${e.updatedAt || ''}:${e.archived ? 1 : 0}`),
+        allPurchases.map((p) => `${p.id}:${p.updatedAt || ''}:${p.archived ? 1 : 0}:${p.branchId || ''}`),
+        allSales.map((s) => `${s.id}:${s.updatedAt || ''}:${s.archived ? 1 : 0}:${s.branchId || ''}`),
+        allExpenses.map((e) => `${e.id}:${e.updatedAt || ''}:${e.archived ? 1 : 0}:${e.branchId || ''}`),
         partners.map((p) => `${p.id}:${p.updatedAt || ''}:${p.archived ? 1 : 0}`),
         Object.keys(tombstones).length,
       ]),
-    [purchases, sales, expenses, partners, tombstones]
+    [allPurchases, allSales, allExpenses, partners, branches, tombstones]
   );
 
   useEffect(() => {
@@ -1091,10 +1300,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       version: 6,
       storeName,
       userEmail,
-      purchases,
-      sales,
-      expenses,
+      purchases: allPurchases,
+      sales: allSales,
+      expenses: allExpenses,
       partners,
+      branches,
+      invoiceCounters,
       rates,
       tombstones,
       exportedAt: new Date().toISOString(),
@@ -1110,17 +1321,19 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const exportCsv = () => {
     const rows: string[][] = [
-      ['النوع', 'التاريخ', 'الوزن (جرام.حبة.جزء)', 'النقاوة', 'المبلغ', 'المتبقي', 'الطرف', 'ملاحظات'],
+      ['النوع', 'التاريخ', 'الفرع', 'رقم الفاتورة', 'الوزن (جرام.حبة.جزء)', 'النقاوة', 'المبلغ', 'المتبقي', 'الطرف', 'ملاحظات'],
     ];
     const fmtUnits = (units: number) => {
       const g = Math.floor(units / 100);
       const rest = units % 100;
       return `${g}.${Math.floor(rest / 10)}.${Math.round(rest % 10)}`;
     };
-    purchases.forEach((p) =>
+    allPurchases.forEach((p) =>
       rows.push([
         'شراء',
         new Date(p.date).toLocaleDateString('en-GB'),
+        branchName(branches, p.branchId),
+        p.invoiceNo || '',
         fmtUnits(p.units || 0),
         String(p.purity ?? ''),
         String(p.amount || 0),
@@ -1129,10 +1342,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         (p.notes || '').replace(/[\n,]/g, ' '),
       ])
     );
-    sales.forEach((s) =>
+    allSales.forEach((s) =>
       rows.push([
         'بيع',
         new Date(s.date).toLocaleDateString('en-GB'),
+        branchName(branches, s.branchId),
+        s.invoiceNo || '',
         fmtUnits(s.units || 0),
         String(s.purity ?? ''),
         String(s.sellAmount || 0),
@@ -1141,10 +1356,11 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         (s.notes || '').replace(/[\n,]/g, ' '),
       ])
     );
-    expenses.forEach((e) =>
+    allExpenses.forEach((e) =>
       rows.push([
         'مصروف',
         new Date(e.date).toLocaleDateString('en-GB'),
+        branchName(branches, e.branchId),
         '',
         '',
         String(e.amount || 0),
@@ -1174,10 +1390,19 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         Array.isArray(data.partners);
       if (!hasAny) return false;
 
-      setPurchases(safeArray<Purchase>(data.purchases));
-      setSales(safeArray<Sale>(data.sales));
-      setExpenses(safeArray<Expense>(data.expenses));
+      setAllPurchases(safeArray<Purchase>(data.purchases));
+      setAllSales(safeArray<Sale>(data.sales));
+      setAllExpenses(safeArray<Expense>(data.expenses));
       setPartners(safeArray<Partner>(data.partners));
+      if (Array.isArray(data.branches)) {
+        setBranches(data.branches.filter((b: Branch) => b && b.id && b.name));
+      }
+      if (data.invoiceCounters && typeof data.invoiceCounters === 'object') {
+        setInvoiceCounters({
+          sale: Math.max(0, Number(data.invoiceCounters.sale) || 0),
+          purchase: Math.max(0, Number(data.invoiceCounters.purchase) || 0),
+        });
+      }
       if (data.tombstones && typeof data.tombstones === 'object') setTombstones(data.tombstones);
       if (data.rates && typeof data.rates === 'object') setRates((prev) => ({ ...prev, ...data.rates }));
       if (data.userEmail) setUserEmailState(String(data.userEmail));
@@ -1189,20 +1414,123 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const resetAllData = () => {
-    setPurchases([]);
-    setSales([]);
-    setExpenses([]);
+    setAllPurchases([]);
+    setAllSales([]);
+    setAllExpenses([]);
     setPartners([]);
+    setBranches([]);
+    setActiveBranchIdState(ALL_BRANCHES);
+    setInvoiceCounters({ sale: 0, purchase: 0 });
     setTombstones({});
     setRates(INITIAL_RATES);
     localStorage.removeItem(STORAGE_KEY);
+  };
+
+  /* ------------------------- إدارة الفروع ------------------------- */
+
+  const addBranch = (b: Omit<Branch, 'id' | 'createdAt' | 'updatedAt'>): Branch => {
+    const now = new Date().toISOString();
+    const branch: Branch = { ...b, id: makeId('brn'), createdAt: now, updatedAt: now };
+    setBranches((prev) => [...prev, branch]);
+    // أول فرع يُضاف يصبح الفرع النشط تلقائياً
+    setActiveBranchIdState((prev) => (prev === ALL_BRANCHES ? branch.id : prev));
+    return branch;
+  };
+
+  const updateBranch = (b: Branch) => {
+    setBranches((prev) =>
+      prev.map((item) => (item.id === b.id ? { ...b, updatedAt: new Date().toISOString() } : item))
+    );
+  };
+
+  const archiveBranch = (id: string) => {
+    setBranches((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, archived: true, updatedAt: new Date().toISOString() } : item
+      )
+    );
+    setActiveBranchIdState((prev) => (prev === id ? ALL_BRANCHES : prev));
+  };
+
+  const restoreBranch = (id: string) => {
+    setBranches((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, archived: false, updatedAt: new Date().toISOString() } : item
+      )
+    );
+  };
+
+  const deleteBranch = (id: string) => {
+    setBranches((prev) => prev.filter((item) => item.id !== id));
+    setActiveBranchIdState((prev) => (prev === id ? ALL_BRANCHES : prev));
+    markDeleted([id]);
+  };
+
+  /** عدد العمليات غير المسندة لأي فرع (بيانات قديمة) */
+  const unassignedOperations = useMemo(
+    () =>
+      allPurchases.filter((x) => !x.branchId).length +
+      allSales.filter((x) => !x.branchId).length +
+      allExpenses.filter((x) => !x.branchId).length,
+    [allPurchases, allSales, allExpenses]
+  );
+
+  /** إسناد كل العمليات القديمة (بلا فرع) إلى فرع محدد */
+  const assignUnbranchedTo = (branchId: string): number => {
+    if (!branchId || branchId === ALL_BRANCHES || branchId === UNASSIGNED_BRANCH) return 0;
+    const now = new Date().toISOString();
+    const touch = <T extends { branchId?: string; updatedAt?: string }>(items: T[]) =>
+      items.map((item) => (item.branchId ? item : { ...item, branchId, updatedAt: now }));
+    const count = unassignedOperations;
+    setAllPurchases(touch);
+    setAllSales(touch);
+    setAllExpenses(touch);
+    return count;
+  };
+
+  /** ترقيم الفواتير القديمة (التي أُنشئت قبل إضافة نظام الأرقام) */
+  const numberLegacyInvoices = (): number => {
+    const saleRes = assignMissingInvoiceNumbersByBranch(allSales, 'sale', {
+      branches,
+      counter: invoiceCounters.sale,
+    });
+    const purchaseRes = assignMissingInvoiceNumbersByBranch(allPurchases, 'purchase', {
+      branches,
+      counter: invoiceCounters.purchase,
+    });
+    if (saleRes.assigned > 0) setAllSales(saleRes.items);
+    if (purchaseRes.assigned > 0) setAllPurchases(purchaseRes.items);
+    setInvoiceCounters({
+      sale: Math.max(invoiceCounters.sale, saleRes.nextCounter),
+      purchase: Math.max(invoiceCounters.purchase, purchaseRes.nextCounter),
+    });
+    return saleRes.assigned + purchaseRes.assigned;
   };
 
   const value: GoldStoreContextType = {
     purchases,
     sales,
     expenses,
+    allPurchases,
+    allSales,
+    allExpenses,
     partners,
+    branches,
+    activeBranchList,
+    activeBranchId,
+    activeBranch,
+    activeBranchName,
+    setActiveBranchId,
+    addBranch,
+    updateBranch,
+    archiveBranch,
+    restoreBranch,
+    deleteBranch,
+    invoiceCounters,
+    numberLegacyInvoices,
+    syncBranchesTable,
+    unassignedOperations,
+    assignUnbranchedTo,
     rates,
     pinCode,
     isLocked,

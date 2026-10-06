@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   ShoppingBag,
   Plus,
+  Printer,
   Archive,
   Edit2,
   Search,
@@ -25,6 +26,10 @@ import { purityLabel, unitsToK21 } from '../../core/purity';
 import { buildPurchaseInvoiceText, buildReminderText, openWhatsApp } from '../../core/share';
 import { toDateInputValue, arabicDate } from '../../core/dates';
 import { ShareButtons } from '../common/ShareButtons';
+import { StickyActionBar } from '../layout/StickyActionBar';
+import { InvoicePrintModal } from '../common/InvoicePrintModal';
+import { PrintableInvoice, buildPurchaseInvoice } from '../../core/invoice';
+import { branchName } from '../../core/branches';
 
 export const PurchasesScreen: React.FC = () => {
   const {
@@ -36,6 +41,7 @@ export const PurchasesScreen: React.FC = () => {
     addPaymentToPurchase,
     rates,
     storeName,
+    branches,
   } = useGoldStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,6 +50,7 @@ export const PurchasesScreen: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
+  const [printInvoice, setPrintInvoice] = useState<PrintableInvoice | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState<Purchase | null>(null);
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [bulkSeller, setBulkSeller] = useState('');
@@ -226,6 +233,20 @@ export const PurchasesScreen: React.FC = () => {
   const totalAmountSum = filteredPurchases.reduce((sum, p) => sum + (p.amount || 0), 0);
   const totalPendingSum = filteredPurchases.reduce((sum, p) => sum + (p.pendingAmount || 0), 0);
 
+  /** تجهيز فاتورة الشراء للطباعة */
+  const openPrint = (purchase: Purchase) => {
+    setPrintInvoice(
+      buildPurchaseInvoice(purchase, {
+        storeName,
+        currency: kCurrency,
+        branch: branches.find((b) => b.id === purchase.branchId),
+        purityLabel,
+        weightLabel: (u) => `${unitsToGhJ(u)} (${(u / 100).toFixed(2)} جرام)`,
+        invoiceNo: purchase.invoiceNo || 'بدون رقم',
+      })
+    );
+  };
+
   return (
     <div className="space-y-4 pb-24 animate-in fade-in duration-200">
       
@@ -340,38 +361,33 @@ export const PurchasesScreen: React.FC = () => {
                 })
               )}
             </tbody>
-            {filteredPurchases.length > 0 && (
-              <tfoot>
-                <tr className="bg-amber-500/20 border-t-2 border-amber-500/60 font-black text-xs text-amber-300">
-                  <td className="py-3.5 px-3 text-right font-black">الإجمالي</td>
-                  <td className="py-3.5 px-3 text-center font-mono text-amber-400 text-sm whitespace-nowrap">
-                    {unitsToGhJ(totalUnitsSum)}
-                  </td>
-                  <td className="py-3.5 px-3 text-center text-slate-400">—</td>
-                  <td className="py-3.5 px-3 text-center font-mono text-amber-400 text-sm whitespace-nowrap">
-                    {fmtNum(totalAmountSum)}
-                  </td>
-                  <td className="py-3.5 px-3 text-center font-mono text-rose-400 text-sm whitespace-nowrap">
-                    {fmtNum(totalPendingSum)}
-                  </td>
-                  <td className="py-3.5 px-3 text-right text-slate-400">—</td>
-                </tr>
-              </tfoot>
-            )}
           </table>
         </div>
       </div>
 
-      {/* Action Button: + مشترى جديد */}
-      <div className="pt-1">
-        <button
-          onClick={resetPurchaseForm}
-          className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 text-slate-950 font-black py-3 px-4 rounded-2xl shadow-xl shadow-amber-500/25 flex items-center justify-center gap-2 transition-transform active:scale-95"
-        >
-          <Plus className="w-5 h-5 text-slate-950" />
-          <span className="text-xs font-bold">مشترى جديد</span>
-        </button>
-      </div>
+      {/* شريط ثابت: الإجماليات + زر مشترى جديد (البيانات تتحرك وهو يبقى ثابتاً) */}
+      <StickyActionBar
+        stats={[
+          { label: 'إجمالي الوزن', value: unitsToGhJ(totalUnitsSum), tone: 'amber' },
+          { label: 'إجمالي المبلغ', value: fmtNum(totalAmountSum), tone: 'amber' },
+          { label: 'المتبقي (دين)', value: fmtNum(totalPendingSum), tone: 'rose' },
+          { label: 'عدد الفواتير', value: String(filteredPurchases.length), tone: 'slate' },
+        ]}
+        columns={4}
+        hint={
+          filterPeriod !== 'all' || searchQuery
+            ? 'الإجماليات للنتائج الظاهرة حالياً فقط'
+            : 'الإجماليات لكل المشتريات غير المؤرشفة'
+        }
+        actions={[
+          {
+            label: 'مشترى جديد',
+            onClick: resetPurchaseForm,
+            icon: Plus,
+            tone: 'amber',
+          },
+        ]}
+      />
 
       {/* Modal: Add New Purchase Invoice */}
       {showAddModal && (
@@ -627,6 +643,13 @@ export const PurchasesScreen: React.FC = () => {
       </div>}
 
       {/* Modal: View / Pay Selected Purchase */}
+      {/* نافذة معاينة وطباعة الفاتورة */}
+      <InvoicePrintModal
+        invoice={printInvoice}
+        currency={kCurrency}
+        onClose={() => setPrintInvoice(null)}
+      />
+
       {selectedPurchase && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border-2 border-amber-500/60 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl text-white animate-in zoom-in-95">
@@ -641,6 +664,14 @@ export const PurchasesScreen: React.FC = () => {
             </div>
 
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">رقم الفاتورة:</span>
+                <span className="font-mono font-black text-amber-400">{selectedPurchase.invoiceNo || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">الفرع:</span>
+                <span className="text-white">{branchName(branches, selectedPurchase.branchId)}</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">التاريخ:</span>
                 <span className="font-mono text-white">{formatInvoiceDate(selectedPurchase.date)}</span>
@@ -690,6 +721,15 @@ export const PurchasesScreen: React.FC = () => {
                 </span>
               </div>
             </div>
+
+            {/* طباعة فاتورة الشراء */}
+            <button
+              onClick={() => openPrint(selectedPurchase)}
+              className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2"
+            >
+              <Printer className="w-4 h-4" />
+              طباعة الفاتورة / PDF
+            </button>
 
             {/* مشاركة فاتورة الشراء على واتساب */}
             <ShareButtons

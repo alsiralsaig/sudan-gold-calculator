@@ -17,6 +17,7 @@ import {
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum, kCurrency } from '../../core/format';
 import { KARAT_OPTIONS, priceForKarat } from '../../core/purity';
+import { StickyActionBar } from '../layout/StickyActionBar';
 
 const pct = (n: number, base: number) => (base > 0 ? ((n - base) / base) * 100 : 0);
 
@@ -425,6 +426,18 @@ export const GoldPriceScreen: React.FC = () => {
           آخر سعر متوفر مع تنبيه أعلاه.
         </p>
       </div>
+      {/* شريط ثابت: أهم الأسعار + زر التحديث */}
+      <StickyActionBar
+        stats={[
+          { label: 'عيار 21 (الرسمي)', value: fmtNum(rates.karat21), tone: 'amber' },
+          { label: 'عيار 24', value: fmtNum(rates.karat24), tone: 'slate' },
+          { label: 'الدولار', value: fmtNum(rates.usdRate), tone: 'emerald' },
+          { label: 'الأونصة العالمية', value: fmtNum(rates.globalOunceUsd), tone: 'cyan' },
+        ]}
+        columns={4}
+        hint={rates.isStale ? 'الأسعار تحتاج تحديثاً — اضغط تحديث' : 'الأسعار محدّثة'}
+        actions={[{ label: 'تحديث الأسعار', onClick: handleSync, icon: RefreshCw, tone: 'amber', disabled: isSyncing }]}
+      />
     </div>
   );
 };
