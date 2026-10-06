@@ -209,6 +209,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     setTimeout(() => setSyncToast(''), 3000);
   };
 
+  /**
+   * تحديث التطبيق فوراً: يحدّث Service Worker ويمسح الكاش القديم ثم يعيد التحميل.
+   * مفيد عندما يبقى الجوال يعرض نسخة قديمة بعد النشر.
+   */
+  const handleForceUpdate = async () => {
+    setSyncToast('جاري تحديث التطبيق لأحدث نسخة...');
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.update().catch(() => undefined)));
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {
+      /* نتجاهل ونعيد التحميل على أي حال */
+    }
+    setTimeout(() => window.location.reload(), 700);
+  };
+
   const handleSignOut = () => {
     if (confirm('تسجيل الخروج: سيتم إيقاف المزامنة السحابية على هذا الجهاز وستبقى بياناتك المحلية محفوظة. هل تريد المتابعة؟')) {
       signOutCloud();
@@ -718,6 +739,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
             </div>
             <div>
               <h4 className="font-extrabold text-sm text-white">حاسبة الذهب والشركاء (Sudan Gold Pro)</h4>
+              <button
+                onClick={handleForceUpdate}
+                className="mb-3 px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center justify-center gap-2 mx-auto"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>تحديث التطبيق لأحدث نسخة</span>
+              </button>
               <p className="text-xs text-slate-400">النسخة {APP_VERSION_LABEL} — معتمد لتجارة الذهب بالسودان (أساس عيار 21) + الفروع وطباعة الفواتير والسلف النقدية والإشعارات</p>
             </div>
           </div>

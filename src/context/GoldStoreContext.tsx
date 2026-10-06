@@ -1943,6 +1943,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const next = withDismissed(dismissedRef.current, keys);
     dismissedRef.current = next;
     setDismissedNotifications(next);
+    // حفظ فوري — لا ينتظر تأثيرات React حتى لا يرجع الإشعار لو أُغلق التطبيق سريعاً
+    try {
+      localStorage.setItem(DISMISSED_NOTIFICATIONS_KEY, JSON.stringify(next));
+    } catch {
+      /* تجاهل */
+    }
   }, []);
 
   /** حذف كل الإشعارات — ولا تعود مرة أخرى */

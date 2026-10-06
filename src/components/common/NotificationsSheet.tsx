@@ -2,20 +2,21 @@
 import React, { useMemo, useState } from 'react';
 import {
   BellRing,
-  X,
   CheckCheck,
-  Trash2,
-  TrendingUp,
-  ShoppingBag,
+  Clock,
+  Cloud,
   DollarSign,
   HandCoins,
-  Wallet,
-  Clock,
-  Users,
-  Cloud,
-  Settings,
   Info,
+  Settings,
+  ShoppingBag,
+  Trash2,
+  TrendingUp,
+  Users,
+  Wallet,
+  X,
 } from 'lucide-react';
+import { APP_VERSION_LABEL } from '../../core/version';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { AppNotification, NotificationKind, relativeArabic } from '../../core/notifications';
 
@@ -253,6 +254,10 @@ export const NotificationsSheet: React.FC<Props> = ({ open, onClose, onNavigate 
             <Settings className="w-4 h-4" />
             الإعدادات
           </button>
+        </div>
+
+        <div className="text-center text-[10px] text-slate-500 font-mono pt-1">
+          إشعارات التطبيق • {APP_VERSION_LABEL}
         </div>
       </div>
     </div>
