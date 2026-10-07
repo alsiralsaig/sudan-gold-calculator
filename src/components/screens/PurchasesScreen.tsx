@@ -6,7 +6,8 @@ import {
   Archive,
   Edit2,
   Search,
-  Filter
+  Filter,
+  AlertTriangle
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import {
@@ -30,6 +31,7 @@ import { StickyActionBar } from '../layout/StickyActionBar';
 import { InvoicePrintModal } from '../common/InvoicePrintModal';
 import { PrintableInvoice, buildPurchaseInvoice } from '../../core/invoice';
 import { branchName } from '../../core/branches';
+import { operationPriceWarning } from '../../core/pricing';
 
 export const PurchasesScreen: React.FC = () => {
   const {
@@ -40,6 +42,7 @@ export const PurchasesScreen: React.FC = () => {
     deletePurchase,
     addPaymentToPurchase,
     rates,
+    approvedPrice,
     storeName,
     branches,
   } = useGoldStore();
@@ -241,7 +244,7 @@ export const PurchasesScreen: React.FC = () => {
         currency: kCurrency,
         branch: branches.find((b) => b.id === purchase.branchId),
         purityLabel,
-        weightLabel: (u) => `${unitsToGhJ(u)} (${(u / 100).toFixed(2)} جرام)`,
+        weightLabel: (u) => `${unitsToGhJ(u)} ج.ح.ز (${(u / 100).toFixed(2)} جرام)`,
         invoiceNo: purchase.invoiceNo || 'بدون رقم',
       })
     );
@@ -497,6 +500,12 @@ export const PurchasesScreen: React.FC = () => {
                   placeholder="اتركه فارغاً وأدخل الإجمالي يدوياً"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-mono text-sm focus:border-amber-400 focus:outline-none text-right"
                 />
+                {operationPriceWarning(parseFloat(pricePerGram) || 0, approvedPrice?.buy || rates.karat21) && (
+                  <p className="mt-1 text-[10px] text-amber-300 flex items-start gap-1 leading-relaxed">
+                    <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                    {operationPriceWarning(parseFloat(pricePerGram) || 0, approvedPrice?.buy || rates.karat21)} — سعر الشراء المعتمد هو المرجع
+                  </p>
+                )}
               </div>
 
               <div>
@@ -733,7 +742,7 @@ export const PurchasesScreen: React.FC = () => {
 
             {/* مشاركة فاتورة الشراء على واتساب */}
             <ShareButtons
-              text={buildPurchaseInvoiceText(storeName, selectedPurchase, rates.karat21)}
+              text={buildPurchaseInvoiceText(storeName, selectedPurchase, Math.round(approvedPrice?.buy || rates.karat21))}
               phone={selectedPurchase.sellerPhone}
               label="إرسال الفاتورة على واتساب"
             />

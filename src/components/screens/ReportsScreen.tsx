@@ -418,18 +418,18 @@ export const ReportsScreen: React.FC = () => {
               <thead className="bg-slate-950 text-slate-400">
                 <tr>
                   <th className="text-right py-2 px-3 font-bold">العيار</th>
-                  <th className="text-right py-2 px-3 font-bold">الوزن (جرام)</th>
+                  <th className="text-right py-2 px-3 font-bold">الوزن (ج.ح.ز)</th>
                   <th className="text-right py-2 px-3 font-bold">بالإشارة السودانية</th>
-                  <th className="text-right py-2 px-3 font-bold">معادل 21 (جرام)</th>
+                  <th className="text-right py-2 px-3 font-bold">معادل 21 (ج.ح.ز)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {inventory.byKarat.map((k) => (
                   <tr key={k.purity}>
                     <td className="py-2 px-3 text-white font-bold">عيار {purityLabel(k.purity)}</td>
-                    <td className="py-2 px-3 font-mono text-slate-300">{(k.units / 100).toFixed(2)}</td>
+                    <td className="py-2 px-3 font-mono text-slate-300">{unitsToGhJ(k.units)}</td>
                     <td className="py-2 px-3 font-mono text-slate-400">{unitsToGhJ(k.units)}</td>
-                    <td className="py-2 px-3 font-mono text-amber-300">{(k.unitsK21 / 100).toFixed(2)}</td>
+                    <td className="py-2 px-3 font-mono text-amber-300">{unitsToGhJ(k.unitsK21)}</td>
                   </tr>
                 ))}
               </tbody>

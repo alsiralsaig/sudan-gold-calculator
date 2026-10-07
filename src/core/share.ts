@@ -55,7 +55,7 @@ export function buildInvoiceText(input: InvoiceShareInput): string {
   lines.push(isSale ? '*فاتورة بيع ذهب*' : '*فاتورة شراء ذهب*');
   lines.push('—————————————');
   lines.push(`التاريخ: ${arabicDate(input.date)}`);
-  lines.push(`الوزن: ${unitsToGhJ(input.units)} (${(input.units / 100).toFixed(2)} جرام)`);
+  lines.push(`الوزن: ${unitsToGhJ(input.units)} ج.ح.ز (${(input.units / 100).toFixed(2)} جرام)`);
   if (input.purity > 0) {
     lines.push(`العيار: ${purityLabel(input.purity)}${input.purity <= 24 ? 'k' : ' (نقاوة)'}`);
   }
@@ -140,7 +140,7 @@ export function buildReportText(input: ReportShareInput): string {
   lines.push('—————————————');
   lines.push(`عدد عمليات البيع: ${input.salesCount}`);
   lines.push(`إجمالي المبيعات: ${fmtNum(input.salesAmount)} ${currency}`);
-  lines.push(`وزن المبيعات: ${(input.salesUnits / 100).toFixed(2)} جرام`);
+  lines.push(`وزن المبيعات: ${unitsToGhJ(input.salesUnits)} ج.ح.ز`);
   lines.push(`الربح الإجمالي: ${fmtNum(input.profit)} ${currency}`);
   lines.push(`المصروفات: ${fmtNum(input.expenses)} ${currency}`);
   lines.push(`*الصافي: ${fmtNum(input.net)} ${currency}*`);

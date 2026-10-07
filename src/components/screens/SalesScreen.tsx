@@ -5,6 +5,7 @@ import {
   Printer,
   Edit2,
   Search,
+  AlertTriangle,
   Filter,
   HandCoins,
   Wallet
@@ -31,6 +32,7 @@ import { ShareButtons } from '../common/ShareButtons';
 import { InvoicePrintModal } from '../common/InvoicePrintModal';
 import { PrintableInvoice, buildSaleInvoice } from '../../core/invoice';
 import { branchName } from '../../core/branches';
+import { operationPriceWarning } from '../../core/pricing';
 import { StickyActionBar } from '../layout/StickyActionBar';
 
 export const SalesScreen: React.FC = () => {
@@ -42,6 +44,7 @@ export const SalesScreen: React.FC = () => {
     deleteSale,
     addPaymentToSale,
     rates,
+    approvedPrice,
     storeName,
     branches,
     activeBranchName,
@@ -118,8 +121,8 @@ export const SalesScreen: React.FC = () => {
     setGrams('');
     setHabba('');
     setJuz('');
-    setSellPricePerGram(rates.karat21.toString());
-    setBuyCostPricePerGram((rates.karat21 * 0.98).toFixed(0));
+    setSellPricePerGram(String(approvedPrice?.sell || rates.karat21));
+    setBuyCostPricePerGram(String(approvedPrice?.buy || Math.round(rates.karat21 * 0.98)));
     setCustomKarat('21');
     setSellAmount('');
     setBuyAmount('');
@@ -274,7 +277,7 @@ export const SalesScreen: React.FC = () => {
         currency: kCurrency,
         branch: branches.find((b) => b.id === sale.branchId),
         purityLabel,
-        weightLabel: (u) => `${unitsToGhJ(u)} (${(u / 100).toFixed(2)} جرام)`,
+        weightLabel: (u) => `${unitsToGhJ(u)} ج.ح.ز (${(u / 100).toFixed(2)} جرام)`,
         invoiceNo: sale.invoiceNo || 'بدون رقم',
       })
     );
@@ -544,6 +547,12 @@ export const SalesScreen: React.FC = () => {
                   placeholder="956,529"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-mono text-sm focus:border-emerald-400 focus:outline-none text-right"
                 />
+                {operationPriceWarning(parseFloat(sellPricePerGram) || 0, approvedPrice?.sell || rates.karat21) && (
+                  <p className="mt-1 text-[10px] text-amber-300 flex items-start gap-1 leading-relaxed">
+                    <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                    {operationPriceWarning(parseFloat(sellPricePerGram) || 0, approvedPrice?.sell || rates.karat21)} — السعر المعتمد هو المرجع
+                  </p>
+                )}
               </div>
 
               <div>
@@ -839,7 +848,7 @@ export const SalesScreen: React.FC = () => {
 
             {/* مشاركة الفاتورة على واتساب */}
             <ShareButtons
-              text={buildSaleInvoiceText(storeName, selectedSale, rates.karat21)}
+              text={buildSaleInvoiceText(storeName, selectedSale, Math.round(approvedPrice?.sell || rates.karat21))}
               phone={selectedSale.buyerPhone}
               label="إرسال الفاتورة على واتساب"
             />

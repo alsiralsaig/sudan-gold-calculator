@@ -1,6 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { checkApproval } from '../core/pricing';
+import type { Aggregate, ApprovedPrice, GoldComputation, SourceReading } from '../core/pricing';
 import {
   AppTombstones,
   Branch,
@@ -77,6 +79,28 @@ export interface CloudInspection {
     partners: number;
     branches: number;
   };
+}
+
+export interface EngineSnapshot {
+  ok: boolean;
+  fetchedAt: string;
+  inputs: { ounceUsd: number | null; usdBuy: number | null; usdSell: number | null; adjust: number; karat: number };
+  overridesUsed: { usdBuy: boolean; usdSell: boolean; ounce: boolean };
+  parallel: { readings: SourceReading[]; errors: string[] };
+  official: { readings: SourceReading[]; errors: string[] };
+  spot: { readings: SourceReading[]; errors: string[] };
+  aggregates: { parallel: Aggregate; official: Aggregate; spot: Aggregate };
+  computation: GoldComputation | null;
+  publishedLocalGold: number | null;
+  sourcesUsed?: { parallel: string[]; official: string[]; spot: string[] };
+  warnings: string[];
+  errors: string[];
+}
+
+export interface EngineOverrides {
+  usdBuy?: number;
+  usdSell?: number;
+  ounce?: number;
 }
 
 interface GoldStoreContextType {
@@ -230,6 +254,24 @@ interface GoldStoreContextType {
   setLocalPremium: (percent: number) => void;
   setManualRateOverride: (enabled: boolean) => void;
 
+  /* ----------------------- محرك الأسعار (v6.6) ----------------------- */
+  /** آخر لقطة من محرك الأسعار: القراءات + التحقق + الحساب */
+  engine: EngineSnapshot | null;
+  /** جلب كل المصادر عبر محرك التحقق — false يعني فشل الجلب */
+  refreshEngine: (overrides?: EngineOverrides) => Promise<boolean>;
+  engineBusy: boolean;
+  engineError: string;
+  /** السعر المعتمد لجرام عيار 21 (شراء وبيع) — يقود كل العمليات الجديدة */
+  approvedPrice: ApprovedPrice | null;
+  /** اعتماد سعر (يدوي أو تلقائي) */
+  approvePrice: (price: { buy: number; sell: number }, source?: 'manual' | 'auto', note?: string) => void;
+  clearApprovedPrice: () => void;
+  /** تعديل السوق المحلي % (موجب/سالب) */
+  localAdjustPercent: number;
+  setLocalAdjust: (percent: number) => void;
+  /** هل السعر المقترح يحتاج تأكيداً بسبب تغيّر كبير */
+  approvalNeedsConfirmation: boolean;
+
   setPinCode: (pin: string) => Promise<void>;
   unlockApp: (enteredPin: string) => Promise<boolean>;
   /** التحقق من الرمز بدون فتح القفل (لتغيير الرمز في الإعدادات) */
@@ -256,6 +298,8 @@ const DISMISSED_NOTIFICATIONS_KEY = 'gold_dismissed_notifications_v1';
 const SEEN_RECORDS_KEY = 'gold_seen_records_v1';
 const NOTIFICATION_PREFS_KEY = 'gold_notification_prefs_v1';
 const PENDING_SYNC_KEY = 'gold_pending_sync';
+const APPROVED_PRICE_KEY = 'gold_approved_price_v1';
+const LOCAL_ADJUST_KEY = 'gold_local_adjust_v1';
 
 const GRAMS_PER_OUNCE = 31.1034768;
 const DEFAULT_OUNCE_USD = 4150;
@@ -350,6 +394,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   });
   const [lockout, setLockout] = useState<{ attempts: number; until: number }>({ attempts: 0, until: 0 });
   const [ratesHistory, setRatesHistory] = useState<{ t: string; v: number }[]>([]);
+  const [engineSnapshot, setEngineSnapshot] = useState<EngineSnapshot | null>(null);
+  const [engineBusy, setEngineBusy] = useState<boolean>(false);
+  const [engineError, setEngineError] = useState<string>('');
+  const [approvedPrice, setApprovedPrice] = useState<ApprovedPrice | null>(null);
+  const approvedRef = useRef<ApprovedPrice | null>(null);
+  const [localAdjustPercent, setLocalAdjustState] = useState<number>(0);
   const [pendingSync, setPendingSync] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [allLoans, setAllLoans] = useState<Loan[]>([]);
@@ -634,6 +684,23 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       events.forEach((e) => window.removeEventListener(e, handler));
     };
   }, [pinCode, isLocked]);
+
+  /* ---------------- تحميل السعر المعتمد وتعديل السوق المحلي ---------------- */
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(APPROVED_PRICE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as ApprovedPrice;
+        if (parsed && Number(parsed.buy) > 0 && Number(parsed.sell) > 0) {
+          setApprovedPrice(parsed);
+          approvedRef.current = parsed;
+        }
+      }
+      const adj = Number(localStorage.getItem(LOCAL_ADJUST_KEY));
+      if (Number.isFinite(adj) && adj !== 0) setLocalAdjustState(adj);
+    } catch (_) {}
+  }, []);
 
   /* ------------------------- جلب الأسعار تلقائياً ------------------------- */
 
@@ -1037,6 +1104,137 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setManualRateOverride = (enabled: boolean) => {
     setRates((prev) => ({ ...prev, manualOverride: enabled }));
   };
+
+  /* --------------------------- محرك الأسعار --------------------------- */
+
+  const applyApproved = useCallback((price: ApprovedPrice | null) => {
+    approvedRef.current = price;
+    setApprovedPrice(price);
+    try {
+      if (price) localStorage.setItem(APPROVED_PRICE_KEY, JSON.stringify(price));
+      else localStorage.removeItem(APPROVED_PRICE_KEY);
+    } catch (_) {}
+  }, []);
+
+  const approvePrice = useCallback(
+    (price: { buy: number; sell: number }, source: 'manual' | 'auto' = 'manual', note?: string) => {
+      const buy = Math.round(Number(price.buy) || 0);
+      const sell = Math.round(Number(price.sell) || 0);
+      if (buy <= 0 || sell <= 0) return;
+      const next: ApprovedPrice = { buy, sell, at: new Date().toISOString(), source, note };
+      applyApproved(next);
+      // دعم الشاشات القديمة (الفواتير/العروض) — البيع هو سعر المتجر لجرام 21
+      setRates((prev) => ({
+        ...prev,
+        karat21: sell,
+        karat24: Math.round(sell * (24 / 21)),
+        karat22: Math.round(sell * (22 / 21)),
+        karat18: Math.round(sell * (18 / 21)),
+        manualOverride: true,
+        lastUpdated: next.at,
+      }));
+    },
+    [applyApproved]
+  );
+
+  const clearApprovedPrice = useCallback(() => applyApproved(null), [applyApproved]);
+
+  const setLocalAdjust = useCallback((percent: number) => {
+    const clamped = Math.max(-20, Math.min(50, Number(percent) || 0));
+    setLocalAdjustState(clamped);
+    try {
+      localStorage.setItem(LOCAL_ADJUST_KEY, String(clamped));
+    } catch (_) {}
+  }, []);
+
+  const refreshEngine = useCallback(
+    async (overrides?: EngineOverrides): Promise<boolean> => {
+      setEngineBusy(true);
+      setEngineError('');
+      try {
+        const params = new URLSearchParams();
+        params.set('adjust', String(localAdjustPercent || 0));
+        if (overrides?.usdBuy) params.set('usdBuy', String(overrides.usdBuy));
+        if (overrides?.usdSell) params.set('usdSell', String(overrides.usdSell));
+        if (overrides?.ounce) params.set('ounce', String(overrides.ounce));
+        const res = await fetch(`/api/rates/engine?${params.toString()}`, { cache: 'no-store' });
+        if (!res.ok) {
+          setEngineError('تعذر تشغيل محرك الأسعار الآن');
+          return false;
+        }
+        const data = (await res.json()) as EngineSnapshot;
+        setEngineSnapshot(data);
+
+        // الاعتماد التلقائي: فقط إذا مرّت الأسعار من كل طبقات التحقق
+        const comp = data?.computation;
+        const parallelOk = (data?.aggregates?.parallel?.used?.length ?? 0) > 0;
+        if (comp?.ok && parallelOk) {
+          const check = checkApproval(approvedRef.current, { buy: comp.buy, sell: comp.sell });
+          if (!check.needsConfirmation) {
+            const auto: ApprovedPrice = {
+              buy: comp.buy,
+              sell: comp.sell,
+              at: new Date().toISOString(),
+              source: 'auto',
+              note: `محرك الأسعار — ${data.sourcesUsed?.parallel?.join(' + ') || 'مصادر متعددة'}`,
+            };
+            applyApproved(auto);
+            setRates((prev) => ({
+              ...prev,
+              karat21: auto.sell,
+              karat24: Math.round(auto.sell * (24 / 21)),
+              karat22: Math.round(auto.sell * (22 / 21)),
+              karat18: Math.round(auto.sell * (18 / 21)),
+              usdRate: data.inputs.usdSell || prev.usdRate,
+              usdBuyRate: data.inputs.usdBuy || prev.usdBuyRate,
+              globalOunceUsd: data.inputs.ounceUsd || prev.globalOunceUsd,
+              manualOverride: true,
+              lastUpdated: auto.at,
+            }));
+          }
+        }
+        return Boolean(data?.ok);
+      } catch (err) {
+        setEngineError('تعذر الاتصال بمحرك الأسعار');
+        console.warn('Engine fetch failed:', err);
+        return false;
+      } finally {
+        setEngineBusy(false);
+      }
+    },
+    [localAdjustPercent, applyApproved]
+  );
+
+  /* ------------ الجلب التلقائي للمحرك (دوري + عند العودة للتطبيق) ------------ */
+
+  const lastEngineFetchRef = useRef<number>(0);
+
+  useEffect(() => {
+    const runIfDue = (minGapMs: number) => {
+      if (Date.now() - lastEngineFetchRef.current < minGapMs) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      lastEngineFetchRef.current = Date.now();
+      refreshEngine();
+    };
+
+    // أول جلب بعد فتح التطبيق بقليل (لا يعطّل الإقلاع)
+    const boot = setTimeout(() => runIfDue(0), 4000);
+    const interval = setInterval(() => runIfDue(14 * 60 * 1000), 5 * 60 * 1000);
+    const onFocus = () => runIfDue(5 * 60 * 1000);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearTimeout(boot);
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const approvalNeedsConfirmation = useMemo(() => {
+    const comp = engineSnapshot?.computation;
+    if (!comp?.ok) return false;
+    return checkApproval(approvedRef.current, { buy: comp.buy, sell: comp.sell }).needsConfirmation;
+  }, [engineSnapshot]);
 
   /* ------------------------- القفل والـ PIN ------------------------- */
 
@@ -2190,6 +2388,16 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [dues.overdue.length, dues.dueToday.length, notificationPrefs.duesEnabled]);
 
   const value: GoldStoreContextType = {
+    engine: engineSnapshot,
+    refreshEngine,
+    engineBusy,
+    engineError,
+    approvedPrice,
+    approvePrice,
+    clearApprovedPrice,
+    localAdjustPercent,
+    setLocalAdjust,
+    approvalNeedsConfirmation,
     purchases,
     sales,
     expenses,

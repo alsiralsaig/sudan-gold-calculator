@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { BarChart, LineChart } from '../charts/Charts';
-import { fmtNum, unitsToGramsDecimal, kCurrency } from '../../core/format';
+import { fmtNum, unitsToGramsDecimal,
+  unitsToGhJ, kCurrency } from '../../core/format';
 import { summarizeRange, startOfDay, startOfMonth, endOfDay } from '../../core/accounting';
 import { shortLabel, arabicDate, arabicDayName, addDays } from '../../core/dates';
 import { StickyActionBar } from '../layout/StickyActionBar';
@@ -265,7 +266,7 @@ export const AnalyticsScreen: React.FC = () => {
             <Scale className="w-4 h-4 text-amber-400" />
             <h3 className="font-extrabold text-sm text-white">حركة الوزن (جرام)</h3>
           </div>
-          <span className="text-[10px] text-slate-500">صافي الفترة: {unitsToGramsDecimal(totals.netUnits).toFixed(2)} ج</span>
+          <span className="text-[10px] text-slate-500">صافي الفترة: {unitsToGhJ(totals.netUnits)} ج.ح.ز</span>
         </div>
         <BarChart
           data={dailySeries.map((d) => ({
@@ -385,11 +386,11 @@ export const AnalyticsScreen: React.FC = () => {
           </div>
           <div className="bg-slate-950 rounded-xl p-3">
             <span className="text-slate-400 block mb-1">ما بعته ({rangeDays} يوم)</span>
-            <span className="font-mono text-emerald-300">{(totals.soldUnits / 100).toFixed(2)} ج</span>
+            <span className="font-mono text-emerald-300">{unitsToGhJ(totals.soldUnits)} ج.ح.ز</span>
           </div>
           <div className="bg-slate-950 rounded-xl p-3">
             <span className="text-slate-400 block mb-1">رصيد المخزون (معادل 21)</span>
-            <span className="font-mono text-amber-300">{unitsToGramsDecimal(inventory.unitsK21).toFixed(2)} ج</span>
+            <span className="font-mono text-amber-300">{unitsToGhJ(inventory.unitsK21)} ج.ح.ز</span>
           </div>
           <div className="bg-slate-950 rounded-xl p-3">
             <span className="text-slate-400 block mb-1">نسبة الدوران</span>

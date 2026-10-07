@@ -133,7 +133,8 @@ test('loanStatusLabel يوضح الحالة بالعربي', () => {
   assert.match(loanStatusLabel(loan({ payments: [payment(500000)] })), /مسددة/);
   assert.equal(loanStatusLabel(loan()), 'متبقٍ 500,000');
   assert.match(loanStatusLabel(loan({ dueDate: '2026-10-01T00:00:00Z' })), /متأخرة/);
-  assert.equal(loanStatusLabel(loan({ dueDate: '2026-10-06T00:00:00Z' })), 'تستحق اليوم');
+  const todayIso = new Date(Date.now()).toISOString();
+  assert.equal(loanStatusLabel(loan({ dueDate: todayIso })), 'تستحق اليوم');
 });
 
 test('loanText يحتوي المتبقي والإجمالي', () => {

@@ -325,10 +325,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
           <div>
             <span className="text-xs text-slate-400 block font-bold mb-1">معادل عيار 21</span>
             <div className="text-xl font-black text-amber-400 font-mono">
-              {unitsToGramsDecimal(inventory.unitsK21).toFixed(2)} جرام
+              {unitsToGhJ(inventory.unitsK21)} <span className="text-xs font-sans">ج.ح.ز</span>
             </div>
             <div className="text-xs text-slate-300 font-semibold mt-0.5">
-              ({unitsToGhJ(inventory.unitsK21)}) — {unitsToWeight(inventory.unitsK21)}
+              {unitsToGramsDecimal(inventory.unitsK21).toFixed(2)} جرام — {unitsToWeight(inventory.unitsK21)}
             </div>
           </div>
 
