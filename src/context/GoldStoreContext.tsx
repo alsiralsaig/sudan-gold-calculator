@@ -18,6 +18,7 @@ import {
 import { mergeRecordsWithTombstones } from '../core/merge';
 import { DEFAULT_STORE_NAME, normalizeStoreName } from '../core/branding';
 import { SessionSnapshotMeta, totalRecords } from '../core/session';
+import { buildCsv, buildExportTable, exportFileName } from '../core/dataExport';
 import {
   Financials,
   Inventory,
@@ -2106,16 +2107,20 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   /* ------------------------- النسخ الاحتياطي ------------------------- */
 
   const exportData = () => {
+    const byNewest = <T extends { date?: string }>(items: T[]) =>
+      [...items].sort(
+        (a, b) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime()
+      );
     const db = {
       version: 6,
       storeName,
       userEmail,
-      purchases: allPurchases,
-      sales: allSales,
-      expenses: allExpenses,
+      purchases: byNewest(allPurchases),
+      sales: byNewest(allSales),
+      expenses: byNewest(allExpenses),
       partners,
       branches,
-      loans: allLoans,
+      loans: byNewest(allLoans),
       invoiceCounters,
       rates,
       tombstones,
@@ -2131,75 +2136,21 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const exportCsv = () => {
-    const rows: string[][] = [
-      ['النوع', 'التاريخ', 'الفرع', 'رقم الفاتورة', 'الوزن (جرام.حبة.جزء)', 'النقاوة', 'المبلغ', 'المتبقي', 'الطرف', 'ملاحظات'],
-    ];
-    const fmtUnits = (units: number) => {
-      const g = Math.floor(units / 100);
-      const rest = units % 100;
-      return `${g}.${Math.floor(rest / 10)}.${Math.round(rest % 10)}`;
-    };
-    allPurchases.forEach((p) =>
-      rows.push([
-        'شراء',
-        new Date(p.date).toLocaleDateString('en-GB'),
-        branchName(branches, p.branchId),
-        p.invoiceNo || '',
-        fmtUnits(p.units || 0),
-        String(p.purity ?? ''),
-        String(p.amount || 0),
-        String(p.pendingAmount || 0),
-        p.seller || '',
-        (p.notes || '').replace(/[\n,]/g, ' '),
-      ])
-    );
-    allSales.forEach((s) =>
-      rows.push([
-        'بيع',
-        new Date(s.date).toLocaleDateString('en-GB'),
-        branchName(branches, s.branchId),
-        s.invoiceNo || '',
-        fmtUnits(s.units || 0),
-        String(s.purity ?? ''),
-        String(s.sellAmount || 0),
-        String(salePending(s)),
-        s.buyer || '',
-        (s.notes || '').replace(/[\n,]/g, ' '),
-      ])
-    );
-    allLoans.forEach((l) =>
-      rows.push([
-        l.direction === 'lent' ? 'سلفة لنا' : 'سلفة علينا',
-        new Date(l.date).toLocaleDateString('en-GB'),
-        branchName(branches, l.branchId),
-        '',
-        '',
-        '',
-        String(l.amount || 0),
-        String(loanPending(l)),
-        l.person || '',
-        (l.notes || '').replace(/[\n,]/g, ' '),
-      ])
-    );
-    allExpenses.forEach((e) =>
-      rows.push([
-        'مصروف',
-        new Date(e.date).toLocaleDateString('en-GB'),
-        branchName(branches, e.branchId),
-        '',
-        '',
-        String(e.amount || 0),
-        '',
-        e.target || '',
-        (e.name || '').replace(/[\n,]/g, ' '),
-      ])
-    );
-    const csv = '\uFEFF' + rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
+    const rows = buildExportTable({
+      storeName,
+      exportedAt: new Date(),
+      branches,
+      purchases: allPurchases,
+      sales: allSales,
+      expenses: allExpenses,
+      loans: allLoans,
+    });
+    const csv = buildCsv(rows);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Gold_Calculator_Export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = exportFileName(new Date());
     a.click();
     URL.revokeObjectURL(url);
   };
