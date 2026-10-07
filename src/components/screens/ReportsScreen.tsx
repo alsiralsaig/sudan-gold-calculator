@@ -36,6 +36,9 @@ import { buildReportText, buildReminderText, openWhatsApp } from '../../core/sha
 import { branchShare, branchStats } from '../../core/branches';
 import { loanStatusLabel } from '../../core/loans';
 import { StickyActionBar } from '../layout/StickyActionBar';
+import { SmartSearchBar } from '../common/SmartSearchBar';
+import { PasteButton } from '../common/PasteButton';
+import { matchSaleQuery, matchPurchaseQuery, textIn, normalizeArabic } from '../../core/globalSearch';
 import { Building2 } from 'lucide-react';
 import { MessageCircle, AlertTriangle } from 'lucide-react';
 
@@ -106,6 +109,8 @@ export const ReportsScreen: React.FC = () => {
   const [period, setPeriod] = useState<PeriodKey>('today');
   const [partyQuery, setPartyQuery] = useState('');
   const [partyType, setPartyType] = useState<'customer' | 'supplier'>('customer');
+  /** بحث داخل حركات الفترة (لا يمس الإجماليات) */
+  const [movementQuery, setMovementQuery] = useState('');
 
   const range = periodRange(period);
   const summary = useMemo(
@@ -140,6 +145,17 @@ export const ReportsScreen: React.FC = () => {
     [purchases, period]
   );
 
+  /** الصفوف المعروضة فقط — الإجماليات تبقى إجماليات الفترة كاملة */
+  const shownSales = useMemo(
+    () => (movementQuery.trim() ? inPeriodSales.filter((s) => matchSaleQuery(s, movementQuery)) : inPeriodSales),
+    [inPeriodSales, movementQuery]
+  );
+
+  const shownPurchases = useMemo(
+    () => (movementQuery.trim() ? inPeriodPurchases.filter((p) => matchPurchaseQuery(p, movementQuery)) : inPeriodPurchases),
+    [inPeriodPurchases, movementQuery]
+  );
+
   // كشف حساب طرف
   const parties = useMemo(() => {
     const names = new Set<string>();
@@ -151,14 +167,25 @@ export const ReportsScreen: React.FC = () => {
   const filteredParties = useMemo(() => {
     const q = partyQuery.trim();
     if (!q) return parties.slice(0, 40);
-    return parties.filter((n) => n.includes(q)).slice(0, 40);
+    const needle = normalizeArabic(q);
+    return parties.filter((n) => textIn(n, needle)).slice(0, 40);
   }, [parties, partyQuery]);
 
   const statement = useMemo(() => {
     const q = partyQuery.trim();
     if (!q) return null;
+    // مطابقة ذكية: «فاطمه» تجد «فاطمة»، وإن لم يوجد تطابق تام يُجمع كل المتقاربين
+    const needle = normalizeArabic(q);
+    const nameMatch = (name?: string) => {
+      if (!name) return false;
+      const n = normalizeArabic(name);
+      return n === needle || n.includes(needle);
+    };
+    const exactExists = (names: string[]) => names.some((n) => normalizeArabic(n) === needle);
     if (partyType === 'customer') {
-      const rows = sales.filter((s) => !s.archived && s.buyer === q);
+      const buyers = sales.filter((s) => !s.archived && s.buyer).map((s) => s.buyer);
+      const exact = exactExists(buyers);
+      const rows = sales.filter((s) => !s.archived && (exact ? normalizeArabic(s.buyer || '') === needle : nameMatch(s.buyer)));
       return {
         name: q,
         rows: rows.map((r) => ({
@@ -175,7 +202,9 @@ export const ReportsScreen: React.FC = () => {
         remaining: rows.reduce((sum, r) => sum + (r.pendingAmount || 0), 0),
       };
     }
-    const rows = purchases.filter((p) => !p.archived && p.seller === q);
+    const sellers = purchases.filter((p) => !p.archived && p.seller).map((p) => p.seller);
+    const exact = exactExists(sellers);
+    const rows = purchases.filter((p) => !p.archived && (exact ? normalizeArabic(p.seller || '') === needle : nameMatch(p.seller)));
     return {
       name: q,
       rows: rows.map((r) => ({
@@ -276,7 +305,12 @@ export const ReportsScreen: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar print:hidden">
+        <div className="print:hidden">
+        <SmartSearchBar
+          value={movementQuery}
+          onChange={setMovementQuery}
+          placeholder="بحث في حركات الفترة: اسم، مبلغ، وزن (5.3.2)، فاتورة..."
+        >
           {PERIODS.map((p) => (
             <button
               key={p.id}
@@ -290,6 +324,7 @@ export const ReportsScreen: React.FC = () => {
               {p.label}
             </button>
           ))}
+        </SmartSearchBar>
         </div>
       </div>
 
@@ -768,12 +803,15 @@ export const ReportsScreen: React.FC = () => {
           </button>
         </div>
 
-        <input
-          value={partyQuery}
-          onChange={(e) => setPartyQuery(e.target.value)}
-          placeholder={partyType === 'customer' ? 'اكتب اسم الزبون...' : 'اكتب اسم المورد...'}
-          className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-sm text-white focus:outline-none print:hidden"
-        />
+        <div className="flex items-center gap-2 print:hidden">
+          <input
+            value={partyQuery}
+            onChange={(e) => setPartyQuery(e.target.value)}
+            placeholder={partyType === 'customer' ? 'اكتب اسم الزبون... (الهمزات لا تفرق)' : 'اكتب اسم المورد... (الهمزات لا تفرق)'}
+            className="flex-1 min-w-0 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-sm text-white focus:outline-none"
+          />
+          <PasteButton onPaste={setPartyQuery} compact />
+        </div>
 
         {!statement && (
           <div className="flex flex-wrap gap-2 print:hidden">
@@ -850,9 +888,15 @@ export const ReportsScreen: React.FC = () => {
 
       {/* حركات الفترة */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3 print:bg-white">
-        <h3 className="font-extrabold text-sm text-white">مبيعات الفترة ({inPeriodSales.length})</h3>
-        {inPeriodSales.length === 0 ? (
-          <p className="text-xs text-slate-500">لا توجد مبيعات في هذه الفترة</p>
+        <h3 className="font-extrabold text-sm text-white">
+          مبيعات الفترة ({shownSales.length}
+          {movementQuery.trim() ? ` من ${inPeriodSales.length}` : ''})
+        </h3>
+        {movementQuery.trim() && (
+          <p className="text-[11px] text-amber-300/80">البحث يفلتر الصفوف المعروضة — الإجماليات تبقى إجماليات الفترة</p>
+        )}
+        {shownSales.length === 0 ? (
+          <p className="text-xs text-slate-500">{movementQuery.trim() ? 'لا توجد مبيعات مطابقة للبحث في هذه الفترة' : 'لا توجد مبيعات في هذه الفترة'}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[520px]">
@@ -869,7 +913,7 @@ export const ReportsScreen: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {inPeriodSales.map((s) => (
+                {shownSales.map((s) => (
                   <tr key={s.id}>
                     <td className="py-2 px-2 text-slate-300">{formatInvoiceDate(s.date)}</td>
                     <td className="py-2 px-2 text-slate-200">{s.buyer || 'زبون عام'}</td>
@@ -905,9 +949,12 @@ export const ReportsScreen: React.FC = () => {
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3 print:bg-white">
-        <h3 className="font-extrabold text-sm text-white">مشتريات الفترة ({inPeriodPurchases.length})</h3>
-        {inPeriodPurchases.length === 0 ? (
-          <p className="text-xs text-slate-500">لا توجد مشتريات في هذه الفترة</p>
+        <h3 className="font-extrabold text-sm text-white">
+          مشتريات الفترة ({shownPurchases.length}
+          {movementQuery.trim() ? ` من ${inPeriodPurchases.length}` : ''})
+        </h3>
+        {shownPurchases.length === 0 ? (
+          <p className="text-xs text-slate-500">{movementQuery.trim() ? 'لا توجد مشتريات مطابقة للبحث في هذه الفترة' : 'لا توجد مشتريات في هذه الفترة'}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[480px]">
@@ -923,7 +970,7 @@ export const ReportsScreen: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {inPeriodPurchases.map((p) => (
+                {shownPurchases.map((p) => (
                   <tr key={p.id}>
                     <td className="py-2 px-2 text-slate-300">{formatInvoiceDate(p.date)}</td>
                     <td className="py-2 px-2 text-slate-200">{p.seller || 'بائع عام'}</td>

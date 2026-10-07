@@ -6,6 +6,8 @@ import {
   Trash2
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
+import { SmartSearchBar } from '../common/SmartSearchBar';
+import { smartMatch } from '../../core/globalSearch';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { fmtMoney, fmtNum, kCurrency } from '../../core/format';
 import { Partner } from '../../types';
@@ -25,7 +27,16 @@ export const PartnersScreen: React.FC = () => {
     expenses,
   } = useGoldStore();
 
-  const visiblePartners = partners.filter((p) => !p.archived);
+  const [partnerQuery, setPartnerQuery] = useState('');
+  const visiblePartners = partners
+    .filter((p) => !p.archived)
+    .filter((p) =>
+      smartMatch(partnerQuery, {
+        texts: [p.name, p.notes],
+        phones: [p.phone],
+        amounts: [p.capital, p.profitPercent],
+      })
+    );
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
@@ -162,6 +173,13 @@ export const PartnersScreen: React.FC = () => {
 
       </div>
 
+      {/* عدسة البحث بين الشركاء */}
+      <SmartSearchBar
+        value={partnerQuery}
+        onChange={setPartnerQuery}
+        placeholder="ابحث بين الشركاء: اسم، هاتف، رأس المال، نسبة الربح..."
+      />
+
       {/* Header and Add Partner Action */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -178,6 +196,11 @@ export const PartnersScreen: React.FC = () => {
 
       {/* Partners Cards List */}
       <div className="space-y-4">
+        {visiblePartners.length === 0 && (
+          <div className="bg-slate-900 border border-dashed border-slate-700 rounded-3xl py-12 text-center text-slate-500 text-sm">
+            لا يوجد شريك مطابق للبحث
+          </div>
+        )}
         {visiblePartners.map((p) => {
           // Partner share of profit
           const profitShare = (netProfit * p.profitPercent) / 100;
