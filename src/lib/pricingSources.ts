@@ -67,6 +67,78 @@ async function fetchTextRetry(url: string, timeoutMs = 12000, attempts = 2): Pro
   return null;
 }
 
+/** شهور عربية → رقم (0-based) */
+const AR_MONTHS: Record<string, number> = {
+  يناير: 0, فبراير: 1, مارس: 2, أبريل: 3, ابريل: 3, مايو: 4, يونيو: 5,
+  يوليو: 6, أغسطس: 7, اغسطس: 7, سبتمبر: 8, أكتوبر: 9, اكتوبر: 9, نوفمبر: 10, ديسمبر: 11,
+};
+
+/**
+ * يقرأ «منذ 18 دقيقة / منذ 12 ساعة / منذ 3 أيام / منذ أسبوعين» ويعيد وقتاً ISO.
+ * المواقع السودانية تنشر العمر النسبي بدل التاريخ.
+ */
+export function parseRelativeArabicAge(text: string, now: Date = new Date()): string | null {
+  const t = normalizeDigits(text);
+  const m = t.match(/منذ\s+(?:<[^>]*>\s*)?(\d+|نصف|أسبوعين|أسبوع|شهر|سنة)?\s*(دقيقة|دقائق|دقيقتين|ساعة|ساعات|ساعتين|يوم|أيام|يومين|أسبوع|أسابيع|أسبوعين|شهر|أشهر|شهرين)?/);
+  if (!m) return null;
+  const rawNum = m[1];
+  let unit = m[2] || '';
+  let count = 1;
+  if (rawNum === 'نصف') count = 0.5;
+  else if (rawNum && /^\d+$/.test(rawNum)) count = Number(rawNum);
+  else if (rawNum) {
+    // صيغ المثنى بلا رقم: أسبوعين، يومين، ساعتين، دقيقتين، شهرين
+    count = 2;
+    if (rawNum === 'أسبوعين') unit = unit || 'أسبوع';
+    else if (rawNum === 'شهرين') unit = unit || 'شهر';
+    else if (rawNum === 'سنة') {
+      count = 1;
+      unit = unit || 'شهر';
+      count = 12;
+    }
+  }
+  if (!unit && rawNum === 'أسبوع') unit = 'أسبوع';
+  let minutes: number | null = null;
+  if (/دقيق/.test(unit)) minutes = count;
+  else if (/ساع/.test(unit)) minutes = count * 60;
+  else if (/يوم|أيام/.test(unit)) minutes = count * 1440;
+  else if (/أسبوع|أسابيع/.test(unit)) minutes = count * 10080;
+  else if (/شهر|أشهر/.test(unit)) minutes = count * 43200;
+  if (minutes === null) return null;
+  return new Date(now.getTime() - minutes * 60000).toISOString();
+}
+
+/** «6 أكتوبر 2026 - 2:25 مساءً» أو «7-10-2026» */
+export function parseArabicDate(text: string, now: Date = new Date()): string | null {
+  const t = normalizeDigits(text);
+
+  const named = t.match(/(\d{1,2})\s+(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+(\d{4})/);
+  if (named) {
+    const day = Number(named[1]);
+    const month = AR_MONTHS[named[2]];
+    const year = Number(named[3]);
+    const time = t.match(/(\d{1,2}):(\d{2})\s*(ص|م|صباحاً|مساءً|صباحا|مساء)?/);
+    let hour = time ? Number(time[1]) : 12;
+    if (time && /م|مساء/.test(time[3] || '')) hour = hour === 12 ? 12 : hour + 12;
+    const d = new Date(Date.UTC(year, month, day, hour, time ? Number(time[2]) : 0));
+    // تحويل تقريبي لتوقيت السودان (UTC+2)
+    d.setUTCHours(d.getUTCHours() - 2);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  const numeric = t.match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if (numeric) {
+    const d = new Date(Date.UTC(Number(numeric[3]), Number(numeric[2]) - 1, Number(numeric[1]), 12));
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  return null;
+}
+
+/** عمر المقال من نص الصفحة: «منذ 12 ساعة» أو تاريخ صريح */
+export function articleTime(pageText: string, now: Date = new Date()): string {
+  return parseRelativeArabicAge(pageText, now) || parseArabicDate(pageText, now) || now.toISOString();
+}
+
 export interface RssItem {
   title: string;
   link: string;
@@ -288,6 +360,71 @@ async function fetchSudanakhbarReading(): Promise<{ reading: SourceReading | nul
 }
 
 /* ------------------------------------------------------------------ */
+/*                 اليوم نيوز (aluom.net) — السوق الموازي              */
+/* ------------------------------------------------------------------ */
+
+export function parseAluomArticle(text: string): { buy: number | null; sell: number | null } {
+  const t = normalizeDigits(text);
+  let buy: number | null = null;
+  let sell: number | null = null;
+
+  // «متوسط سعر بيع تراوح بين 8400 و8550 جنيهاً سودانياً»
+  const range = t.match(/سعر\s*بيع[^0-9]{0,60}?([\d][\d.,]{2,12})[^0-9]{0,25}?و\s*([\d][\d.,]{2,12})/);
+  if (range) {
+    const a = toNum(range[1]);
+    const b = toNum(range[2]);
+    if (a && b) sell = Math.round(((a + b) / 2) * 100) / 100;
+  }
+  if (!sell) {
+    const single = t.match(/سعر\s*بيع(?:\s*الدولار)?[^0-9]{0,60}?([\d][\d.,]{3,12})/);
+    if (single) sell = toNum(single[1]);
+  }
+
+  // «فيما بلغ متوسط سعر الشراء نحو 8300 جنيه»
+  const buyM = t.match(/سعر\s*الشراء[^0-9]{0,50}?([\d][\d.,]{3,12})/);
+  if (buyM) buy = toNum(buyM[1]);
+
+  if (!sell && !buy) {
+    // احتياط: «سجل الدولار ... 8,550»
+    const alt = t.match(/الدولار\s*الأمريكي[^0-9]{0,80}?([\d][\d.,]{3,12})/);
+    if (alt) sell = toNum(alt[1]);
+  }
+  return { buy, sell };
+}
+
+async function fetchAluomReading(): Promise<{ reading: SourceReading | null; error: string | null }> {
+  const search = await fetchTextRetry('https://aluom.net/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1', 12000);
+  if (!search) return { reading: null, error: 'اليوم نيوز: تعذّر الوصول' };
+
+  const links = Array.from(new Set(Array.from(search.matchAll(/href="(https:\/\/aluom\.net\/\d+)"/g)).map((m) => m[1])));
+  for (const url of links.slice(0, 3)) {
+    const html = await fetchTextRetry(url, 12000, 1);
+    if (!html) continue;
+    const title = (html.match(/<title>([^<]{5,180})<\/title>/i) || [])[1] || '';
+    if (!/دولار/i.test(title)) continue;
+    const pageText = htmlToText(html);
+    const parsed = parseAluomArticle(pageText);
+    if (parsed.sell || parsed.buy) {
+      // وقت المقال من «منذ X» أو التاريخ المنشور
+      const header = pageText.slice(0, 2500);
+      return {
+        reading: {
+          source: 'اليوم نيوز',
+          kind: 'parallel',
+          buy: parsed.buy,
+          sell: parsed.sell,
+          at: articleTime(header),
+          url,
+          label: title.trim(),
+        },
+        error: null,
+      };
+    }
+  }
+  return { reading: null, error: 'اليوم نيوز: لم يُعثر على سعر' };
+}
+
+/* ------------------------------------------------------------------ */
 /*              المشهد السوداني — خبر السوق الموازية اليومي           */
 /* ------------------------------------------------------------------ */
 
@@ -366,11 +503,29 @@ async function fetchAlmashhadReading(): Promise<{ reading: SourceReading | null;
 }
 
 /* ------------------------------------------------------------------ */
-/*                 فلسطينيو48 — جدول شراء/بيع للدولار                 */
+/*        فلسطينيو48 — يخدم المستويين: المركزي (رسمي) والموازي        */
 /* ------------------------------------------------------------------ */
+
+export interface Pls48Result {
+  /** رسمي (بنك السودان) أم موازي */
+  kind: 'bank' | 'parallel';
+  buy: number | null;
+  sell: number | null;
+  title: string;
+  at: string;
+  url: string;
+}
 
 export function parsePls48Article(text: string): { buy: number | null; sell: number | null } {
   const t = normalizeDigits(text);
+  // «سعر الشراء: 4200 جنيه سوداني. سعر البيع: 3700 جنيه»
+  const sellM = t.match(/سعر\s*البيع[^0-9]{0,20}([\d][\d.,]{2,12})/);
+  const buyM = t.match(/سعر\s*الشراء[^0-9]{0,20}([\d][\d.,]{2,12})/);
+  if (sellM || buyM) {
+    return { buy: toNum(buyM?.[1]), sell: toNum(sellM?.[1]) };
+  }
+
+  // جدول: «الدولار الأمريكي ... X ... Y»
   const idx = t.search(/الدولار\s*(الأمريكي)?/);
   if (idx < 0) return { buy: null, sell: null };
   const seg = t.slice(idx, idx + 300);
@@ -382,34 +537,52 @@ export function parsePls48Article(text: string): { buy: number | null; sell: num
   return { buy: Math.min(a, b), sell: Math.max(a, b) };
 }
 
-async function fetchPls48Reading(): Promise<{ reading: SourceReading | null; error: string | null }> {
-  // صفحة التصنيف: آخر مقالات أسعار العملات في السودان
-  const section = await fetchTextRetry('https://pls48.net/category/economy/', 12000);
-  if (!section) return { reading: null, error: 'فلسطينيو48: تعذّر الوصول' };
-  const links = Array.from(new Set(Array.from(section.matchAll(/href="(https:\/\/pls48\.net\/[^"#]+)"/g)).map((m) => m[1])))
-    .filter((u) => /%D8%A7%D9%84%D8%B3%D9%88%D8%AF%D8%A7%D9%86|%D8%A3%D8%B3%D8%B9%D8%A7%D8%B1/.test(u))
-    .slice(0, 3);
-  for (const url of links) {
-    const html = await fetchText(url, 12000);
-    if (!html) continue;
-    const parsed = parsePls48Article(htmlToText(html));
-    if (parsed.sell) {
-      const title = (html.match(/<title>([^<]{5,180})<\/title>/i) || [])[1] || '';
-      return {
-        reading: {
-          source: 'فلسطينيو48',
-          kind: 'parallel',
-          buy: parsed.buy,
-          sell: parsed.sell,
-          at: nowIso(),
-          url,
-          label: title.trim(),
-        },
-        error: null,
-      };
-    }
+/** يقرر المستوى من عنوان المقال */
+export function classifyPls48(title: string): 'bank' | 'parallel' {
+  if (/البنوك|المركزي|بنك السودان/.test(title)) return 'bank';
+  return 'parallel';
+}
+
+async function fetchPls48Reading(): Promise<{ bank: Pls48Result | null; parallel: Pls48Result | null; error: string | null }> {
+  const search = await fetchTextRetry(
+    'https://pls48.net/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1+%D8%A7%D9%84%D8%B3%D9%88%D8%AF%D8%A7%D9%86',
+    12000
+  );
+  if (!search) return { bank: null, parallel: null, error: 'فلسطينيو48: تعذّر الوصول' };
+
+  const links: { url: string; title: string }[] = [];
+  const re = /<a[^>]+href="(https:\/\/pls48\.net\/[^"#]+)"[^>]*>([\s\S]{0,160}?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(search)) && links.length < 10) {
+    const title = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!title || !/دولار|جنيه/.test(title)) continue;
+    if (!links.some((l) => l.url === m![1])) links.push({ url: m[1], title });
   }
-  return { reading: null, error: 'فلسطينيو48: لا يوجد سعر حديث' };
+
+  let bank: Pls48Result | null = null;
+  let parallel: Pls48Result | null = null;
+
+  for (const link of links.slice(0, 4)) {
+    const html = await fetchTextRetry(link.url, 12000, 1);
+    if (!html) continue;
+    const pageText = htmlToText(html);
+    const parsed = parsePls48Article(pageText);
+    if (!parsed.buy && !parsed.sell) continue;
+    const kind = classifyPls48(link.title);
+    const result: Pls48Result = {
+      kind,
+      buy: parsed.buy,
+      sell: parsed.sell,
+      title: link.title.slice(0, 90),
+      at: articleTime(pageText.slice(0, 2500)),
+      url: link.url,
+    };
+    if (kind === 'bank' && !bank) bank = result;
+    if (kind === 'parallel' && !parallel) parallel = result;
+    if (bank && parallel) break;
+  }
+
+  return { bank, parallel, error: bank || parallel ? null : 'فلسطينيو48: لا سعر في المقالات الحديثة' };
 }
 
 /* ------------------------------------------------------------------ */
@@ -506,43 +679,76 @@ export interface PricingSnapshot {
 
 /** جلب كل المصادر بالتوازي — فشل مصدر لا يوقف البقية أبداً */
 export async function fetchPricingSources(): Promise<PricingSnapshot> {
-  const [sudafax, sudanakhbar, almashhad, pls48, official, spot] = await Promise.allSettled([
+  const now = new Date();
+  const [sudafax, sudanakhbar, almashhad, aluom, pls48, official, spot] = await Promise.allSettled([
     fetchSudafaxReading(),
     fetchSudanakhbarReading(),
     fetchAlmashhadReading(),
+    fetchAluomReading(),
     fetchPls48Reading(),
     fetchOfficialUsdReading(),
     fetchSpotReadings(),
   ]);
 
   const parallel: SourceBundle = { readings: [], errors: [] };
+  const officialBundle: SourceBundle = { readings: [], errors: [] };
+  const spotBundle: SourceBundle = { readings: [], errors: [] };
   let publishedLocalGold: number | null = null;
 
-  const collect = (
-    result: PromiseSettledResult<{ reading: SourceReading | null; error: string | null; gold21?: number | null }>,
-    bundle: SourceBundle = parallel
+  const collectParallel = (
+    result: PromiseSettledResult<{ reading: SourceReading | null; error: string | null; gold21?: number | null }>
   ) => {
     if (result.status === 'fulfilled') {
-      if (result.value.reading) bundle.readings.push(result.value.reading);
-      if (result.value.error) bundle.errors.push(result.value.error);
-      if (result.value.gold21) publishedLocalGold = result.value.gold21;
+      if (result.value.reading) parallel.readings.push(result.value.reading);
+      if (result.value.error) parallel.errors.push(result.value.error);
+      if (result.value.gold21) publishedLocalGold = result.value.gold21 as number;
     } else {
       parallel.errors.push('مصدر: فشل غير متوقع');
     }
   };
 
-  collect(sudafax);
-  collect(sudanakhbar);
-  collect(almashhad);
-  collect(pls48);
+  collectParallel(sudafax);
+  collectParallel(sudanakhbar);
+  collectParallel(almashhad);
+  collectParallel(aluom as PromiseSettledResult<{ reading: SourceReading | null; error: string | null }>);
 
-  const officialBundle: SourceBundle = { readings: [], errors: [] };
+  // فلسطينيو48 يخدم المستويين
+  if (pls48.status === 'fulfilled') {
+    const value = pls48.value;
+    if (value.bank && (value.bank.buy || value.bank.sell)) {
+      officialBundle.readings.push({
+        source: 'فلسطينيو48',
+        kind: 'bank',
+        buy: value.bank.buy,
+        sell: value.bank.sell,
+        at: value.bank.at,
+        url: value.bank.url,
+        label: value.bank.title,
+      });
+    }
+    if (value.parallel && (value.parallel.buy || value.parallel.sell)) {
+      parallel.readings.push({
+        source: 'فلسطينيو48',
+        kind: 'parallel',
+        buy: value.parallel.buy,
+        sell: value.parallel.sell,
+        at: value.parallel.at,
+        url: value.parallel.url,
+        label: value.parallel.title,
+      });
+    }
+    if (value.error) {
+      parallel.errors.push(value.error);
+    }
+  } else {
+    parallel.errors.push('فلسطينيو48: فشل غير متوقع');
+  }
+
   if (official.status === 'fulfilled') {
     if (official.value.reading) officialBundle.readings.push(official.value.reading);
     if (official.value.error) officialBundle.errors.push(official.value.error);
   }
 
-  const spotBundle: SourceBundle = { readings: [], errors: [] };
   if (spot.status === 'fulfilled') {
     spotBundle.readings = spot.value.readings;
     spotBundle.errors = spot.value.errors;
@@ -552,6 +758,6 @@ export async function fetchPricingSources(): Promise<PricingSnapshot> {
     parallel: { ...parallel, publishedLocalGold },
     official: officialBundle,
     spot: spotBundle,
-    fetchedAt: nowIso(),
+    fetchedAt: now.toISOString(),
   };
 }

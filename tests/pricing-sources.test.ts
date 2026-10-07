@@ -2,7 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  articleTime,
+  classifyPls48,
   parseAlmashhadArticle,
+  parseAluomArticle,
+  parseArabicDate,
+  parseRelativeArabicAge,
   parseCoinbaseJson,
   parseGoldApiJson,
   parseNbsOfficial,
@@ -144,4 +149,77 @@ test('parseSudafaxFeedItem: نص بلا سعر → قيم فارغة', () => {
   const r = parseSudafaxFeedItem('<p>تعديل وزاري في الحكومة السودانية</p>');
   assert.equal(r.buy, null);
   assert.equal(r.sell, null);
+});
+
+/* --------------------- اليوم نيوز (aluom) --------------------- */
+
+test('اليوم نيوز: «متوسط سعر بيع تراوح بين 8400 و8550» → وسيط، والشراء 8300', () => {
+  const text = `
+    وبحسب مؤشرات التداول في السوق الموازي، سجل سعر الدولار الأمريكي متوسط سعر بيع تراوح
+    بين 8400 و8550 جنيهاً سودانياً، فيما بلغ متوسط سعر الشراء نحو 8300 جنيه.
+  `;
+  const r = parseAluomArticle(text);
+  assert.equal(r.sell, 8475, 'وسيط 8400 و8550');
+  assert.equal(r.buy, 8300);
+});
+
+test('اليوم نيوز: سعر بيع مفرد', () => {
+  const r = parseAluomArticle('سجل سعر بيع الدولار الأمريكي 8,550 جنيهاً في السوق الموازي.');
+  assert.equal(r.sell, 8550);
+});
+
+/* ------------------------ فلسطينيو48 ------------------------ */
+
+test('فلسطينيو48: تصنيف العنوان — بنوك أم موازي', () => {
+  assert.equal(classifyPls48('سعر الدولار أمام الجنيه في بنك السودان المركزي'), 'bank');
+  assert.equal(classifyPls48('أسعار الدولار والعملات في البنوك السودانية اليوم بالتفصيل'), 'bank');
+  assert.equal(classifyPls48('الجنيه السوداني يواجه موجة تراجع جديدة أمام الدولار والدرهم والريال'), 'parallel');
+});
+
+test('فلسطينيو48: يقرأ «سعر الشراء: X. سعر البيع: Y» كما هي (بلا تصحيح صامت)', () => {
+  const t = 'سعر الجنيه السوداني مقابل الدولار في بنك السودان المركزي سعر الشراء: 4200 جنيه سوداني. سعر البيع: 3700 جنيه سوداني.';
+  const r = parsePls48Article(t);
+  assert.equal(r.buy, 4200);
+  assert.equal(r.sell, 3700, 'قيم المصدر تُنقل كما هي — والتحقق هو من يستبعد المعكوس');
+});
+
+test('فلسطينيو48: جدول بزوج أرقام → الأصغر شراء والأكبر بيع', () => {
+  const r = parsePls48Article('الدولار الأمريكي 7,455 جنيه للشراء مقابل 7,565 جنيه للبيع في السوق الموازي.');
+  assert.equal(r.buy, 7455);
+  assert.equal(r.sell, 7565);
+});
+
+/* --------------------- التواريخ العربية --------------------- */
+
+test('parseRelativeArabicAge: دقائق/ساعات/أيام/أسابيع', () => {
+  const now = new Date('2026-10-07T12:00:00Z');
+  assert.equal(parseRelativeArabicAge('منذ 18 دقيقة', now), new Date(now.getTime() - 18 * 60000).toISOString());
+  assert.equal(parseRelativeArabicAge('منذ 12 ساعة', now), new Date(now.getTime() - 12 * 3600000).toISOString());
+  assert.equal(parseRelativeArabicAge('منذ 3 أيام', now), new Date(now.getTime() - 3 * 86400000).toISOString());
+  assert.equal(parseRelativeArabicAge('منذ أسبوعين', now), new Date(now.getTime() - 14 * 86400000).toISOString());
+  assert.equal(parseRelativeArabicAge('منذ 3 أسابيع', now), new Date(now.getTime() - 21 * 86400000).toISOString());
+});
+
+test('parseRelativeArabicAge: نص بلا عمر → null', () => {
+  assert.equal(parseRelativeArabicAge('نشرة اقتصادية بلا تاريخ', new Date()), null);
+});
+
+test('parseArabicDate: «6 أكتوبر 2026 - 2:25 مساءً» يُحوَّل لتوقيت السودان', () => {
+  const iso = parseArabicDate('اليوم نيوز 8 6 أكتوبر 2026 - 2:25 مساءً');
+  assert.ok(iso, 'التاريخ مقروء');
+  const d = new Date(iso as string);
+  assert.equal(d.toISOString(), '2026-10-06T12:25:00.000Z', '2:25 مساءً بتوقيت +2 = 12:25Z');
+});
+
+test('parseArabicDate: صيغة رقمية 7-10-2026', () => {
+  const iso = parseArabicDate('بتاريخ 7-10-2026 بتوقيت الخرطوم');
+  assert.ok(iso && iso.startsWith('2026-10-07'));
+});
+
+test('articleTime: يفضل العمر النسبي ثم التاريخ ثم الآن', () => {
+  const now = new Date('2026-10-07T12:00:00Z');
+  const rel = articleTime('admin منذ 5 ساعات', now);
+  assert.equal(rel, new Date(now.getTime() - 5 * 3600000).toISOString());
+  const abs = articleTime('نُشر 6 أكتوبر 2026', now);
+  assert.ok(abs.startsWith('2026-10-06'));
 });
