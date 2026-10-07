@@ -58,6 +58,8 @@ export interface PartnerShare {
   privateExpenses: number;
   netShare: number;
   capitalPercent: number;
+  /** عدد عمليات المسحوبات الخاصة لهذا الشريك */
+  privateExpensesCount: number;
 }
 
 function active<T extends { archived?: boolean }>(rows: T[] | undefined): T[] {
@@ -212,13 +214,13 @@ export function partnerShares(
 
   return activePartners.map((partner) => {
     const profitShare = (netProfit * (partner.profitPercent || 0)) / 100;
-    const privExp = activeExpenses
-      .filter((e) => e.target === partner.name)
-      .reduce((sum, e) => sum + (e.amount || 0), 0);
+    const partnerExpenses = activeExpenses.filter((e) => e.target === partner.name);
+    const privExp = partnerExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
     return {
       partner,
       profitShare,
       privateExpenses: privExp,
+      privateExpensesCount: partnerExpenses.length,
       netShare: profitShare - privExp,
       capitalPercent: totalCapital > 0 ? ((partner.capital || 0) / totalCapital) * 100 : 0,
     };

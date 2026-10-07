@@ -19,6 +19,8 @@ import {
   kCurrency
 } from '../../core/format';
 import { Expense, LoanDirection } from '../../types';
+import { summarizeExpenses, partnerExpenseText, PeriodFilter } from '../../core/expenseSummary';
+import { ShareButtons } from '../common/ShareButtons';
 
 export const ExpensesScreen: React.FC = () => {
   const {
@@ -33,8 +35,10 @@ export const ExpensesScreen: React.FC = () => {
   } = useGoldStore();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'general' | 'private'>('all');
-  const [filterPeriod, setFilterPeriod] = useState<'all' | 'today' | '7days' | 'month'>('all');
+  /** 'all' | 'عام' | 'خاصة' | اسم شريك — الفلترة الأساسية للشاشة */
+  const [filterTarget, setFilterTarget] = useState<'all' | 'عام' | 'خاصة' | string>('all');
+  const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all');
+  const [showBreakdown, setShowBreakdown] = useState(true);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
@@ -98,59 +102,82 @@ export const ExpensesScreen: React.FC = () => {
     setShowAddModal(false);
   };
 
-  // Filter & Search Logic
-  const filteredExpenses = useMemo(() => {
-    return expenses.filter((item) => !item.archived).filter((item) => {
-      // Type Filter
-      if (filterType === 'general' && item.target !== 'عام' && item.target) {
-        return false;
-      }
-      if (filterType === 'private' && (item.target === 'عام' || !item.target)) {
-        return false;
-      }
+  // الفلترة والتجميع — المنطق في core/expenseSummary.ts (مُختبر)
+  const summary = useMemo(
+    () =>
+      summarizeExpenses(expenses, {
+        target: filterTarget,
+        period: filterPeriod,
+        query: searchQuery,
+      }),
+    [expenses, filterTarget, filterPeriod, searchQuery]
+  );
 
-      // Period Filter
-      if (filterPeriod !== 'all') {
-        const itemDate = new Date(item.date);
-        const now = new Date();
-        if (filterPeriod === 'today') {
-          if (itemDate.toDateString() !== now.toDateString()) return false;
-        } else if (filterPeriod === '7days') {
-          const diffDays = (now.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
-          if (diffDays > 7) return false;
-        } else if (filterPeriod === 'month') {
-          if (
-            itemDate.getMonth() !== now.getMonth() ||
-            itemDate.getFullYear() !== now.getFullYear()
-          ) {
-            return false;
+  const filteredExpenses = useMemo(
+    () =>
+      expenses
+        .filter((e) => !e.archived)
+        .filter((e) => {
+          if (filterTarget === 'all') return true;
+          if (filterTarget === 'عام') return !e.target || e.target === 'عام';
+          if (filterTarget === 'خاصة') return Boolean(e.target) && e.target !== 'عام';
+          return e.target === filterTarget;
+        })
+        .filter((e) => {
+          if (filterPeriod === 'all') return true;
+          const d = new Date(e.date);
+          const now = new Date();
+          if (filterPeriod === 'today') return d.toDateString() === now.toDateString();
+          if (filterPeriod === '7days') {
+            const diff = (now.getTime() - d.getTime()) / 86400000;
+            return diff >= 0 && diff <= 7;
           }
-        }
-      }
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        })
+        .filter((e) => {
+          const q = searchQuery.trim().toLowerCase();
+          if (!q) return true;
+          return (
+            e.name.toLowerCase().includes(q) ||
+            (e.notes || '').toLowerCase().includes(q) ||
+            (e.target || '').toLowerCase().includes(q) ||
+            String(e.amount).includes(q)
+          );
+        }),
+    [expenses, filterTarget, filterPeriod, searchQuery]
+  );
 
-      // Search Query
-      const q = searchQuery.toLowerCase().trim();
-      if (!q) return true;
-      return (
-        item.name.toLowerCase().includes(q) ||
-        (item.notes && item.notes.toLowerCase().includes(q)) ||
-        (item.target && item.target.toLowerCase().includes(q)) ||
-        item.amount.toString().includes(q)
-      );
-    });
-  }, [expenses, filterType, filterPeriod, searchQuery]);
+  /** تجميع الشرائح: يتبع الفترة والبحث، ولا يتبع فلتر الشريك */
+  const allTimeByPartner = useMemo(
+    () => summarizeExpenses(expenses, { target: 'all', period: filterPeriod, query: searchQuery }),
+    [expenses, filterPeriod, searchQuery]
+  );
 
-  // Totals for Summary Row
-  const totalAmountSum = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const generalSum = filteredExpenses
-    .filter((e) => e.target === 'عام' || !e.target)
-    .reduce((sum, e) => sum + (e.amount || 0), 0);
-  const privateSum = filteredExpenses
-    .filter((e) => e.target !== 'عام' && e.target)
-    .reduce((sum, e) => sum + (e.amount || 0), 0);
+  const partnerList = useMemo(
+    () => allTimeByPartner.partners.map((p) => ({ name: p.target, count: p.count, total: p.total })),
+    [allTimeByPartner]
+  );
 
-  const totalGeneralCount = expenses.filter((e) => e.target === 'عام' || !e.target).length;
-  const totalPrivateCount = expenses.filter((e) => e.target !== 'عام' && e.target).length;
+  // الإجماليات للنتائج الظاهرة
+  const totalAmountSum = summary.total;
+  const generalSum = summary.generalTotal;
+  const privateSum = summary.privateTotal;
+
+  const periodLabels: Record<PeriodFilter, string> = {
+    all: 'كل الفترات',
+    today: 'اليوم',
+    '7days': 'آخر 7 أيام',
+    month: 'هذا الشهر',
+  };
+  const periodLabel = periodLabels[filterPeriod];
+  const selectedLabel =
+    filterTarget === 'all'
+      ? 'كل المنصرفات'
+      : filterTarget === 'عام'
+      ? 'المنصرفات العامة'
+      : filterTarget === 'خاصة'
+      ? 'منصرفات الشركاء'
+      : `منصرفات ${filterTarget}`;
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
@@ -167,43 +194,178 @@ export const ExpensesScreen: React.FC = () => {
         <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
       </div>
 
-      {/* 2. Type Filter Tabs (كل المنصرفات / عامة فقط / خاصة فقط) */}
+      {/* 2. فلترة الجهة: الكل / عامة / خاصة */}
       <div className="grid grid-cols-3 gap-2">
         <button
-          onClick={() => setFilterType('all')}
+          onClick={() => setFilterTarget('all')}
           className={`py-2.5 px-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            filterType === 'all'
+            filterTarget === 'all'
               ? 'bg-rose-500 text-white font-black shadow-lg shadow-rose-500/20'
               : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
           }`}
         >
-          <span>كل المنصرفات ({expenses.length})</span>
+          <span>كل المنصرفات ({allTimeByPartner.count})</span>
         </button>
 
         <button
-          onClick={() => setFilterType('general')}
+          onClick={() => setFilterTarget('عام')}
           className={`py-2.5 px-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            filterType === 'general'
+            filterTarget === 'عام'
               ? 'bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/20'
               : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
           }`}
         >
           <Building2 className="w-3.5 h-3.5" />
-          <span>عامة فقط ({totalGeneralCount})</span>
+          <span>عامة ({allTimeByPartner.general?.count || 0})</span>
         </button>
 
         <button
-          onClick={() => setFilterType('private')}
+          onClick={() => setFilterTarget('خاصة')}
           className={`py-2.5 px-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            filterType === 'private'
+            filterTarget === 'خاصة'
               ? 'bg-cyan-500 text-slate-950 font-black shadow-lg shadow-cyan-500/20'
               : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
           }`}
         >
           <UserCheck className="w-3.5 h-3.5" />
-          <span>خاصة فقط ({totalPrivateCount})</span>
+          <span>خاصة ({allTimeByPartner.partners.reduce((n, x) => n + x.count, 0)})</span>
         </button>
       </div>
+
+      {/* 2.1 شرائح الشركاء — ضغطة واحدة تجمع منصرفات الشريك كاملة */}
+      {partnerList.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-slate-300 flex items-center gap-1.5">
+              <HandCoins className="w-3.5 h-3.5 text-cyan-400" />
+              منصرفات كل شريك ({periodLabel}) — اضغط لتجميعها
+            </span>
+            {filterTarget !== 'all' && (
+              <button
+                onClick={() => setFilterTarget('all')}
+                className="text-[10px] font-bold text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-2 py-1"
+              >
+                إلغاء الفلترة
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            {partnerList.map((partner) => {
+              const active = filterTarget === partner.name;
+              return (
+                <button
+                  key={partner.name}
+                  onClick={() => setFilterTarget(active ? 'all' : partner.name)}
+                  className={`shrink-0 min-w-[110px] text-right rounded-2xl p-3 border transition-all ${
+                    active
+                      ? 'bg-cyan-500/20 border-cyan-400 shadow-lg shadow-cyan-500/10'
+                      : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className={`text-xs font-black ${active ? 'text-cyan-200' : 'text-white'}`}>
+                    {partner.name}
+                  </div>
+                  <div className={`text-sm font-black font-mono mt-0.5 ${active ? 'text-cyan-300' : 'text-slate-200'}`}>
+                    {fmtNum(partner.total)}
+                  </div>
+                  <div className="text-[10px] text-slate-500">{partner.count} عملية</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2.2 جدول التجميع التفصيلي بالشريك */}
+      {showBreakdown && summary.byTarget.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-white flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-amber-400" />
+              تجميع {selectedLabel} — {periodLabel}
+            </span>
+            <button
+              onClick={() => setShowBreakdown(false)}
+              className="text-[10px] text-slate-400 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1"
+            >
+              إخفاء
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {summary.byTarget.map((row) => {
+              const active = filterTarget === row.target;
+              return (
+                <button
+                  key={row.target}
+                  onClick={() => setFilterTarget(active ? 'all' : row.target)}
+                  className={`w-full text-right rounded-2xl p-3 border transition-all space-y-1.5 ${
+                    active ? 'bg-amber-500/15 border-amber-500/50' : 'bg-slate-950 border-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-black text-white flex items-center gap-1.5">
+                      {row.target}
+                      {row.isGeneral && (
+                        <span className="text-[9px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 rounded-md px-1.5 py-0.5">
+                          عام
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-sm font-black font-mono text-rose-300 whitespace-nowrap">
+                      {fmtNum(row.total)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${row.isGeneral ? 'bg-amber-400' : 'bg-cyan-400'}`}
+                        style={{ width: `${Math.min(100, row.percent)}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono w-12 text-left">{row.percent}%</span>
+                    <span className="text-[10px] text-slate-500">{row.count} عملية</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-2xl p-3">
+            <span className="text-[11px] font-bold text-slate-300">الإجمالي</span>
+            <span className="text-sm font-black font-mono text-white">{fmtNum(summary.total)} {kCurrency}</span>
+          </div>
+          {filterTarget !== 'all' && filterPeriod !== 'all' && (
+            <div className="pt-1">
+              <ShareButtons
+                text={partnerExpenseText(
+                  'مجوهرات الذهب',
+                  {
+                    target: selectedLabel,
+                    isGeneral: filterTarget === 'عام',
+                    count: summary.count,
+                    total: summary.total,
+                    percent: 100,
+                    firstDate: null,
+                    lastDate: null,
+                  },
+                  periodLabel
+                )}
+                label="إرسال الملخص على واتساب"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {!showBreakdown && summary.byTarget.length > 0 && (
+        <button
+          onClick={() => setShowBreakdown(true)}
+          className="w-full py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-[11px] font-bold text-slate-300"
+        >
+          إظهار تجميع الشركاء
+        </button>
+      )}
 
       {/* Period Filter Pills */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
@@ -306,15 +468,15 @@ export const ExpensesScreen: React.FC = () => {
       {/* شريط ثابت: إجماليات المصروفات + زر مصروف جديد */}
       <StickyActionBar
         stats={[
-          { label: 'الإجمالي', value: fmtNum(totalAmountSum), tone: 'rose' },
+          { label: filterTarget === 'all' ? 'الإجمالي' : 'إجمالي المعروض', value: fmtNum(totalAmountSum), tone: 'rose' },
           { label: 'عامة', value: fmtNum(generalSum), tone: 'amber' },
           { label: 'خاصة', value: fmtNum(privateSum), tone: 'cyan' },
-          { label: 'عدد العمليات', value: String(filteredExpenses.length), tone: 'slate' },
+          { label: 'عدد العمليات', value: String(summary.count), tone: 'slate' },
         ]}
         columns={4}
         hint={
-          filterPeriod !== 'all' || filterType !== 'all' || searchQuery
-            ? 'الإجماليات للنتائج الظاهرة حالياً فقط'
+          filterTarget !== 'all' || filterPeriod !== 'all' || searchQuery
+            ? `${selectedLabel} — ${periodLabel} (النتائج الظاهرة فقط)`
             : 'الإجماليات لكل المصروفات غير المؤرشفة'
         }
         actions={[{ label: 'مصروف جديد', onClick: handleOpenAdd, icon: Plus, tone: 'rose' }]}
