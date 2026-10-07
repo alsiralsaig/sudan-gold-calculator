@@ -15,6 +15,7 @@ import {
   receiptNameFor,
   scopeToBranch,
   suggestBranchCode,
+  hiddenByBranchCount,
 } from '../src/core/branches';
 import {
   assignMissingInvoiceNumbers,
@@ -234,4 +235,22 @@ test('assignMissingInvoiceNumbersByBranch يحفظ الأرقام الموجود
   );
   assert.equal(res.assigned, 0);
   assert.equal(res.items[0].invoiceNo, 'SAL-KH1-0009');
+});
+
+test('hiddenByBranchCount: يحسب المخفي بسبب الفرع النشط', () => {
+  const items = [
+    { branchId: 'b1' },
+    { branchId: 'b1' },
+    { branchId: 'b2' },
+    {}, // بلا فرع (بيانات قديمة)
+  ];
+  // فرع محدد: يظهر منه اثنان ويُخفي الآخران (فرع آخر + بلا فرع)
+  assert.equal(hiddenByBranchCount(items, 'b1'), 2);
+  // فرع فارغ: يُخفي المسندين فقط ويظهر غير المسند
+  assert.equal(hiddenByBranchCount(items, UNASSIGNED_BRANCH), 3);
+  // كل الفروع: لا شيء مخفي
+  assert.equal(hiddenByBranchCount(items, ALL_BRANCHES), 0);
+  assert.equal(hiddenByBranchCount(items, undefined), 0);
+  // قائمة فارغة
+  assert.equal(hiddenByBranchCount([], 'b1'), 0);
 });

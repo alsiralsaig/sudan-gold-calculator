@@ -33,6 +33,18 @@ export function scopeToBranch<T extends BranchScoped>(items: T[], branchId?: str
   return items.filter((x) => x.branchId === branchId);
 }
 
+/**
+ * عدد السجلات المخفية بسبب الفرع النشط:
+ * - فرع محدد → كل ما ليس منه (من فروع أخرى أو بلا فرع).
+ * - «بلا فرع» → كل ما هو مسند لفرع.
+ * - كل الفروع → صفر (لا شيء مخفي).
+ */
+export function hiddenByBranchCount(items: BranchScoped[] = [], branchId?: string | null): number {
+  if (!branchId || branchId === ALL_BRANCHES) return 0;
+  if (branchId === UNASSIGNED_BRANCH) return items.filter((x) => !!x.branchId).length;
+  return items.filter((x) => x.branchId !== branchId).length;
+}
+
 /** عدد السجلات التي لم تُسند إلى أي فرع (بيانات قديمة) */
 export function unassignedCount(items: BranchScoped[] = []): number {
   return items.filter((x) => !x.branchId).length;
