@@ -503,6 +503,65 @@ async function fetchAlmashhadReading(): Promise<{ reading: SourceReading | null;
 }
 
 /* ------------------------------------------------------------------ */
+/*                الراكوبة (alrakoba.net) — feed الموازي               */
+/* ------------------------------------------------------------------ */
+
+export function parseAlrakobaFeedItem(descHtml: string): { buy: number | null; sell: number | null; price: number | null } {
+  const text = rssText(descHtml);
+
+  // «ووصل سعر الدولار أمس إلى أسعار تراوحت بين 8600 إلى 8700 للطلبيات الكبيرة»
+  const range = text.match(/(?:الدولار|العملات)[\s\S]{0,400}?بين\s*([\d][\d.,]{2,12})\s*(?:إلى|-|و)\s*([\d][\d.,]{2,12})/);
+  if (range) {
+    const a = toNum(range[1]);
+    const b = toNum(range[2]);
+    if (a && b) {
+      // نطاق أوسع من 20% يعني قراءة غير موثوقة — لا نأخذ أي رقم منها
+      if (Math.abs(a - b) >= Math.max(a, b) * 0.2) {
+        return { buy: null, sell: null, price: null };
+      }
+      return { buy: null, sell: null, price: Math.round(((a + b) / 2) * 100) / 100 };
+    }
+  }
+
+  // «وصل سعر الدولار إلى 8,700 جنيه»
+  const single = text.match(/سعر\s*الدولار[^\d]{0,60}?([\d][\d.,]{3,12})/);
+  if (single) return { buy: null, sell: null, price: toNum(single[1]) };
+
+  return { buy: null, sell: null, price: null };
+}
+
+async function fetchAlrakobaReading(): Promise<{
+  reading: SourceReading | null;
+  error: string | null;
+}> {
+  const feed = await fetchTextRetry('https://alrakoba.net/feed/', 12000);
+  if (!feed) return { reading: null, error: 'الراكوبة: تعذّر الوصول' };
+
+  const items = parseRssItems(feed);
+  const priced = items.find((it) => /أسعار|سعر/.test(it.title) && /العملات|الدولار/.test(it.title));
+  if (!priced) return { reading: null, error: 'الراكوبة: لا خبر أسعار حديث في الـ feed' };
+
+  const parsed = parseAlrakobaFeedItem(priced.description);
+  if (!parsed.price && !parsed.buy && !parsed.sell) {
+    return { reading: null, error: 'الراكوبة: الخبر المنشور بلا أرقام' };
+  }
+
+  return {
+    reading: {
+      source: 'الراكوبة',
+      kind: 'parallel',
+      buy: parsed.buy,
+      sell: parsed.sell,
+      price: parsed.price,
+      at: priced.pubDate || nowIso(),
+      url: priced.link,
+      label: priced.title.slice(0, 90),
+    },
+    error: null,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /*        فلسطينيو48 — يخدم المستويين: المركزي (رسمي) والموازي        */
 /* ------------------------------------------------------------------ */
 
@@ -680,11 +739,12 @@ export interface PricingSnapshot {
 /** جلب كل المصادر بالتوازي — فشل مصدر لا يوقف البقية أبداً */
 export async function fetchPricingSources(): Promise<PricingSnapshot> {
   const now = new Date();
-  const [sudafax, sudanakhbar, almashhad, aluom, pls48, official, spot] = await Promise.allSettled([
+  const [sudafax, sudanakhbar, almashhad, aluom, alrakoba, pls48, official, spot] = await Promise.allSettled([
     fetchSudafaxReading(),
     fetchSudanakhbarReading(),
     fetchAlmashhadReading(),
     fetchAluomReading(),
+    fetchAlrakobaReading(),
     fetchPls48Reading(),
     fetchOfficialUsdReading(),
     fetchSpotReadings(),
@@ -711,6 +771,7 @@ export async function fetchPricingSources(): Promise<PricingSnapshot> {
   collectParallel(sudanakhbar);
   collectParallel(almashhad);
   collectParallel(aluom as PromiseSettledResult<{ reading: SourceReading | null; error: string | null }>);
+  collectParallel(alrakoba as PromiseSettledResult<{ reading: SourceReading | null; error: string | null }>);
 
   // فلسطينيو48 يخدم المستويين
   if (pls48.status === 'fulfilled') {

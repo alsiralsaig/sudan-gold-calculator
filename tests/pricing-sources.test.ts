@@ -8,6 +8,7 @@ import {
   parseAluomArticle,
   parseArabicDate,
   parseRelativeArabicAge,
+  parseAlrakobaFeedItem,
   parseCoinbaseJson,
   parseGoldApiJson,
   parseNbsOfficial,
@@ -222,4 +223,30 @@ test('articleTime: يفضل العمر النسبي ثم التاريخ ثم ا�
   assert.equal(rel, new Date(now.getTime() - 5 * 3600000).toISOString());
   const abs = articleTime('نُشر 6 أكتوبر 2026', now);
   assert.ok(abs.startsWith('2026-10-06'));
+});
+
+/* ------------------------- الراكوبة ------------------------- */
+
+test('الراكوبة: «تراوحت بين 8600 إلى 8700» → سعر مفرد = الوسيط 8650', () => {
+  const desc =
+    'عادت أسعار العملات الأجنبية إلى الصعود مجدداً في السوق الموازي، وسط توقعات التجار أن يقفز الدولار الأمريكي إلى 9 آلاف جنيه مقابل الجنيه السوداني. ووصل سعر الدولار أمس إلى أسعار تراوحت بين 8600 إلى 8700 للطلبيات الكبيرة، بينما ارتفع سعر الدرهم الإماراتي إلى 2287 جنيها.';
+  const r = parseAlrakobaFeedItem(desc);
+  assert.equal(r.price, 8650);
+  assert.equal(r.buy, null, 'بلا شراء صريح');
+  assert.equal(r.sell, null);
+});
+
+test('الراكوبة: لا يلتقط «9 آلاف جنيه» كسعر (توقع لا سعر)', () => {
+  const r = parseAlrakobaFeedItem('يتوقع التجار أن يقفز الدولار الأمريكي إلى 9 آلاف جنيه قريباً');
+  assert.equal(r.price, null, 'التوقع ليس سعراً منشوراً');
+});
+
+test('الراكوبة: صيغة «وصل سعر الدولار إلى 8,700»', () => {
+  const r = parseAlrakobaFeedItem('وصل سعر الدولار إلى 8,700 جنيه في تعاملات الخرطوم');
+  assert.equal(r.price, 8700);
+});
+
+test('الراكوبة: نطاق بعيد جداً (شاذ) لا يُقبل كسعر وسط', () => {
+  const r = parseAlrakobaFeedItem('سعر الدولار تراوحت بين 3000 إلى 9000 جنيه');
+  assert.equal(r.price, null, 'نطاق أوسع من 20% يُرفض');
 });
