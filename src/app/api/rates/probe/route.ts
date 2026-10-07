@@ -92,7 +92,7 @@ export async function GET(request: Request) {
   if (mode === 'harvest') {
     const target = url.searchParams.get('url') || '';
     const needle = url.searchParams.get('needle') || 'دولار';
-    const allowed = /^https:\/\/(pls48\.net|aluom\.net|alrakoba\.net|sudafax\.com|nbs\.sd|dabangasudan\.org|sudanile\.com|alnilin\.com|suna-sd\.net)\//;
+    const allowed = /^https:\/\/(pls48\.net|aluom\.net|alrakoba\.net|sudafax\.com|nbs\.sd|dabangasudan\.org|sudanile\.com|alnilin\.com|suna-sd\.net|kushnews\.net|almandara\.net|bajnews\.com|smc\.sd|alsudani\.news)\//;
     if (!allowed.test(target)) {
       return NextResponse.json({ ok: false, message: 'رابط غير مسموح' }, { status: 400 });
     }
