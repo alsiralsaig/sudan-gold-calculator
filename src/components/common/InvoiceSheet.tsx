@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
 import { PrintableInvoice } from '../../core/invoice';
-import { fmtNum, formatInvoiceDate, unitsToGhJ } from '../../core/format';
+import { fmtNum, formatInvoiceDate, formatDateWithTime, unitsToGhJ } from '../../core/format';
 
 /**
  * ورقة الفاتورة — نسخة واحدة تُستخدم للمعاينة والطباعة معاً،
@@ -35,7 +35,7 @@ export const InvoiceSheet: React.FC<{ invoice: PrintableInvoice; currency: strin
         <div className="inv-meta-cell">
           <div className="inv-meta-label">الفرع / المستخدم</div>
           <div className="inv-meta-value">{inv.branchName || 'الفرع الرئيسي'}</div>
-          <div className="inv-meta-label">تاريخ الإصدار: {formatInvoiceDate(inv.date)}</div>
+          <div className="inv-meta-label">تاريخ الإصدار: {formatDateWithTime(inv.date)}</div>
         </div>
         {inv.dueDate ? (
           <div className="inv-meta-cell">

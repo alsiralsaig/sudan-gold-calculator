@@ -30,3 +30,27 @@ test('التاريخ مع الزمن للتفاصيل', () => {
   // تاريخ بلا زمن: التاريخ وحده بلا «—»
   assert.ok(!formatDateWithTime('2026-10-07').includes('—'));
 });
+
+import { buildSaleInvoiceText } from '../src/core/share';
+import { buildSaleInvoice, invoiceText } from '../src/core/invoice';
+
+const sale = {
+  id: 's1',
+  date: local(2026, 10, 7, 15, 45),
+  units: 1000,
+  purity: 21,
+  buyAmount: 1000000,
+  sellAmount: 1200000,
+  buyer: 'زبون',
+  notes: '',
+} as any;
+
+test('رسالة الواتساب فيها الزمن', () => {
+  const txt = buildSaleInvoiceText('محل تجربة', sale);
+  assert.ok(txt.includes('الساعة 3:45 م'), txt);
+});
+
+test('نص الفاتورة فيه التاريخ والزمن', () => {
+  const inv = buildSaleInvoice(sale, { storeName: 'محل تجربة', purityLabel: (p: number) => String(p), weightLabel: (u: number) => String(u) } as any);
+  assert.ok(invoiceText(inv).includes('7/10/2026 — 3:45 م'));
+});

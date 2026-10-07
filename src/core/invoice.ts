@@ -3,7 +3,7 @@
  * منطق نقي قابل للاختبار، بلا React وبلا شبكة.
  */
 import { Branch, Purchase, Sale } from '../types';
-import { formatInvoiceDate } from './format';
+import { formatInvoiceDate, formatDateWithTime } from './format';
 
 export type InvoiceKind = 'sale' | 'purchase';
 
@@ -196,7 +196,7 @@ export function invoiceText(inv: PrintableInvoice, currency = 'ج.س'): string {
   lines.push(`🧾 ${inv.title} — ${inv.invoiceNo}`);
   lines.push(inv.storeName);
   if (inv.branchName) lines.push(`الفرع: ${inv.branchName}`);
-  lines.push(`التاريخ: ${formatInvoiceDate(inv.date)}`);
+  lines.push(`التاريخ: ${formatDateWithTime(inv.date)}`);
   lines.push('-----------------------------');
   lines.push(`${inv.partyLabel}: ${inv.partyName}`);
   if (inv.partyPhone) lines.push(`الهاتف: ${inv.partyPhone}`);

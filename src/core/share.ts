@@ -1,6 +1,6 @@
 import { Purchase, Sale } from '../types';
 import { purchasePending, salePending } from './accounting';
-import { unitsToGhJ, fmtNum, kCurrency } from './format';
+import { unitsToGhJ, fmtNum, kCurrency, formatEntryTime } from './format';
 import { purityLabel } from './purity';
 import { arabicDate, relativeDays } from './dates';
 
@@ -54,7 +54,10 @@ export function buildInvoiceText(input: InvoiceShareInput): string {
   lines.push(`*${input.storeName}*`);
   lines.push(isSale ? '*فاتورة بيع ذهب*' : '*فاتورة شراء ذهب*');
   lines.push('—————————————');
-  lines.push(`التاريخ: ${arabicDate(input.date)}`);
+  {
+    const t = formatEntryTime(input.date);
+    lines.push(`التاريخ: ${arabicDate(input.date)}${t ? ` — الساعة ${t}` : ''}`);
+  }
   lines.push(`الوزن: ${unitsToGhJ(input.units)} ج.ح.ز (${(input.units / 100).toFixed(2)} جرام)`);
   if (input.purity > 0) {
     lines.push(`العيار: ${purityLabel(input.purity)}${input.purity <= 24 ? 'k' : ' (نقاوة)'}`);
