@@ -21,6 +21,9 @@ import { Expense, LoanDirection } from '../../types';
 import { summarizeExpenses, partnerExpenseText, PeriodFilter } from '../../core/expenseSummary';
 import { matchExpenseQuery } from '../../core/globalSearch';
 import { SmartSearchBar } from '../common/SmartSearchBar';
+import { sortRecords } from '../../core/recordOrder';
+import { useRecordOrder } from '../../hooks/useRecordOrder';
+import { RecordOrderToggle } from '../common/RecordOrderToggle';
 import { ShareButtons } from '../common/ShareButtons';
 
 export const ExpensesScreen: React.FC = () => {
@@ -115,9 +118,12 @@ export const ExpensesScreen: React.FC = () => {
     [expenses, filterTarget, filterPeriod, searchQuery]
   );
 
+  // ترتيب السجلات (موحّد بين الشاشات)
+  const [recordOrder, toggleRecordOrder] = useRecordOrder();
+
   const filteredExpenses = useMemo(
     () =>
-      expenses
+      sortRecords(expenses, recordOrder)
         .filter((e) => !e.archived)
         .filter((e) => {
           if (filterTarget === 'all') return true;
@@ -137,7 +143,7 @@ export const ExpensesScreen: React.FC = () => {
           return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
         })
         .filter((e) => matchExpenseQuery(e, searchQuery)),
-    [expenses, filterTarget, filterPeriod, searchQuery]
+    [expenses, filterTarget, filterPeriod, searchQuery, recordOrder]
   );
 
   /** تجميع الشرائح: يتبع الفترة والبحث، ولا يتبع فلتر الشريك */
@@ -376,6 +382,7 @@ export const ExpensesScreen: React.FC = () => {
             <span>{tab.label}</span>
           </button>
         ))}
+        <RecordOrderToggle order={recordOrder} onToggle={toggleRecordOrder} compact />
       </div>
 
       {filteredExpenses.length > 0 && <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">

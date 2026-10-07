@@ -34,6 +34,9 @@ import { branchName } from '../../core/branches';
 import { operationPriceWarning } from '../../core/pricing';
 import { matchSaleQuery } from '../../core/globalSearch';
 import { SmartSearchBar } from '../common/SmartSearchBar';
+import { sortRecords } from '../../core/recordOrder';
+import { useRecordOrder } from '../../hooks/useRecordOrder';
+import { RecordOrderToggle } from '../common/RecordOrderToggle';
 import { StickyActionBar } from '../layout/StickyActionBar';
 
 export const SalesScreen: React.FC = () => {
@@ -211,9 +214,12 @@ export const SalesScreen: React.FC = () => {
     setShowAddModal(false);
   };
 
+  // ترتيب السجلات (موحّد بين الشاشات)
+  const [recordOrder, toggleRecordOrder] = useRecordOrder();
+
   // Filter & Search Logic
   const filteredSales = useMemo(() => {
-    return sales.filter((item) => !item.archived).filter((item) => {
+    return sortRecords(sales, recordOrder).filter((item) => !item.archived).filter((item) => {
       // بحث ذكي موحّد: اسم/هاتف/مبلغ/وزن/فاتورة/ملاحظات
       if (!matchSaleQuery(item, searchQuery)) return false;
 
@@ -236,7 +242,7 @@ export const SalesScreen: React.FC = () => {
       }
       return true;
     });
-  }, [sales, searchQuery, filterPeriod]);
+  }, [sales, searchQuery, filterPeriod, recordOrder]);
 
   // Totals for Summary Row
   const totalUnitsSum = filteredSales.reduce((sum, s) => sum + (s.units || 0), 0);
@@ -304,6 +310,7 @@ export const SalesScreen: React.FC = () => {
             {filterPeriod === tab.id && ' ✓'}
           </button>
         ))}
+        <RecordOrderToggle order={recordOrder} onToggle={toggleRecordOrder} />
       </SmartSearchBar>
 
       {filteredSales.length > 0 && <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">

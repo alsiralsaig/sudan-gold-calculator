@@ -1,6 +1,6 @@
 {
   "name": "gold-calculator-nextjs",
-  "version": "6.9.9",
+  "version": "6.10.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001 -H 0.0.0.0",

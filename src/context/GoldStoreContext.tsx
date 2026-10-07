@@ -20,6 +20,7 @@ import { DEFAULT_STORE_NAME, normalizeStoreName } from '../core/branding';
 import { permissionState, pushSupported, subscribeToPush } from '../core/systemNotify';
 import { SessionSnapshotMeta, totalRecords } from '../core/session';
 import { buildCsv, buildExportTable, exportFileName } from '../core/dataExport';
+import { sortRecords } from '../core/recordOrder';
 import {
   Financials,
   Inventory,
@@ -1572,12 +1573,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         version: 6,
         storeName: normalizeStoreName(local?.storeName || cloud?.storeName || ''),
         userEmail: local?.userEmail || cloud?.userEmail || '',
-        purchases: purchasesMerge.items,
-        sales: salesMerge.items,
-        expenses: expensesMerge.items,
+        purchases: sortRecords(purchasesMerge.items),
+        sales: sortRecords(salesMerge.items),
+        expenses: sortRecords(expensesMerge.items),
         partners: partnersMerge.items,
         branches: branchesMerge.items,
-        loans: loansMerge.items,
+        loans: sortRecords(loansMerge.items),
         invoiceCounters: {
           sale: Math.max(
             Number(local?.invoiceCounters?.sale) || 0,
