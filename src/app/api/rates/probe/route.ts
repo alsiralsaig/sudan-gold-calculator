@@ -102,12 +102,20 @@ export async function GET(request: Request) {
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/g, ' ')
       .replace(/\s+/g, ' ');
-    const idx = text.indexOf('الدولار');
+    const around = (needle: string, chars: number) => {
+      const i = text.indexOf(needle);
+      return i >= 0 ? text.slice(Math.max(0, i - 60), i + chars) : null;
+    };
     return NextResponse.json({
       ok: true,
       bytes: body.length,
-      snippet: idx >= 0 ? text.slice(Math.max(0, idx - 200), idx + 700) : text.slice(0, 600),
-      numbers: (text.match(/[\d,]{4,9}/g) || []).slice(0, 12),
+      snippets: {
+        الدولار: around('الدولار', 1600),
+        شراء: around('شراء', 900),
+        الموازي: around('الموازي', 900),
+        بنك: around('بنك', 900),
+      },
+      numbers: (text.match(/[\d,]{3,9}/g) || []).slice(0, 20),
     });
   }
 
