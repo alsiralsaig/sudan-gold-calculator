@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import {
   TrendingDown,
   Plus,
-  Search,
   Filter,
   Building2,
   UserCheck,
@@ -21,7 +20,7 @@ import {
 import { Expense, LoanDirection } from '../../types';
 import { summarizeExpenses, partnerExpenseText, PeriodFilter } from '../../core/expenseSummary';
 import { matchExpenseQuery } from '../../core/globalSearch';
-import { PasteButton } from '../common/PasteButton';
+import { SmartSearchBar } from '../common/SmartSearchBar';
 import { ShareButtons } from '../common/ShareButtons';
 
 export const ExpensesScreen: React.FC = () => {
@@ -175,20 +174,13 @@ export const ExpensesScreen: React.FC = () => {
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
       
-      {/* 1. Search Bar */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 min-w-0">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="بحث بالبيان أو الشريك أو المبلغ..."
-            className="w-full bg-slate-900 border border-slate-800 focus:border-rose-400 rounded-2xl py-3 px-4 pl-10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none shadow-md transition-colors"
-          />
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        </div>
-        <PasteButton onPaste={(text) => setSearchQuery(text)} compact />
-      </div>
+      {/* 1. العدسة في سطر الفلاتر — البحث ينفتح عند الحاجة فقط */}
+      <SmartSearchBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="بحث بالبيان أو الشريك أو المبلغ..."
+        accent="rose"
+      />
 
       {/* 2. فلترة الجهة: الكل / عامة / خاصة */}
       <div className="grid grid-cols-3 gap-2">

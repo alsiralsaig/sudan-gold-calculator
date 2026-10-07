@@ -4,7 +4,6 @@ import {
   Plus,
   Printer,
   Edit2,
-  Search,
   AlertTriangle,
   Filter,
   HandCoins,
@@ -34,7 +33,7 @@ import { PrintableInvoice, buildSaleInvoice } from '../../core/invoice';
 import { branchName } from '../../core/branches';
 import { operationPriceWarning } from '../../core/pricing';
 import { matchSaleQuery } from '../../core/globalSearch';
-import { PasteButton } from '../common/PasteButton';
+import { SmartSearchBar } from '../common/SmartSearchBar';
 import { StickyActionBar } from '../layout/StickyActionBar';
 
 export const SalesScreen: React.FC = () => {
@@ -280,23 +279,12 @@ export const SalesScreen: React.FC = () => {
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
       
-      {/* 1. Search Bar */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 min-w-0">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="بحث بالاسم، الهاتف، المبلغ، الوزن (5.3.2)، الفاتورة..."
-            className="w-full bg-slate-900 border border-slate-800 focus:border-amber-400 rounded-2xl py-3 px-4 pl-10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none shadow-md transition-colors"
-          />
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        </div>
-        <PasteButton onPaste={(text) => setSearchQuery(text)} compact />
-      </div>
-
-      {/* 2. Filter Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+      {/* 1. العدسة + فلاتر الفترة في سطر واحد — البحث ينفتح عند الحاجة فقط */}
+      <SmartSearchBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="بحث بالاسم، الهاتف، المبلغ، الوزن (5.3.2)، الفاتورة..."
+      >
         {[
           { id: 'all', label: 'الكل' },
           { id: 'today', label: 'اليوم' },
@@ -316,7 +304,7 @@ export const SalesScreen: React.FC = () => {
             {filterPeriod === tab.id && ' ✓'}
           </button>
         ))}
-      </div>
+      </SmartSearchBar>
 
       {filteredSales.length > 0 && <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">
         <div className="text-[11px] text-slate-400">إجراءات الصفحة على السجلات الظاهرة فقط</div>

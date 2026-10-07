@@ -4,7 +4,6 @@ import React, { useMemo, useState } from 'react';
 import {
   HandCoins,
   Plus,
-  Search,
   ArrowUpLeft,
   ArrowDownRight,
   Pencil,
@@ -21,7 +20,7 @@ import {
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { Loan, LoanDirection } from '../../types';
 import { matchLoanQuery } from '../../core/globalSearch';
-import { PasteButton } from '../common/PasteButton';
+import { SmartSearchBar } from '../common/SmartSearchBar';
 import { fmtNum, formatInvoiceDate, kCurrency } from '../../core/format';
 import {
   isLoanSettled,
@@ -248,22 +247,14 @@ export const LoansScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* البحث والفلاتر */}
+      {/* البحث والفلاتر — العدسة في نفس سطر الفلاتر */}
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 min-w-0">
-            <Search className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="ابحث بالاسم أو الهاتف أو المبلغ أو الملاحظات..."
-              className="w-full bg-slate-900 border border-slate-800 rounded-2xl pr-9 pl-3 py-2.5 text-xs focus:outline-none focus:border-amber-500"
-            />
-          </div>
-          <PasteButton onPaste={(text) => setQuery(text)} compact />
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <SmartSearchBar
+          value={query}
+          onChange={setQuery}
+          placeholder="ابحث بالاسم أو الهاتف أو المبلغ أو دفعات السداد..."
+        >
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           {FILTERS.map((f) => {
             const active = filter === f.id;
             const badge = f.id === 'overdue' ? overdueCount : 0;
@@ -290,7 +281,8 @@ export const LoansScreen: React.FC = () => {
               </button>
             );
           })}
-        </div>
+          </div>
+        </SmartSearchBar>
       </div>
 
       {/* القائمة */}

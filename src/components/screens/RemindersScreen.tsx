@@ -8,7 +8,6 @@ import {
   HandCoins,
   Wallet,
   Users,
-  Search,
   CheckCircle2,
   MessageCircle,
 } from 'lucide-react';
@@ -18,6 +17,7 @@ import { buildReminderText, openWhatsApp } from '../../core/share';
 import { fmtNum, fmtMoney, kCurrency } from '../../core/format';
 import { arabicDate, relativeDays } from '../../core/dates';
 import { StickyActionBar } from '../layout/StickyActionBar';
+import { SmartSearchBar } from '../common/SmartSearchBar';
 
 type Filter = 'all' | 'overdue' | 'today' | 'upcoming' | 'receivable' | 'payable';
 
@@ -161,18 +161,13 @@ export const RemindersScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* البحث والفلاتر */}
+      {/* البحث والفلاتر — العدسة في نفس سطر الفلاتر */}
       <div className="space-y-2">
-        <div className="relative">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="ابحث باسم الزبون أو المورد..."
-            className="w-full bg-slate-900 border border-slate-800 focus:border-amber-400 rounded-2xl py-3 px-4 pl-10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none"
-          />
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        </div>
-
+        <SmartSearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="ابحث باسم الزبون أو المورد..."
+        >
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
           {FILTERS.map((f) => {
             const count =
@@ -202,6 +197,7 @@ export const RemindersScreen: React.FC = () => {
             );
           })}
         </div>
+        </SmartSearchBar>
       </div>
 
       {/* القائمة */}
