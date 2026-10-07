@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { checkApproval } from '../core/pricing';
+import { checkApproval, computeGoldPrice, TRADE_KARAT } from '../core/pricing';
 import type { Aggregate, ApprovedPrice, GoldComputation, SourceReading } from '../core/pricing';
 import {
   AppTombstones,
@@ -1087,18 +1087,31 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }));
   };
 
+  /**
+   * تعديل السوق المحلي — مصدر حقيقة واحد مع محرك الأسعار.
+   * يُعاد الحساب فوراً من آخر مدخلات المحرك (بلا شبكة) ثم يُحدَّث من المصادر.
+   */
   const setLocalPremium = (percent: number) => {
-    setRates((prev) => {
-      const base = prev.karat21Base || prev.karat21;
-      return {
-        ...prev,
-        localPremiumPercent: percent,
-        karat21: Math.round(base * (1 + percent / 100)),
-        karat24: Math.round(base * (24 / 21) * (1 + percent / 100)),
-        karat22: Math.round(base * (22 / 21) * (1 + percent / 100)),
-        karat18: Math.round(base * (18 / 21) * (1 + percent / 100)),
-      };
-    });
+    setLocalAdjust(percent);
+    const inputs = engineSnapshot?.inputs;
+    if (inputs?.ounceUsd && inputs?.usdBuy && inputs?.usdSell) {
+      const recomputed = computeGoldPrice({
+        ounceUsd: inputs.ounceUsd,
+        usdBuy: inputs.usdBuy,
+        usdSell: inputs.usdSell,
+        localAdjustPercent: percent,
+        karat: TRADE_KARAT,
+      });
+      if (recomputed.ok) {
+        approvePrice(
+          { buy: recomputed.buy, sell: recomputed.sell },
+          'manual',
+          `تعديل السوق المحلي ${percent > 0 ? '+' : ''}${percent}%`
+        );
+      }
+    }
+    setRates((prev) => ({ ...prev, localPremiumPercent: percent }));
+    refreshEngine();
   };
 
   const setManualRateOverride = (enabled: boolean) => {
