@@ -51,8 +51,67 @@ function snippet(html: string, needle: string, limit = 3, window = 200): string[
   return out;
 }
 
+/** يعيد الروابط التي يحتوي نصها على كلمة معينة (لفهم بنية المواقع) */
+function linksWith(html: string, needle: string, base: string, limit = 12): { href: string; text: string }[] {
+  const out: { href: string; text: string }[] = [];
+  const re = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]{0,160}?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) && out.length < limit) {
+    const text = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!text.includes(needle)) continue;
+    let href = m[1];
+    if (href.startsWith('/')) href = base.replace(/\/$/, '') + href;
+    if (href.startsWith('http')) out.push({ href, text: text.slice(0, 90) });
+  }
+  return out;
+}
+
 export async function GET(request: Request) {
-  const inspect = new URL(request.url).searchParams.get('mode') === 'inspect';
+  const url = new URL(request.url);
+  const mode = url.searchParams.get('mode');
+
+  if (mode === 'links') {
+    const targets = [
+      { name: 'pls48 (اقتصاد)', url: 'https://pls48.net/category/economy/', base: 'https://pls48.net', needle: 'دولار' },
+      { name: 'pls48 (بحث)', url: 'https://pls48.net/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1+%D8%A7%D9%84%D8%B3%D9%88%D8%AF%D8%A7%D9%86', base: 'https://pls48.net', needle: 'دولار' },
+      { name: 'اليوم نيوز (بحث)', url: 'https://aluom.net/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1', base: 'https://aluom.net', needle: 'دولار' },
+      { name: 'الراكوبة (رئيسية)', url: 'https://alrakoba.net/', base: 'https://alrakoba.net', needle: 'دولار' },
+      { name: 'الراكوبة (اقتصاد)', url: 'https://alrakoba.net/category/economy/', base: 'https://alrakoba.net', needle: 'دولار' },
+      { name: 'Google News RSS', url: 'https://news.google.com/rss/search?q=%D8%B3%D8%B9%D8%B1+%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1+%D9%81%D9%8A+%D8%A7%D9%84%D8%B3%D9%88%D8%AF%D8%A7%D9%86+%D8%AC%D9%86%D9%8A%D9%87&hl=ar&gl=SD&ceid=SD:ar', base: 'https://news.google.com', needle: 'جنيه' },
+    ];
+    const out = await Promise.all(
+      targets.map(async (t) => {
+        const body = await fetchText(t.url, 12000);
+        if (!body) return { name: t.name, ok: false, links: [] };
+        return { name: t.name, ok: true, links: linksWith(body, t.needle, t.base) };
+      })
+    );
+    return NextResponse.json({ ok: true, mode: 'links', out });
+  }
+
+  if (mode === 'fetch') {
+    const target = url.searchParams.get('url') || '';
+    const allowed = /^https:\/\/(pls48\.net|aluom\.net|alrakoba\.net|sudafax\.com|nbs\.sd)\//;
+    if (!allowed.test(target)) {
+      return NextResponse.json({ ok: false, message: 'رابط غير مسموح' }, { status: 400 });
+    }
+    const body = await fetchText(target, 15000);
+    if (!body) return NextResponse.json({ ok: false, message: 'لا رد' });
+    const text = body
+      .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ');
+    const idx = text.indexOf('الدولار');
+    return NextResponse.json({
+      ok: true,
+      bytes: body.length,
+      snippet: idx >= 0 ? text.slice(Math.max(0, idx - 200), idx + 700) : text.slice(0, 600),
+      numbers: (text.match(/[\d,]{4,9}/g) || []).slice(0, 12),
+    });
+  }
+
+  const inspect = mode === 'inspect';
   if (inspect) {
     const targets = [
       { name: 'فلسطينيو48 (اقتصاد)', url: 'https://pls48.net/category/economy/' },
