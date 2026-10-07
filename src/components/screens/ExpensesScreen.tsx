@@ -15,6 +15,8 @@ import {
   fmtMoney,
   fmtNum,
   formatInvoiceDate,
+  formatEntryTime,
+  formatDateWithTime,
   kCurrency
 } from '../../core/format';
 import { Expense, LoanDirection } from '../../types';
@@ -426,7 +428,10 @@ export const ExpensesScreen: React.FC = () => {
                       className="hover:bg-slate-800/60 cursor-pointer transition-colors"
                     >
                       <td className="py-3.5 px-3 text-right text-slate-300 font-mono text-[11px] whitespace-nowrap">
-                        {formatInvoiceDate(item.date)}
+                        <div>{formatInvoiceDate(item.date)}</div>
+                        {formatEntryTime(item.date) && (
+                          <div className="text-[10px] text-slate-500 mt-0.5">{formatEntryTime(item.date)}</div>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-3 text-center text-rose-400 font-mono font-black text-xs whitespace-nowrap">
@@ -710,7 +715,7 @@ export const ExpensesScreen: React.FC = () => {
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-slate-400">التاريخ:</span>
-                <span className="font-mono text-white">{formatInvoiceDate(selectedExpense.date)}</span>
+                <span className="font-mono text-white">{formatDateWithTime(selectedExpense.date)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">البيان:</span>

@@ -21,7 +21,7 @@ import { useGoldStore } from '../../context/GoldStoreContext';
 import { Loan, LoanDirection } from '../../types';
 import { matchLoanQuery } from '../../core/globalSearch';
 import { SmartSearchBar } from '../common/SmartSearchBar';
-import { fmtNum, formatInvoiceDate, kCurrency } from '../../core/format';
+import { fmtNum, formatDateWithTime, kCurrency } from '../../core/format';
 import {
   isLoanSettled,
   loanPaid,
@@ -345,7 +345,7 @@ export const LoansScreen: React.FC = () => {
                       ) : null}
                     </div>
                     <div className="text-[10px] text-slate-400 flex flex-wrap items-center gap-x-3 mt-1">
-                      <span>{formatInvoiceDate(loanItem.date)}</span>
+                      <span>{formatDateWithTime(loanItem.date)}</span>
                       {loanItem.phone ? (
                         <a
                           href={`tel:${loanItem.phone}`}

@@ -63,3 +63,27 @@ export function formatInvoiceDate(dateStr: string): string {
     return dateStr;
   }
 }
+
+/**
+ * زمن إدخال الحساب بالساعة والدقيقة (نظام 12 ساعة بالسوداني): 3:05 م
+ * - التاريخ يُحفظ لحظة الإدخال بصيغة ISO كاملة، فالزمن متاح حتى للسجلات القديمة.
+ * - تاريخ بلا زمن (YYYY-MM-DD — بيانات مستوردة/قديمة جداً) → نص فارغ،
+ *   حتى لا نعرض زمناً مخترعاً مثل 2:00 ص.
+ * - بالتوقيت المحلي للجهاز.
+ */
+export function formatEntryTime(dateStr?: string | null): string {
+  if (!dateStr || typeof dateStr !== 'string') return '';
+  if (!/T\d{2}:\d{2}/.test(dateStr)) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const h24 = d.getHours();
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${h12}:${mm} ${h24 < 12 ? 'ص' : 'م'}`;
+}
+
+/** التاريخ والزمن معاً للتفاصيل: 7/10/2026 — 3:05 م */
+export function formatDateWithTime(dateStr: string): string {
+  const t = formatEntryTime(dateStr);
+  return t ? `${formatInvoiceDate(dateStr)} — ${t}` : formatInvoiceDate(dateStr);
+}

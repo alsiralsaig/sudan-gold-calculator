@@ -1,6 +1,6 @@
 import { Purchase, Sale } from '../types';
 import { purchasePending, salePending } from './accounting';
-import { daysBetween, startOfDay } from './dates';
+import { daysBetween, startOfDay, toDateInputValue } from './dates';
 
 export type DueStatus = 'overdue' | 'today' | 'soon' | 'later' | 'nodate';
 
@@ -129,7 +129,8 @@ export function computeDues(
 export function suggestedDueDate(from: Date = new Date()): string {
   const d = new Date(from);
   d.setDate(d.getDate() + 30);
-  return d.toISOString().slice(0, 10);
+  // بالتوقيت المحلي — toISOString (UTC) كان يُنقص يوماً في السودان بين 12 و2 بعد منتصف الليل
+  return toDateInputValue(d);
 }
 
 /**

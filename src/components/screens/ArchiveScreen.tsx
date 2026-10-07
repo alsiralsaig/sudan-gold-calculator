@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Archive, RotateCcw, Trash2 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { Expense, Loan, Partner, Purchase, Sale } from '../../types';
-import { fmtNum, formatInvoiceDate, unitsToGhJ } from '../../core/format';
+import { fmtNum, formatDateWithTime, unitsToGhJ } from '../../core/format';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { SmartSearchBar } from '../common/SmartSearchBar';
 import { sortRecords } from '../../core/recordOrder';
@@ -82,7 +82,7 @@ export const ArchiveScreen: React.FC = () => {
       </SmartSearchBar>
     </div>
     <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
-      {items.length === 0 ? <div className="py-16 text-center text-slate-500 text-sm">الأرشيف فارغ</div> : shown.length === 0 ? <div className="py-16 text-center text-slate-500 text-sm">لا نتائج مطابقة للبحث في الأرشيف</div> : shown.map(x => <div key={`${x.kind}-${x.item.id}`} className="flex items-center gap-3 p-4 border-b border-slate-800 last:border-0"><div className="flex-1 min-w-0"><div className="text-[10px] text-amber-400 font-bold">{label(x)}</div><div className="text-sm text-white font-bold truncate">{title(x)}</div><div className="text-[11px] text-slate-400">{'date' in x.item ? formatInvoiceDate(x.item.date) : 'بيانات شريك'}</div>{x.kind === 'purchase' && <div className="text-[11px] text-slate-400">الوزن: {unitsToGhJ((x.item as Purchase).units)}</div>}</div><button onClick={() => restore(x)} className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400" title="استعادة"><RotateCcw className="w-4 h-4"/></button><button onClick={() => remove(x)} className="p-2 rounded-xl bg-rose-500/15 text-rose-400" title="حذف نهائي"><Trash2 className="w-4 h-4"/></button></div>)}
+      {items.length === 0 ? <div className="py-16 text-center text-slate-500 text-sm">الأرشيف فارغ</div> : shown.length === 0 ? <div className="py-16 text-center text-slate-500 text-sm">لا نتائج مطابقة للبحث في الأرشيف</div> : shown.map(x => <div key={`${x.kind}-${x.item.id}`} className="flex items-center gap-3 p-4 border-b border-slate-800 last:border-0"><div className="flex-1 min-w-0"><div className="text-[10px] text-amber-400 font-bold">{label(x)}</div><div className="text-sm text-white font-bold truncate">{title(x)}</div><div className="text-[11px] text-slate-400">{'date' in x.item ? formatDateWithTime(x.item.date) : 'بيانات شريك'}</div>{x.kind === 'purchase' && <div className="text-[11px] text-slate-400">الوزن: {unitsToGhJ((x.item as Purchase).units)}</div>}</div><button onClick={() => restore(x)} className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400" title="استعادة"><RotateCcw className="w-4 h-4"/></button><button onClick={() => remove(x)} className="p-2 rounded-xl bg-rose-500/15 text-rose-400" title="حذف نهائي"><Trash2 className="w-4 h-4"/></button></div>)}
     </div>
 
     {/* شريط ثابت: عدد السجلات المؤرشفة */}
