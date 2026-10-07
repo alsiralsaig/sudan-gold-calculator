@@ -54,6 +54,54 @@ function pairAfter(text: string, keyword: string, window = 220): { buy: number |
 }
 
 /* ------------------------------------------------------------------ */
+/*                        أدوات مشتركة (RSS/إعادة)                    */
+/* ------------------------------------------------------------------ */
+
+/** جلب مع إعادة محاولة — المصادر السودانية متقطعة، والمحاولة الثانية تنقذ كثيراً */
+async function fetchTextRetry(url: string, timeoutMs = 12000, attempts = 2): Promise<string | null> {
+  for (let i = 0; i < attempts; i++) {
+    const html = await fetchText(url, timeoutMs);
+    if (html) return html;
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, 500));
+  }
+  return null;
+}
+
+export interface RssItem {
+  title: string;
+  link: string;
+  description: string;
+  pubDate: string | null;
+}
+
+/** قارئ RSS بسيط — يكفي لمواقع ووردبريس التي نعتمد عليها */
+export function parseRssItems(xml: string): RssItem[] {
+  const items = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) || [];
+  const clean = (raw: string | undefined): string =>
+    (raw || '')
+      .replace(/^\s*<!\[CDATA\[/, '')
+      .replace(/\]\]>\s*$/, '')
+      .trim();
+  return items.map((item) => {
+    const grab = (tag: string): string | undefined => {
+      const m = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+      return m?.[1];
+    };
+    const pubRaw = clean(grab('pubDate'));
+    const pub = pubRaw ? new Date(pubRaw) : null;
+    return {
+      title: clean(grab('title')),
+      link: clean(grab('link')),
+      description: clean(grab('description')),
+      pubDate: pub && !isNaN(pub.getTime()) ? pub.toISOString() : null,
+    };
+  });
+}
+
+/** تحويل وصف RSS (HTML) إلى نص نظيف */
+const rssText = (descHtml: string): string => normalizeDigits(htmlToText(descHtml));
+
+/* ------------------------------------------------------------------ */
 /*                    سودافاكس — JSON-LD articleBody                  */
 /* ------------------------------------------------------------------ */
 
@@ -108,33 +156,80 @@ function extractJsonLdBody(html: string): string | null {
   return null;
 }
 
-async function fetchSudafaxReading(): Promise<{ reading: SourceReading | null; gold21: number | null; error: string | null }> {
-  const search = await fetchText('https://sudafax.com/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1', 12000);
-  if (!search) return { reading: null, gold21: null, error: 'سودافاكس: تعذّر الوصول' };
+export function parseSudafaxFeedItem(descHtml: string): { buy: number | null; sell: number | null } {
+  const text = rssText(descHtml);
 
-  const links = Array.from(search.matchAll(/<h2[^>]*>\s*<a[^>]*href="(https:\/\/sudafax\.com\/\d+\/[^"]+)"/g)).map((m) => m[1]);
-  const articleUrls = links.filter((u) => /%D8%AF%D9%88%D9%84%D8%A7%D8%B1|دولار|أسعار|%d8%a3%d8%b3%d8%b9%d8%a7%d8%b1/.test(decodeURIComponent(u)));
-  for (const url of articleUrls.slice(0, 3)) {
-    const html = await fetchText(url, 12000);
-    if (!html) continue;
-    const parsed = parseSudafaxArticle(html);
-    if (parsed.usd.sell) {
-      return {
-        reading: {
-          source: 'سودافاكس',
-          kind: 'parallel',
-          buy: parsed.usd.buy,
-          sell: parsed.usd.sell,
-          at: nowIso(),
-          url,
-          label: parsed.title || undefined,
-        },
-        gold21: parsed.gold21,
-        error: null,
-      };
+  // الصيغة الأكثر شيوعاً: «سجل الدولار 8,185 جنيهاً للشراء و8,675 جنيهاً للبيع»
+  const pair = text.match(
+    /الدولار[^\d]{0,60}?([\d][\d.,]{2,12})[^\d]{0,60}?للشراء[^\d]{0,40}?([\d][\d.,]{2,12})[^\d]{0,40}?للبيع/
+  );
+  if (pair) return { buy: toNum(pair[1]), sell: toNum(pair[2]) };
+
+  // صيغة بديلة: «شراء 7,005 وبيع 7,420»
+  const alt = text.match(/(?:شراء)[^\d]{0,30}?([\d][\d.,]{2,12})[^\d]{0,60}?(?:بيع)[^\d]{0,30}?([\d][\d.,]{2,12})/);
+  if (alt) return { buy: toNum(alt[1]), sell: toNum(alt[2]) };
+
+  // رقم واحد فقط
+  const single = text.match(/الدولار[^\d]{0,60}?([\d][\d.,]{3,12})/);
+  if (single) return { buy: null, sell: toNum(single[1]) };
+
+  return { buy: null, sell: null };
+}
+
+async function fetchSudafaxReading(): Promise<{ reading: SourceReading | null; gold21: number | null; error: string | null }> {
+  // ① الـ feed أولاً: أخف (55KB) وأسرع وأثبت من صفحات البحث والمقالات
+  const feed = await fetchTextRetry('https://sudafax.com/feed/', 12000);
+  if (feed) {
+    const items = parseRssItems(feed);
+    const priced = items.find((it) => /أسعار|سعر/.test(it.title) && /الدولار|العملات/.test(it.title));
+    if (priced) {
+      const parsed = parseSudafaxFeedItem(priced.description);
+      if (parsed.sell || parsed.buy) {
+        const gold = parseSudafaxArticle(`<html><body>${priced.description}</body></html>`).gold21;
+        return {
+          reading: {
+            source: 'سودافاكس',
+            kind: 'parallel',
+            buy: parsed.buy,
+            sell: parsed.sell,
+            at: priced.pubDate || nowIso(),
+            url: priced.link,
+            label: priced.title.slice(0, 90),
+          },
+          gold21: gold,
+          error: null,
+        };
+      }
     }
   }
-  return { reading: null, gold21: null, error: 'سودافاكس: لا يوجد سعر في المقالات الحديثة' };
+
+  // ② بديل: صفحة البحث ثم المقال
+  const search = await fetchTextRetry('https://sudafax.com/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1', 12000, 1);
+  if (search) {
+    const links = Array.from(search.matchAll(/<h2[^>]*>\s*<a[^>]*href="(https:\/\/sudafax\.com\/\d+\/[^"]+)"/g)).map((m) => m[1]);
+    const articleUrls = links.filter((u) => /%D8%AF%D9%88%D9%84%D8%A7%D8%B1|دولار|أسعار|%d8%a3%d8%b3%d8%b9%d8%a7%d8%b1/.test(decodeURIComponent(u)));
+    for (const url of articleUrls.slice(0, 2)) {
+      const html = await fetchText(url, 12000);
+      if (!html) continue;
+      const parsed = parseSudafaxArticle(html);
+      if (parsed.usd.sell) {
+        return {
+          reading: {
+            source: 'سودافاكس',
+            kind: 'parallel',
+            buy: parsed.usd.buy,
+            sell: parsed.usd.sell,
+            at: nowIso(),
+            url,
+            label: parsed.title || undefined,
+          },
+          gold21: parsed.gold21,
+          error: null,
+        };
+      }
+    }
+  }
+  return { reading: null, gold21: null, error: 'سودافاكس: تعذّر الوصول أو لا سعر حديث' };
 }
 
 /* ------------------------------------------------------------------ */
@@ -164,7 +259,7 @@ export function parseSudanakhbarArticle(text: string): { buy: number | null; sel
 }
 
 async function fetchSudanakhbarReading(): Promise<{ reading: SourceReading | null; error: string | null }> {
-  const section = await fetchText('https://www.sudanakhbar.com/latestnews/dollar-prices', 12000);
+  const section = await fetchTextRetry('https://www.sudanakhbar.com/latestnews/dollar-prices', 12000);
   if (!section) return { reading: null, error: 'اخبار السودان: تعذّر الوصول' };
   const links = Array.from(section.matchAll(/href="(https:\/\/www\.sudanakhbar\.com\/\d+)"/g)).map((m) => m[1]);
   const unique = Array.from(new Set(links)).slice(0, 4);
@@ -212,6 +307,32 @@ export function parseAlmashhadArticle(text: string): { price: number | null } {
 }
 
 async function fetchAlmashhadReading(): Promise<{ reading: SourceReading | null; error: string | null }> {
+  const FEED = 'https://almashhadalsudani.com/economic-news/currency-prices-sudan/feed/';
+
+  // ① الـ feed أولاً (صفحة التصنيف كبيرة وبطيئة)
+  const feed = await fetchTextRetry(FEED, 12000);
+  if (feed) {
+    const items = parseRssItems(feed);
+    for (const item of items.slice(0, 5)) {
+      if (!/دولار/.test(item.title)) continue;
+      const parsed = parseAlmashhadArticle(`${item.title} ${rssText(item.description)}`);
+      if (parsed.price) {
+        return {
+          reading: {
+            source: 'المشهد السوداني',
+            kind: 'parallel',
+            price: parsed.price,
+            at: item.pubDate || nowIso(),
+            url: item.link,
+            label: item.title.slice(0, 90),
+          },
+          error: null,
+        };
+      }
+    }
+  }
+
+  // ② بديل: صفحة التصنيف ثم المقالات
   const section = await fetchText('https://almashhadalsudani.com/economic-news/currency-prices-sudan/', 12000);
   if (!section) return { reading: null, error: 'المشهد السوداني: تعذّر الوصول' };
   const links = Array.from(
@@ -263,7 +384,7 @@ export function parsePls48Article(text: string): { buy: number | null; sell: num
 
 async function fetchPls48Reading(): Promise<{ reading: SourceReading | null; error: string | null }> {
   // صفحة التصنيف: آخر مقالات أسعار العملات في السودان
-  const section = await fetchText('https://pls48.net/category/economy/', 12000);
+  const section = await fetchTextRetry('https://pls48.net/category/economy/', 12000);
   if (!section) return { reading: null, error: 'فلسطينيو48: تعذّر الوصول' };
   const links = Array.from(new Set(Array.from(section.matchAll(/href="(https:\/\/pls48\.net\/[^"#]+)"/g)).map((m) => m[1])))
     .filter((u) => /%D8%A7%D9%84%D8%B3%D9%88%D8%AF%D8%A7%D9%86|%D8%A3%D8%B3%D8%B9%D8%A7%D8%B1/.test(u))
@@ -307,7 +428,7 @@ export function parseNbsOfficial(text: string): { buy: number | null; sell: numb
 }
 
 async function fetchOfficialUsdReading(): Promise<{ reading: SourceReading | null; error: string | null }> {
-  const html = await fetchText('https://nbs.sd/currency-rate/?lang=en', 12000);
+  const html = await fetchTextRetry('https://nbs.sd/currency-rate/?lang=en', 12000);
   if (!html) return { reading: null, error: 'بنك السودان المركزي: تعذّر الوصول' };
   const parsed = parseNbsOfficial(htmlToText(html));
   if (!parsed.buy && !parsed.sell) return { reading: null, error: 'بنك السودان المركزي: لم يُعثر على صف الدولار' };
@@ -345,7 +466,7 @@ async function fetchSpotReadings(): Promise<{ readings: SourceReading[]; errors:
   const readings: SourceReading[] = [];
   const errors: string[] = [];
 
-  const goldApi = await fetchText('https://api.gold-api.com/price/XAU', 9000);
+  const goldApi = await fetchTextRetry('https://api.gold-api.com/price/XAU', 9000);
   if (goldApi) {
     try {
       const price = parseGoldApiJson(JSON.parse(goldApi));
@@ -357,7 +478,7 @@ async function fetchSpotReadings(): Promise<{ readings: SourceReading[]; errors:
     errors.push('gold-api: تعذّر الوصول');
   }
 
-  const coinbase = await fetchText('https://api.coinbase.com/v2/prices/PAXG-USD/spot', 9000);
+  const coinbase = await fetchTextRetry('https://api.coinbase.com/v2/prices/PAXG-USD/spot', 9000);
   if (coinbase) {
     try {
       const price = parseCoinbaseJson(JSON.parse(coinbase));

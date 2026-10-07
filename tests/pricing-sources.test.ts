@@ -7,7 +7,9 @@ import {
   parseGoldApiJson,
   parseNbsOfficial,
   parsePls48Article,
+  parseRssItems,
   parseSudafaxArticle,
+  parseSudafaxFeedItem,
   parseSudanakhbarArticle,
 } from '../src/lib/pricingSources';
 
@@ -102,4 +104,44 @@ test('gold-api: يقرأ السعر من JSON', () => {
 test('Coinbase PAXG: يقرأ amount النصي', () => {
   assert.equal(parseCoinbaseJson({ data: { amount: '4141.97', base: 'PAXG' } }), 4141.97);
   assert.equal(parseCoinbaseJson({ data: {} }), null);
+});
+
+/* ------------------------------ RSS ------------------------------ */
+
+test('parseRssItems: يقرأ عناصر RSS مع التاريخ والعنوان والنص', () => {
+  const xml = `<rss><channel>
+    <item><title><![CDATA[أسعار الدولار والذهب في السودان اليوم]]></title>
+      <link>https://sudafax.com/584690/x</link>
+      <pubDate>Tue, 06 Oct 2026 17:42:39 +0000</pubDate>
+      <description><![CDATA[<p>سجل الدولار 8,185 جنيهاً للشراء و8,675 جنيهاً للبيع</p>]]></description>
+    </item>
+    <item><title>خبر آخر</title><link>https://sudafax.com/1</link><description>بلا تاريخ</description></item>
+  </channel></rss>`;
+  const items = parseRssItems(xml);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].title, 'أسعار الدولار والذهب في السودان اليوم');
+  assert.equal(items[0].link, 'https://sudafax.com/584690/x');
+  assert.ok(items[0].pubDate && items[0].pubDate.startsWith('2026-10-06'), 'التاريخ يُحوَّل ISO');
+  assert.equal(items[1].pubDate, null, 'بلا تاريخ = null');
+});
+
+test('parseSudafaxFeedItem: «8,185 جنيهاً للشراء و8,675 جنيهاً للبيع»', () => {
+  const desc =
+    '<p>شهدت أسعار العملات تفاوتاً، فيما سجل الدولار 8,185 جنيهاً للشراء و8,675 جنيهاً للبيع، وفق الأسعار الواردة.</p>';
+  const r = parseSudafaxFeedItem(desc);
+  assert.equal(r.buy, 8185);
+  assert.equal(r.sell, 8675);
+});
+
+test('parseSudafaxFeedItem: صيغة «شراء X وبيع Y» ورقم مفرد', () => {
+  assert.deepEqual(parseSudafaxFeedItem('<p>الدولار الأمريكي: شراء 7,005 وبيع 7,420 جنيه.</p>'), { buy: 7005, sell: 7420 });
+  const single = parseSudafaxFeedItem('<p>وسجل الدولار 8,730 جنيه في السوق الموازي.</p>');
+  assert.equal(single.sell, 8730);
+  assert.equal(single.buy, null);
+});
+
+test('parseSudafaxFeedItem: نص بلا سعر → قيم فارغة', () => {
+  const r = parseSudafaxFeedItem('<p>تعديل وزاري في الحكومة السودانية</p>');
+  assert.equal(r.buy, null);
+  assert.equal(r.sell, null);
 });

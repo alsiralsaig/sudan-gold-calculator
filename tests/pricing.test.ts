@@ -216,3 +216,16 @@ test('aggregateReadings: مصدر واحد لا يُنتج تحذير «اختل
   assert.ok(agg.warnings.some((w) => w.includes('مصدر واحد')), 'ملاحظة مصدر واحد');
   assert.ok(agg.sell && agg.sell > 0, 'السعر متاح رغم التحفظ');
 });
+
+test('aggregateReadings: القراءة المفردة تدخل في حساب الشراء والبيع معاً', () => {
+  const readings: SourceReading[] = [
+    { source: 'أ', kind: 'parallel', buy: 8185, sell: 8675, at: fresh(30) },
+    { source: 'ب', kind: 'parallel', price: 8600, at: fresh(20) },
+  ];
+  const agg = aggregateReadings(readings, 'parallel', NOW);
+  assert.equal(agg.used.length, 2);
+  // البيع = وسيط [8675, 8600] = 8637.5 | الشراء = وسيط [8185, 8600] = 8392.5
+  assert.ok(Math.abs((agg.sell || 0) - 8637.5) < 1, `البيع ${agg.sell}`);
+  assert.ok(Math.abs((agg.buy || 0) - 8392.5) < 1, `الشراء ${agg.buy}`);
+  assert.ok(agg.buy && agg.sell && agg.buy < agg.sell);
+});

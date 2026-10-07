@@ -219,8 +219,17 @@ export function aggregateReadings(
     warnings.push(`أحدث قراءة عمرها ${Math.round(freshestAge / 60)} ساعة — قد لا تعكس السوق الآن`);
   }
 
-  const buyValues = used.map((r) => r.buy).filter((v): v is number => typeof v === 'number' && v > 0);
-  const sellValues = used.map((r) => r.sell).filter((v): v is number => typeof v === 'number' && v > 0);
+  // القراءة التي تنشر رقماً واحداً (بلا شراء/بيع) تُعتبر سعراً وسطاً يدخل في
+  // حساب الشراء والبيع معاً — وإلا ضاع مصدر كامل من أحد الجانبين.
+  const buyValues: number[] = [];
+  const sellValues: number[] = [];
+  for (const r of used) {
+    const ref = referenceValue(r);
+    if (typeof r.buy === 'number' && r.buy > 0) buyValues.push(r.buy);
+    else if (ref > 0) buyValues.push(ref);
+    if (typeof r.sell === 'number' && r.sell > 0) sellValues.push(r.sell);
+    else if (ref > 0) sellValues.push(ref);
+  }
 
   const sellRef = sellValues.length ? median(sellValues) : med;
   const buyRef = buyValues.length ? median(buyValues) : med;
