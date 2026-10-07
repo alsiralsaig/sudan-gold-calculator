@@ -113,8 +113,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     },
     {
       id: 'gold_price',
-      label: 'أسعار الذهب والعملات',
-      desc: 'السعر العالمي وسعر الدولار بالسوق الموازي',
+      label: 'محرك الأسعار',
+      desc: 'مصادر متعددة + تحقق + السعر المعتمد لبيعنا وشرائنا',
       icon: Coins,
       color: 'text-amber-400 bg-amber-500/10',
     },
@@ -184,7 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       case 'expenses':
         return 'سجل المصروفات';
       case 'gold_price':
-        return 'أسعار الذهب والعملات';
+        return 'محرك الأسعار';
       case 'reports':
         return 'التقارير والكشوفات';
       case 'analytics':
