@@ -171,6 +171,18 @@ export async function unsubscribeFromPush(): Promise<boolean> {
 }
 
 /** هل هذا الجهاز مشترك فعلاً؟ */
+/** هل السيرفر مهيّأ للإشعارات عن بُعد؟ (null = تعذّر الفحص) */
+export async function fetchVapidReady(): Promise<boolean | null> {
+  try {
+    const res = await fetch('/api/push/subscribe', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Boolean(data?.configured && data?.publicKey);
+  } catch {
+    return null;
+  }
+}
+
 export async function isPushSubscribed(): Promise<boolean> {
   if (!pushSupported()) return false;
   try {

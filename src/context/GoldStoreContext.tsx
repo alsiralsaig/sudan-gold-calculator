@@ -17,6 +17,7 @@ import {
 } from '../types';
 import { mergeRecordsWithTombstones } from '../core/merge';
 import { DEFAULT_STORE_NAME, normalizeStoreName } from '../core/branding';
+import { permissionState, pushSupported, subscribeToPush } from '../core/systemNotify';
 import { SessionSnapshotMeta, totalRecords } from '../core/session';
 import { buildCsv, buildExportTable, exportFileName } from '../core/dataExport';
 import {
@@ -2005,6 +2006,22 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, []);
 
+  /**
+   * إعادة ربط إشعارات الجهاز بالحساب الحالي بعد الدخول.
+   * اشتراك Web Push مسجَّل على السيرفر باسم الحساب القديم — إعادة الإرسال
+   * تُحدّث صاحب الاشتراك (upsert على endpoint) فتستمر الإشعارات بعد تبديل الحساب.
+   */
+  const relinkPushToAccount = useCallback(() => {
+    try {
+      if (!pushSupported()) return;
+      if (permissionState() !== 'granted') return;
+      if (!notificationPrefs.enabled) return;
+      void subscribeToPush().catch(() => undefined);
+    } catch {
+      /* تجاهل: الإشعارات ليست حرجة */
+    }
+  }, [notificationPrefs.enabled]);
+
   const signInCloud = async (email: string, pass: string, opts?: { clearLocal?: boolean }) => {
     if (!email.trim() || pass.length < 6) {
       return { success: false, message: 'يرجى كتابة بريد صحيح وكلمة مرور من 6 خانات على الأقل' };
@@ -2039,6 +2056,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       if (!put.ok) return { success: false, message: 'تم الدخول لكن فشل رفع البيانات' };
       setLastSyncTime(syncTimeLabel());
+      relinkPushToAccount();
       return { success: true, message: 'تم تسجيل الدخول ومزامنة بيانات السحابة 🔒' };
     } catch {
       return { success: false, message: 'تعذر الاتصال بقاعدة البيانات' };
@@ -2075,6 +2093,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       if (!put.ok) return { success: false, message: 'تم إنشاء الحساب لكن فشل رفع البيانات' };
       setLastSyncTime(syncTimeLabel());
+      relinkPushToAccount();
       return { success: true, message: 'تم إنشاء الحساب ورفع بيانات جهازك ☁️' };
     } catch {
       return { success: false, message: 'تعذر الاتصال بقاعدة البيانات' };

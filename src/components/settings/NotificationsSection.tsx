@@ -16,16 +16,19 @@ import {
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum } from '../../core/format';
 import { partnerDigestText } from '../../core/notifications';
+import { notificationHealth } from '../../core/notifyHealth';
 import { openWhatsApp } from '../../core/share';
 import {
   PermissionState,
   PushSubscribeResult,
+  fetchVapidReady,
   isIOS,
   isPushSubscribed,
   isStandalonePwa,
   permissionState,
   requestPermission,
   sendTestPush,
+  showSystemNotification,
   subscribeToPush,
   unsubscribeFromPush,
 } from '../../core/systemNotify';
@@ -55,6 +58,7 @@ export const NotificationsSection: React.FC = () => {
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
+  const [serverReady, setServerReady] = useState<boolean | null>(null);
 
   const ios = isIOS();
   const standalone = isStandalonePwa();
@@ -62,6 +66,7 @@ export const NotificationsSection: React.FC = () => {
   const refreshState = async () => {
     setPermission(permissionState());
     setSubscribed(await isPushSubscribed());
+    setServerReady(await fetchVapidReady());
   };
 
   useEffect(() => {
@@ -126,6 +131,47 @@ export const NotificationsSection: React.FC = () => {
       setBusy(false);
     }
   };
+
+  /** إصلاح شامل: إذن → ربط الاشتراك بالحساب → إشعار فوري للتأكيد */
+  const repairNotifications = async () => {
+    setBusy(true);
+    try {
+      let state = permissionState();
+      if (state === 'default') {
+        state = await requestPermission();
+        setPermission(state);
+      }
+      if (state !== 'granted') {
+        flash(state === 'denied' ? 'الإذن مرفوض — اسمح به من إعدادات الموقع في المتصفح' : 'تعذر منح الإذن');
+        return;
+      }
+      setNotificationPrefs({ enabled: true });
+      const res = await subscribeToPush();
+      setSubscribed(res.ok);
+      if (res.ok) {
+        await showSystemNotification('الإشعارات تعمل ✓', 'تم إصلاح وربط الإشعارات بهذا الحساب', {
+          tab: 'settings',
+        });
+        flash('تم الإصلاح — الإشعارات مربوطة بهذا الحساب ✓');
+      } else if (res.ok === false && res.reason === 'unconfigured') {
+        flash('السيرفر غير مهيّأ بمفاتيح VAPID — إشعارات التطبيق المفتوح تعمل');
+      } else {
+        flash('تعذر الربط — تأكد من الاتصال وحاول مرة أخرى');
+      }
+      await refreshState();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const health = notificationHealth({
+    permission,
+    enabled: notificationPrefs.enabled,
+    subscribed,
+    pushSupported: true,
+    configured: serverReady,
+    iosNeedsInstall: ios && !standalone,
+  });
 
   const digestText = useMemo(
     () =>
@@ -229,6 +275,62 @@ export const NotificationsSection: React.FC = () => {
             </p>
           </div>
         ) : null}
+
+        {/* تشخيص صحة الإشعارات — يشرح الحالة الحقيقية بدل الفشل الصامت */}
+        <div className={`rounded-2xl border p-3 space-y-2 ${
+          health.level === 'ok'
+            ? 'bg-emerald-500/10 border-emerald-500/30'
+            : health.level === 'off'
+            ? 'bg-slate-950 border-slate-800'
+            : 'bg-amber-500/10 border-amber-500/30'
+        }`}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-black text-white">{health.title}</span>
+            <span
+              className={`px-2 py-0.5 rounded-lg text-[10px] font-black border ${
+                health.level === 'ok'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : health.level === 'off'
+                  ? 'bg-slate-800 text-slate-300 border-slate-700'
+                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+              }`}
+            >
+              {health.level === 'ok' ? 'سليمة' : health.level === 'off' ? 'موقوفة' : 'تحتاج إصلاح'}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-300 leading-relaxed">{health.hint}</p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="bg-slate-950/60 rounded-xl p-2 border border-slate-800">
+              <span className="block text-[9px] text-slate-400 font-bold">إذن النظام</span>
+              <span className={`block font-black text-[11px] ${
+                permission === 'granted' ? 'text-emerald-300' : permission === 'denied' ? 'text-rose-300' : 'text-amber-300'
+              }`}>
+                {permission === 'granted' ? 'ممنوح ✓' : permission === 'denied' ? 'مرفوض ✗' : permission === 'unsupported' ? 'غير مدعوم' : 'يحتاج طلب'}
+              </span>
+            </div>
+            <div className="bg-slate-950/60 rounded-xl p-2 border border-slate-800">
+              <span className="block text-[9px] text-slate-400 font-bold">الربط بالسحابة</span>
+              <span className={`block font-black text-[11px] ${subscribed ? 'text-emerald-300' : 'text-amber-300'}`}>
+                {subscribed ? 'مربوط ✓' : 'غير مربوط'}
+              </span>
+            </div>
+            <div className="bg-slate-950/60 rounded-xl p-2 border border-slate-800">
+              <span className="block text-[9px] text-slate-400 font-bold">جاهزية السيرفر</span>
+              <span className={`block font-black text-[11px] ${serverReady === null ? 'text-slate-400' : serverReady ? 'text-emerald-300' : 'text-amber-300'}`}>
+                {serverReady === null ? '—' : serverReady ? 'جاهز ✓' : 'ناقص إعداد'}
+              </span>
+            </div>
+          </div>
+          {health.level !== 'ok' && (
+            <button
+              onClick={() => (health.action === 'resubscribe' || health.action === 'request-permission' ? repairNotifications() : enableNotifications())}
+              disabled={busy}
+              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-950 text-xs font-black transition-colors"
+            >
+              إصلاح الإشعارات الآن
+            </button>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-2">
           {permission === 'granted' && notificationPrefs.enabled && subscribed ? (

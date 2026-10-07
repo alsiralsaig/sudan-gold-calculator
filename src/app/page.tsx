@@ -22,6 +22,7 @@ import { LockScreen } from '../components/common/LockScreen';
 import { PwaInstallPrompt } from '../components/common/PwaInstallPrompt';
 import { StoreNamePrompt } from '../components/onboarding/StoreNamePrompt';
 import { BranchScopedNotice } from '../components/layout/BranchScopedNotice';
+import { NotificationsHealthBanner } from '../components/common/NotificationsHealthBanner';
 
 const KNOWN_TABS = [
   'dashboard',
@@ -90,6 +91,8 @@ function MainAppContent() {
         <div className="max-w-4xl mx-auto">
         {/* تنبيه: الفرع النشط يخفي سجلات موجودة — ضغطة واحدة ترجّعها */}
         <BranchScopedNotice />
+        {/* صحة الإشعارات: يظهر فقط لو الإشعارات مفعّلة وفيها خلل */}
+        <NotificationsHealthBanner />
         {activeTab === 'dashboard' && <DashboardScreen onNavigate={setActiveTab} />}
         {activeTab === 'calculator' && <CalculatorScreen />}
         {activeTab === 'partners' && <PartnersScreen />}
