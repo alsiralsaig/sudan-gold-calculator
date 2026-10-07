@@ -20,6 +20,7 @@ import { LoansScreen } from '../components/screens/LoansScreen';
 import { SearchScreen } from '../components/screens/SearchScreen';
 import { LockScreen } from '../components/common/LockScreen';
 import { PwaInstallPrompt } from '../components/common/PwaInstallPrompt';
+import { StoreNamePrompt } from '../components/onboarding/StoreNamePrompt';
 
 const KNOWN_TABS = [
   'dashboard',
@@ -106,6 +107,9 @@ function MainAppContent() {
       {/* Clean 4-Tab Bottom Navigation + Menu Drawer Button */}
       {/* PWA iOS/Android Install Modal */}
       <AutoUpdate />
+
+      {/* شاشة الترحيب: اختيار اسم المحل — مرة واحدة في التثبيت الجديد */}
+      <StoreNamePrompt />
 
       <PwaInstallPrompt
         isOpen={showInstallModal}

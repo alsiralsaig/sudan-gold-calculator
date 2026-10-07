@@ -26,3 +26,22 @@ export function normalizeStoreName(name?: string | null): string {
 export function storeHeader(name?: string | null): string {
   return `*${normalizeStoreName(name)}*`;
 }
+
+/**
+ * هل نعرض شاشة الترحيب التي تسأل عن اسم المحل؟
+ *
+ * تُعرض مرة واحدة فقط في التثبيت الجديد:
+ * - ليست معروضة لمن اختار الاسم من قبل (أو تخطّى).
+ * - ولا لمن لديه سجلات (مستخدم قديم: الاسم قابل للتعديل من الإعدادات).
+ * - ولا لمن سجّل حساباً سحابياً.
+ */
+export function shouldPromptStoreName(input: {
+  chosen: boolean;
+  hasRecords: boolean;
+  userEmail?: string | null;
+}): boolean {
+  if (input.chosen) return false;
+  if (input.hasRecords) return false;
+  if (String(input.userEmail || '').trim()) return false;
+  return true;
+}

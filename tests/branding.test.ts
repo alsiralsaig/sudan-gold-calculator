@@ -4,6 +4,7 @@ import {
   DEFAULT_STORE_NAME,
   LEGACY_STORE_NAMES,
   normalizeStoreName,
+  shouldPromptStoreName,
   storeHeader,
 } from '../src/core/branding';
 
@@ -34,4 +35,19 @@ test('ترويسة الرسالة تُغلَّف بنجيمتين كما في ا
   assert.equal(storeHeader('محلات أبو أحمد'), '*محلات أبو أحمد*');
   assert.equal(storeHeader('مجوهرات الذهب'), '*محلات أبو أحمد*');
   assert.equal(storeHeader(''), '*محلات أبو أحمد*');
+});
+
+test('شاشة الترحيب تظهر فقط في التثبيت الجديد', () => {
+  // تثبيت جديد تماماً: بلا علامة، بلا سجلات، بلا حساب → تظهر
+  assert.equal(shouldPromptStoreName({ chosen: false, hasRecords: false }), true);
+  // اختار الاسم من قبل (أو تخطّى) → لا تظهر
+  assert.equal(shouldPromptStoreName({ chosen: true, hasRecords: false }), false);
+  // لديه سجلات (مستخدم قديم) → لا تظهر، الاسم من الإعدادات
+  assert.equal(shouldPromptStoreName({ chosen: false, hasRecords: true }), false);
+  // مسجّل دخول سحابي → لا تظهر
+  assert.equal(
+    shouldPromptStoreName({ chosen: false, hasRecords: false, userEmail: 'owner@shop.com' }),
+    false
+  );
+  assert.equal(shouldPromptStoreName({ chosen: false, hasRecords: false, userEmail: '   ' }), true);
 });
