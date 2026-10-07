@@ -66,6 +66,23 @@ function linksWith(html: string, needle: string, base: string, limit = 12): { hr
   return out;
 }
 
+const ALLOWED_HOSTS = [
+  'pls48.net', 'aluom.net', 'alrakoba.net', 'sudafax.com', 'nbs.sd',
+  'dabangasudan.org', 'sudanile.com', 'alnilin.com', 'suna-sd.net',
+  'kushnews.net', 'almandara.net', 'bajnews.com', 'smc.sd', 'alsudani.news',
+  'almashhadalsudani.com', 'sudanakhbar.com', 't.me', 'web.archive.org',
+];
+
+/** رابط مسموح للفحص؟ (يتعامل مع www والنطاقات الفرعية) */
+function isAllowedTarget(target: string): boolean {
+  try {
+    const host = new URL(target).hostname.replace(/^www\./, '').toLowerCase();
+    return ALLOWED_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get('mode');
@@ -92,9 +109,8 @@ export async function GET(request: Request) {
   if (mode === 'harvest') {
     const target = url.searchParams.get('url') || '';
     const needle = url.searchParams.get('needle') || 'دولار';
-    const allowed = /^https:\/\/(pls48\.net|aluom\.net|alrakoba\.net|sudafax\.com|nbs\.sd|dabangasudan\.org|sudanile\.com|alnilin\.com|suna-sd\.net|kushnews\.net|almandara\.net|bajnews\.com|smc\.sd|alsudani\.news)\//;
-    if (!allowed.test(target)) {
-      return NextResponse.json({ ok: false, message: 'رابط غير مسموح' }, { status: 400 });
+    if (!isAllowedTarget(target)) {
+      return NextResponse.json({ ok: false, message: 'رابط غير مسموح', target }, { status: 400 });
     }
     const body = await fetchText(target, 15000);
     if (!body) return NextResponse.json({ ok: false, message: 'لا رد' });
@@ -128,9 +144,8 @@ export async function GET(request: Request) {
 
   if (mode === 'fetch') {
     const target = url.searchParams.get('url') || '';
-    const allowed = /^https:\/\/(pls48\.net|aluom\.net|alrakoba\.net|sudafax\.com|nbs\.sd)\//;
-    if (!allowed.test(target)) {
-      return NextResponse.json({ ok: false, message: 'رابط غير مسموح' }, { status: 400 });
+    if (!isAllowedTarget(target)) {
+      return NextResponse.json({ ok: false, message: 'رابط غير مسموح', target }, { status: 400 });
     }
     const body = await fetchText(target, 15000);
     if (!body) return NextResponse.json({ ok: false, message: 'لا رد' });
