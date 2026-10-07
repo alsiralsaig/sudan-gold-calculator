@@ -89,6 +89,43 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, mode: 'links', out });
   }
 
+  if (mode === 'harvest') {
+    const target = url.searchParams.get('url') || '';
+    const needle = url.searchParams.get('needle') || 'دولار';
+    const allowed = /^https:\/\/(pls48\.net|aluom\.net|alrakoba\.net|sudafax\.com|nbs\.sd|dabangasudan\.org|sudanile\.com|alnilin\.com|suna-sd\.net)\//;
+    if (!allowed.test(target)) {
+      return NextResponse.json({ ok: false, message: 'رابط غير مسموح' }, { status: 400 });
+    }
+    const body = await fetchText(target, 15000);
+    if (!body) return NextResponse.json({ ok: false, message: 'لا رد' });
+
+    const base = new URL(target).origin;
+    const all: { href: string; text: string }[] = [];
+    const re = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]{0,220}?)<\/a>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(body)) && all.length < 400) {
+      let href = m[1];
+      if (href.startsWith('/')) href = base + href;
+      if (!href.startsWith('http')) continue;
+      const text = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      if (href.startsWith(base) || /http/.test(href)) all.push({ href, text: text.slice(0, 100) });
+    }
+
+    const articleLike = all.filter((l) => /\/\d{4,}\/?$|\/\d{4,}\/[^/]+$|%d8|%D8/.test(l.href));
+    const withNeedle = all.filter((l) => l.text.includes(needle));
+
+    return NextResponse.json({
+      ok: true,
+      bytes: body.length,
+      anchors: all.length,
+      origin: base,
+      sampleHrefs: Array.from(new Set(all.slice(0, 25).map((l) => l.href))),
+      articleLike: articleLike.slice(0, 15),
+      withNeedle: withNeedle.slice(0, 15),
+      titleSnippet: (body.match(/<title>([^<]{5,150})<\/title>/i) || [])[1] || null,
+    });
+  }
+
   if (mode === 'fetch') {
     const target = url.searchParams.get('url') || '';
     const allowed = /^https:\/\/(pls48\.net|aluom\.net|alrakoba\.net|sudafax\.com|nbs\.sd)\//;
