@@ -20,6 +20,7 @@ import {
   FileBarChart,
   BarChart3,
   BellRing,
+  Search,
   HandCoins,
   WifiOff,
   CloudUpload,
@@ -69,6 +70,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const navMenuItems = [
+    {
+      id: 'search',
+      label: 'البحث الشامل',
+      desc: 'ابحث عن أي شيء في كل الصفحات: أسماء، مبالغ، أوزان، هواتف',
+      icon: Search,
+      color: 'text-amber-400 bg-amber-500/10',
+    },
     {
       id: 'dashboard',
       label: 'الرئيسية (لوحة التحكم)',
@@ -171,6 +179,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const getTitle = () => {
     switch (activeTab) {
+      case 'search':
+        return 'البحث الشامل';
       case 'dashboard':
         return 'لوحة التحكم';
       case 'calculator':
@@ -316,6 +326,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             
             {/* Reload / Refresh Button */}
+            <button
+              onClick={() => onNavigate('search')}
+              className={`p-2 sm:p-2.5 rounded-2xl border transition-all active:scale-90 flex items-center justify-center shadow-sm ${
+                activeTab === 'search'
+                  ? 'bg-amber-500 text-slate-950 border-amber-400'
+                  : 'bg-slate-900 hover:bg-slate-800 text-amber-400 border-slate-700/80'
+              }`}
+              title="البحث الشامل في كل البيانات"
+            >
+              <Search className="w-4 h-4" />
+            </button>
             <button
               onClick={handleGlobalRefresh}
               disabled={isRefreshing}

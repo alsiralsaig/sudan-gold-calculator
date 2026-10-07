@@ -17,11 +17,13 @@ import { ReportsScreen } from '../components/screens/ReportsScreen';
 import { AnalyticsScreen } from '../components/screens/AnalyticsScreen';
 import { RemindersScreen } from '../components/screens/RemindersScreen';
 import { LoansScreen } from '../components/screens/LoansScreen';
+import { SearchScreen } from '../components/screens/SearchScreen';
 import { LockScreen } from '../components/common/LockScreen';
 import { PwaInstallPrompt } from '../components/common/PwaInstallPrompt';
 
 const KNOWN_TABS = [
   'dashboard',
+  'search',
   'calculator',
   'partners',
   'purchases',
@@ -90,6 +92,7 @@ function MainAppContent() {
         {activeTab === 'purchases' && <PurchasesScreen />}
         {activeTab === 'sales' && <SalesScreen />}
         {activeTab === 'expenses' && <ExpensesScreen />}
+        {activeTab === 'search' && <SearchScreen onNavigate={setActiveTab} />}
         {activeTab === 'gold_price' && <GoldPriceScreen />}
         {activeTab === 'reports' && <ReportsScreen />}
         {activeTab === 'analytics' && <AnalyticsScreen />}
