@@ -9,8 +9,13 @@ import {
   isNumericQuery,
   normalizeArabic,
   phoneMatch,
+  matchExpenseQuery,
+  matchLoanQuery,
+  matchPurchaseQuery,
+  matchSaleQuery,
   searchAll,
   searchResultsText,
+  smartMatch,
   weightMatch,
 } from '../src/core/globalSearch';
 import { Branch, Expense, Loan, Partner, Purchase, Sale } from '../src/types';
@@ -365,4 +370,69 @@ test('searchResultsText: نص منظّم بالمجموعات لكل صفحة', 
 test('searchResultsText: بلا نتائج يبقى النص صالحاً', () => {
   const text = searchResultsText('متجري', 'ززز', []);
   assert.match(text, /عدد النتائج: 0/);
+});
+
+/* ------------------ المطابقة الموحّدة للشاشات ------------------ */
+
+test('smartMatch: اسم عربي مطبَّع + كلمتان معاً', () => {
+  assert.equal(smartMatch('ابراهيم', { texts: ['إبراهيم محمد'] }), true);
+  assert.equal(smartMatch('أحمد الصائغ', { texts: ['أحمد الصائغ'] }), true);
+  assert.equal(smartMatch('أحمد الطيب', { texts: ['أحمد الصائغ'] }), false);
+  assert.equal(smartMatch('', { texts: ['أي شيء'] }), true, 'استعلام فارغ = قبول');
+});
+
+test('smartMatch: المبلغ الجزئي والوزن والهاتف', () => {
+  assert.equal(smartMatch('500', { amounts: [500000] }), true);
+  assert.equal(smartMatch('250', { texts: ['عشاء'], amounts: [25000] }), true);
+  assert.equal(smartMatch('5.3.2', { weights: [532] }), true);
+  assert.equal(smartMatch('5.5', { weights: [550] }), true);
+  assert.equal(smartMatch('0912', { phones: ['0912345678'] }), true);
+  assert.equal(smartMatch('جدة', { texts: ['عشاء'], amounts: [25000] }), false);
+});
+
+test('matchSaleQuery: يجد بالزبون، الهاتف، المبلغ، الوزن، الملاحظات', () => {
+  const s = {
+    id: 'x', date: '', units: 532, purity: 21, buyAmount: 900000, sellAmount: 1050000,
+    buyer: 'أحمد الصائغ', buyerPhone: '0999888777', notes: 'مشغولات', payments: [],
+  } as never;
+  assert.equal(matchSaleQuery(s, 'احمد'), true);
+  assert.equal(matchSaleQuery(s, '999888'), true);
+  assert.equal(matchSaleQuery(s, '500'), true, 'جزء من مبلغ البيع (500 داخل 1,050,000)');
+  assert.equal(matchSaleQuery(s, '1050000'), true, 'المبلغ كاملاً');
+  assert.equal(matchSaleQuery(s, '5.3.2'), true);
+  assert.equal(matchSaleQuery(s, 'مشغولات'), true);
+  assert.equal(matchSaleQuery(s, 'عثمان'), false);
+});
+
+test('matchPurchaseQuery: البائع والهاتف والبنك والوزن', () => {
+  const p = {
+    id: 'x', date: '', units: 18*100+8*10, purity: 21, amount: 115000, pendingAmount: 0,
+    seller: 'إبراهيم', sellerPhone: '0912345678', bankAccount: 'بنك الخرطوم', notes: '', payments: [],
+  } as never;
+  assert.equal(matchPurchaseQuery(p, 'ابراهيم'), true);
+  assert.equal(matchPurchaseQuery(p, '09123'), true);
+  assert.equal(matchPurchaseQuery(p, 'الخرطوم'), true, 'البنك');
+  assert.equal(matchPurchaseQuery(p, '18.8'), true, 'الوزن 18.8.0');
+  assert.equal(matchPurchaseQuery(p, '115'), true, 'جزء من المبلغ');
+});
+
+test('matchExpenseQuery: البيان والشريك والتصنيف', () => {
+  const e = { id: 'x', date: '', amount: 25000, category: 'مسحوبات شريك', target: 'أحمد', name: 'عشاء', notes: '' } as never;
+  assert.equal(matchExpenseQuery(e, 'عشاء'), true);
+  assert.equal(matchExpenseQuery(e, 'احمد'), true);
+  assert.equal(matchExpenseQuery(e, 'مسحوبات'), true);
+  assert.equal(matchExpenseQuery(e, '25000'), true);
+  assert.equal(matchExpenseQuery(e, 'شاي'), false);
+});
+
+test('matchLoanQuery: الشخص والهاتف والمبلغ ودفعات السداد', () => {
+  const l = {
+    id: 'x', date: '', person: 'عثمان الطيب', phone: '0123456789', amount: 300000,
+    direction: 'lent', notes: 'سلفة', payments: [{ id: 'p', date: '', amount: 100000, note: '' }],
+  } as never;
+  assert.equal(matchLoanQuery(l, 'عثمان'), true);
+  assert.equal(matchLoanQuery(l, '01234'), true);
+  assert.equal(matchLoanQuery(l, '300000'), true);
+  assert.equal(matchLoanQuery(l, '100000'), true, 'دفعة سداد');
+  assert.equal(matchLoanQuery(l, 'زينب'), false);
 });

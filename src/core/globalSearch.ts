@@ -589,3 +589,81 @@ export function searchResultsText(storeName: string, query: string, hits: Search
   }
   return lines.join('\n').trim();
 }
+
+/* ------------------------------------------------------------------ */
+/*                مطابقة موحّدة لكل شاشة (بحث داخلي ذكي)               */
+/* ------------------------------------------------------------------ */
+
+export interface MatchFields {
+  /** أسماء، ملاحظات، أرقام فواتير، تصنيفات */
+  texts?: (string | null | undefined)[];
+  /** أرقام هواتف */
+  phones?: (string | null | undefined)[];
+  /** مبالغ نقدية */
+  amounts?: (number | null | undefined)[];
+  /** أوزان بوحدات التخزين */
+  weights?: (number | null | undefined)[];
+}
+
+/** مطابقة نص عربي مطبَّع (تصدير مباشر للاستخدام في الشاشات) */
+export function textIn(haystack: string | undefined | null, needle: string): boolean {
+  return textMatch(haystack, needle);
+}
+
+/**
+ * مطابقة ذكية موحّدة — تُستخدم في شاشات السجلات (بيع/شراء/مصروف/سلفة).
+ * نفس منطق البحث الشامل: تطبيع عربي، مبالغ جزئية، أوزان ج.ح.ز، هواتف،
+ * وكلمتان فأكثر يجب أن تتطابقا معاً (AND).
+ */
+export function smartMatch(query: string, fields: MatchFields): boolean {
+  const raw = String(query || '').trim();
+  if (!raw) return true;
+
+  const needle = normalizeArabic(raw);
+  const tokens = needle.split(' ').filter(Boolean);
+  const { texts = [], phones = [], amounts = [], weights = [] } = fields;
+
+  // نص: كل كلمة في الاستعلام يجب أن تُوجد في أحد النصوص
+  if (tokens.length && tokens.every((t) => texts.some((v) => textMatch(v, t)))) return true;
+
+  if (isNumericQuery(raw)) {
+    if (amounts.some((a) => amountMatch(a, raw))) return true;
+    if (weights.some((w) => weightMatch(w, raw))) return true;
+  }
+
+  if (phones.some((p) => phoneMatch(p, raw))) return true;
+  return false;
+}
+
+export function matchSaleQuery(s: Sale, query: string): boolean {
+  return smartMatch(query, {
+    texts: [s.buyer, s.notes, s.invoiceNo],
+    phones: [s.buyerPhone],
+    amounts: [s.sellAmount, s.buyAmount],
+    weights: [s.units],
+  });
+}
+
+export function matchPurchaseQuery(p: Purchase, query: string): boolean {
+  return smartMatch(query, {
+    texts: [p.seller, p.notes, p.invoiceNo, p.bankAccount],
+    phones: [p.sellerPhone],
+    amounts: [p.amount, p.pendingAmount],
+    weights: [p.units],
+  });
+}
+
+export function matchExpenseQuery(e: Expense, query: string): boolean {
+  return smartMatch(query, {
+    texts: [e.name, e.notes, e.target, e.category],
+    amounts: [e.amount],
+  });
+}
+
+export function matchLoanQuery(l: Loan, query: string): boolean {
+  return smartMatch(query, {
+    texts: [l.person, l.notes],
+    phones: [l.phone],
+    amounts: [l.amount, ...(l.payments || []).map((p) => p.amount)],
+  });
+}

@@ -20,6 +20,8 @@ import {
 } from '../../core/format';
 import { Expense, LoanDirection } from '../../types';
 import { summarizeExpenses, partnerExpenseText, PeriodFilter } from '../../core/expenseSummary';
+import { matchExpenseQuery } from '../../core/globalSearch';
+import { PasteButton } from '../common/PasteButton';
 import { ShareButtons } from '../common/ShareButtons';
 
 export const ExpensesScreen: React.FC = () => {
@@ -134,16 +136,7 @@ export const ExpensesScreen: React.FC = () => {
           }
           return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
         })
-        .filter((e) => {
-          const q = searchQuery.trim().toLowerCase();
-          if (!q) return true;
-          return (
-            e.name.toLowerCase().includes(q) ||
-            (e.notes || '').toLowerCase().includes(q) ||
-            (e.target || '').toLowerCase().includes(q) ||
-            String(e.amount).includes(q)
-          );
-        }),
+        .filter((e) => matchExpenseQuery(e, searchQuery)),
     [expenses, filterTarget, filterPeriod, searchQuery]
   );
 
@@ -183,15 +176,18 @@ export const ExpensesScreen: React.FC = () => {
     <div className="space-y-4 animate-in fade-in duration-200">
       
       {/* 1. Search Bar */}
-      <div className="relative">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="بحث بالمصروف أو البيان أو الشريك أو المبلغ..."
-          className="w-full bg-slate-900 border border-slate-800 focus:border-rose-400 rounded-2xl py-3 px-4 pl-10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none shadow-md transition-colors"
-        />
-        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="بحث بالبيان أو الشريك أو المبلغ..."
+            className="w-full bg-slate-900 border border-slate-800 focus:border-rose-400 rounded-2xl py-3 px-4 pl-10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none shadow-md transition-colors"
+          />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        </div>
+        <PasteButton onPaste={(text) => setSearchQuery(text)} compact />
       </div>
 
       {/* 2. فلترة الجهة: الكل / عامة / خاصة */}

@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { Loan, LoanDirection } from '../../types';
+import { matchLoanQuery } from '../../core/globalSearch';
+import { PasteButton } from '../common/PasteButton';
 import { fmtNum, formatInvoiceDate, kCurrency } from '../../core/format';
 import {
   isLoanSettled,
@@ -30,7 +32,7 @@ import {
   loanStatusLabel,
   loanText,
 } from '../../core/loans';
-import { normalizePhone, openWhatsApp } from '../../core/share';
+import { openWhatsApp } from '../../core/share';
 import { daysBetween, relativeDays, startOfDay, toDateInputValue } from '../../core/dates';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { branchName } from '../../core/branches';
@@ -100,15 +102,7 @@ export const LoansScreen: React.FC = () => {
         if (filter === 'settled') return Boolean(l.archived);
         return !l.archived; // «الكل» = السلف النشطة فقط
       })
-      .filter((l) => {
-        if (!query.trim()) return true;
-        const q = query.trim();
-        return (
-          (l.person || '').includes(q) ||
-          normalizePhone(l.phone).includes(normalizePhone(q)) ||
-          (l.notes || '').includes(q)
-        );
-      })
+      .filter((l) => matchLoanQuery(l, query))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [loans, filter, query, today]);
 
@@ -256,14 +250,17 @@ export const LoansScreen: React.FC = () => {
 
       {/* البحث والفلاتر */}
       <div className="space-y-2">
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="ابحث بالاسم أو الهاتف أو الملاحظات..."
-            className="w-full bg-slate-900 border border-slate-800 rounded-2xl pr-9 pl-3 py-2.5 text-xs focus:outline-none focus:border-amber-500"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ابحث بالاسم أو الهاتف أو المبلغ أو الملاحظات..."
+              className="w-full bg-slate-900 border border-slate-800 rounded-2xl pr-9 pl-3 py-2.5 text-xs focus:outline-none focus:border-amber-500"
+            />
+          </div>
+          <PasteButton onPaste={(text) => setQuery(text)} compact />
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
