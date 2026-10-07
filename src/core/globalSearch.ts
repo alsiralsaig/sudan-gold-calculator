@@ -532,3 +532,60 @@ export function hitShareText(storeName: string, hit: SearchHit): string {
   if (hit.date) lines.push(`التاريخ: ${new Date(hit.date).toLocaleDateString('ar-EG')}`);
   return lines.join('\n');
 }
+
+/* ------------------------------------------------------------------ */
+/*                     تجميع النتائج لكل صفحة على حدة                  */
+/* ------------------------------------------------------------------ */
+
+export interface HitGroup {
+  kind: SearchKind;
+  label: string;
+  hits: SearchHit[];
+}
+
+const KIND_ORDER: SearchKind[] = ['purchase', 'sale', 'expense', 'loan', 'partner', 'branch'];
+
+/**
+ * تجميع نتائج البحث حسب الصفحة (النوع) — كل صفحة في قسم مستقل
+ * بترتيب ثابت: مشتريات ← مبيعات ← مصروفات ← سلف ← شركاء ← فروع.
+ */
+export function groupHitsByKind(hits: SearchHit[], order: SearchKind[] = KIND_ORDER): HitGroup[] {
+  return order
+    .map((kind) => ({
+      kind,
+      label: KIND_LABELS[kind],
+      hits: hits.filter((h) => h.kind === kind),
+    }))
+    .filter((group) => group.hits.length > 0);
+}
+
+/** سطر واحد مختصر لكل نتيجة — للنسخ السريع */
+export function hitLine(hit: SearchHit, index?: number): string {
+  const parts: string[] = [];
+  if (index !== undefined) parts.push(`${index})`);
+  parts.push(`[${KIND_LABELS[hit.kind]}]`, hit.title);
+  if (hit.amount) parts.push(`— ${hit.amount.toLocaleString('en-US')} ج.س`);
+  if (hit.units) parts.push(`— ${unitsToGhJ(hit.units)} ج.ح.ز`);
+  if (hit.date) {
+    const t = new Date(hit.date);
+    if (!isNaN(t.getTime())) parts.push(`— ${t.toLocaleDateString('ar-EG')}`);
+  }
+  return parts.join(' ');
+}
+
+/** نص كل النتائج — لزر «نسخ كل النتائج» وإرسالها على واتساب */
+export function searchResultsText(storeName: string, query: string, hits: SearchHit[]): string {
+  const lines: string[] = [
+    `*${storeName}*`,
+    `*نتائج البحث عن:* ${query}`,
+    `عدد النتائج: ${hits.length}`,
+    '—————————————',
+  ];
+  const groups = groupHitsByKind(hits);
+  for (const group of groups) {
+    lines.push(`*${group.label}* (${group.hits.length})`);
+    group.hits.forEach((hit, i) => lines.push(hitLine(hit, i + 1)));
+    lines.push('');
+  }
+  return lines.join('\n').trim();
+}

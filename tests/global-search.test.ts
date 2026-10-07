@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 
 import {
   amountMatch,
+  groupHitsByKind,
+  hitLine,
   hitShareText,
   isNumericQuery,
   normalizeArabic,
   phoneMatch,
   searchAll,
+  searchResultsText,
   weightMatch,
 } from '../src/core/globalSearch';
 import { Branch, Expense, Loan, Partner, Purchase, Sale } from '../src/types';
@@ -316,4 +319,50 @@ test('hitShareText: نص عربي فيه المبلغ والوزن', () => {
   assert.match(text, /إبراهيم محمد/);
   assert.match(text, /550,000 ج\.س/);
   assert.match(text, /5\.3\.2 ج\.ح\.ز/);
+});
+
+/* ------------------- التجميع لكل صفحة + النسخ ------------------- */
+
+test('groupHitsByKind: كل صفحة في قسم مستقل بترتيب ثابت', () => {
+  const r = searchAll(DATA, 'أحمد'); // بيع + مصروف
+  const groups = groupHitsByKind(r.hits);
+  assert.deepEqual(groups.map((g) => g.kind), ['sale', 'expense'], 'المبيعات قبل المصروفات');
+  assert.equal(groups[0].label, 'مبيعات');
+  assert.equal(groups[0].hits.length, 1);
+  assert.equal(groups[1].hits.length, 1);
+
+  const empty: ReturnType<typeof groupHitsByKind> = groupHitsByKind([]);
+  assert.equal(empty.length, 0);
+});
+
+test('groupHitsByKind: الفلترة الصريحة لا تُنتج أقساماً فارغة', () => {
+  const r = searchAll(DATA, '500');
+  const groups = groupHitsByKind(r.hits.filter((h) => h.kind === 'purchase'));
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].kind, 'purchase');
+});
+
+test('hitLine: سطر مختصر فيه النوع والاسم والمبلغ والوزن', () => {
+  const purchaseHit = searchAll(DATA, 'KH1-0001').hits[0];
+  const line = hitLine(purchaseHit, 1);
+  assert.match(line, /1\)/);
+  assert.match(line, /\[مشتريات\]/);
+  assert.match(line, /إبراهيم محمد/);
+  assert.match(line, /550,000 ج\.س/);
+  assert.match(line, /5\.3\.2 ج\.ح\.ز/);
+});
+
+test('searchResultsText: نص منظّم بالمجموعات لكل صفحة', () => {
+  const r = searchAll(DATA, 'أحمد');
+  const text = searchResultsText('مجوهرات الذهب', 'أحمد', r.hits);
+  assert.match(text, /نتائج البحث عن:\* أحمد/);
+  assert.match(text, /عدد النتائج: 2/);
+  assert.match(text, /\*مبيعات\* \(1\)/);
+  assert.match(text, /\*مصروفات\* \(1\)/);
+  assert.match(text, /1\) \[مبيعات\]/);
+});
+
+test('searchResultsText: بلا نتائج يبقى النص صالحاً', () => {
+  const text = searchResultsText('متجري', 'ززز', []);
+  assert.match(text, /عدد النتائج: 0/);
 });

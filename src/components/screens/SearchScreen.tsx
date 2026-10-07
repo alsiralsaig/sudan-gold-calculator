@@ -13,7 +13,9 @@ import {
   Archive,
   Copy,
   Check,
+  ClipboardPaste,
   ArrowLeft,
+  Building2 as Building2Icon,
   Filter,
   Sparkles,
 } from 'lucide-react';
@@ -23,11 +25,14 @@ import {
   KIND_SCREEN,
   SearchHit,
   SearchKind,
+  groupHitsByKind,
   hitShareText,
   searchAll,
+  searchResultsText,
 } from '../../core/globalSearch';
 import { fmtNum, formatInvoiceDate, kCurrency, unitsToGhJ, unitsToGramsDecimal } from '../../core/format';
 import { ShareButtons } from '../common/ShareButtons';
+import { ALL_BRANCHES } from '../../core/branches';
 
 interface SearchScreenProps {
   onNavigate: (tab: string) => void;
@@ -61,9 +66,16 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onNavigate }) => {
     allSales,
     allExpenses,
     allLoans,
+    /** النسخ المقيّدة بالفرع النشط */
+    purchases,
+    sales,
+    expenses,
+    loans,
     partners,
     branches,
     storeName,
+    activeBranchId,
+    activeBranchName,
   } = useGoldStore();
 
   const [query, setQuery] = useState('');
@@ -71,22 +83,38 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onNavigate }) => {
   const [showArchived, setShowArchived] = useState(true);
   const [selected, setSelected] = useState<SearchHit | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedAll, setCopiedAll] = useState(false);
+  const [scope, setScope] = useState<'branch' | 'all'>('branch');
+  const [notice, setNotice] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const flash = (message: string) => {
+    setNotice(message);
+    setTimeout(() => setNotice(''), 2600);
+  };
+
+  /** الفرع النشط مفعّل دائماً؟ (إذا اختار «كل الفروع» من الشريط العلوي فلا فرق) */
+  const branchScopeIsReal = activeBranchId !== ALL_BRANCHES && branches.length > 0;
+
+  /** بيانات البحث حسب النطاق المختار */
+  const scopedData = scope === 'all' || !branchScopeIsReal
+    ? { purchases: allPurchases, sales: allSales, expenses: allExpenses, loans: allLoans }
+    : { purchases, sales, expenses, loans };
 
   const result = useMemo(
     () =>
       searchAll(
         {
-          purchases: allPurchases,
-          sales: allSales,
-          expenses: allExpenses,
-          loans: allLoans,
+          purchases: scopedData.purchases,
+          sales: scopedData.sales,
+          expenses: scopedData.expenses,
+          loans: scopedData.loans,
           partners,
           branches,
         },
         query
       ),
-    [allPurchases, allSales, allExpenses, allLoans, partners, branches, query]
+    [scopedData, partners, branches, query]
   );
 
   const hits = useMemo(
@@ -103,11 +131,46 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onNavigate }) => {
   const copyHit = async (hit: SearchHit) => {
     try {
       await navigator.clipboard.writeText(hitShareText(storeName, hit));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
     } catch {
-      /* بعض المتصفحات تمنع النسخ */
+      flash('المتصفح منع النسخ — انسخ يدوياً من نافذة التفاصيل');
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+  };
+
+  /** نسخ كل النتائج الظاهرة (مجمّعة لكل صفحة) */
+  const copyAll = async () => {
+    try {
+      await navigator.clipboard.writeText(searchResultsText(storeName, query, hits));
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 1800);
+      flash(`تم نسخ ${hits.length} نتيجة`);
+    } catch {
+      flash('المتصفح منع النسخ');
+    }
+  };
+
+  /**
+   * لصق من الحافظة — للوزن/الهاتف/الاسم المنسوخ من واتساب.
+   * بعض المتصفحات (أو بلا HTTPS) تمنع القراءة، فنقع على إدخال يدوي.
+   */
+  const pasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim()) {
+        setQuery(text.trim());
+        flash('تم اللصق');
+      } else {
+        flash('الحافظة فارغة');
+      }
+    } catch {
+      // بديل: لصق يدوي عبر نافذة إدخال
+      const manual = window.prompt('الصق النص هنا (المتصفح منع اللصق المباشر):');
+      if (manual && manual.trim()) {
+        setQuery(manual.trim());
+      }
+    }
+    inputRef.current?.focus();
   };
 
   return (
@@ -140,7 +203,44 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onNavigate }) => {
               </button>
             )}
           </div>
+          <button
+            onClick={pasteFromClipboard}
+            className="p-3 bg-slate-950 hover:bg-slate-800 border-2 border-slate-700 hover:border-amber-500/60 text-amber-400 rounded-2xl transition-colors shrink-0 flex items-center gap-1.5"
+            title="الصق نصاً من الحافظة (اسم، هاتف، مبلغ)"
+          >
+            <ClipboardPaste className="w-5 h-5" />
+            <span className="text-[11px] font-black hidden sm:inline">لصق</span>
+          </button>
         </div>
+
+        {/* مفتاح نطاق البحث: الفرع النشط أو كل الفروع */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setScope('branch')}
+            className={`py-2.5 rounded-2xl text-[11px] font-black border transition-all flex items-center justify-center gap-1.5 ${
+              scope === 'branch'
+                ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                : 'bg-slate-950 border-slate-800 text-slate-400'
+            }`}
+          >
+            <Building2Icon className="w-3.5 h-3.5" />
+            {branchScopeIsReal ? `الفرع النشط: ${activeBranchName}` : 'الفرع النشط (لا فروع بعد)'}
+          </button>
+          <button
+            onClick={() => setScope('all')}
+            className={`py-2.5 rounded-2xl text-[11px] font-black border transition-all flex items-center justify-center gap-1.5 ${
+              scope === 'all'
+                ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                : 'bg-slate-950 border-slate-800 text-slate-400'
+            }`}
+          >
+            كل الفروع (مجمّع)
+          </button>
+        </div>
+
+        {notice && (
+          <p className="text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/40 rounded-xl p-2.5">{notice}</p>
+        )}
 
         {/* أمثلة سريعة */}
         {!hasQuery && (
@@ -232,53 +332,91 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onNavigate }) => {
             </div>
           ) : (
             <>
-              <div className="text-[11px] text-slate-400 px-1">
-                {hits.length} نتيجة{result.truncated ? ` (من أصل ${result.total} — أضف تفاصيل للبحث أدق)` : ''}
-              </div>
-              {hits.map((hit) => {
-                const Icon = KIND_ICON[hit.kind];
-                return (
+              <div className="flex items-center justify-between gap-2 px-1">
+                <div className="text-[11px] text-slate-400">
+                  {hits.length} نتيجة{result.truncated ? ` (من أصل ${result.total} — أضف تفاصيل للبحث أدق)` : ''}
+                  <span className="text-slate-500"> — مجمّعة لكل صفحة</span>
+                </div>
+                <div className="flex items-center gap-1.5">
                   <button
-                    key={`${hit.kind}-${hit.id}`}
-                    onClick={() => setSelected(hit)}
-                    className="w-full text-right bg-slate-900 hover:bg-slate-800/80 border border-slate-800 rounded-2xl p-3.5 transition-colors space-y-2"
+                    onClick={copyAll}
+                    className="text-[10px] font-black px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 hover:border-amber-500/50 flex items-center gap-1"
                   >
-                    <div className="flex items-start gap-2.5">
-                      <span className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${KIND_TONE[hit.kind]}`}>
-                        <Icon className="w-4 h-4" />
+                    {copiedAll ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    {copiedAll ? 'تم النسخ' : 'نسخ الكل'}
+                  </button>
+                  <ShareButtons
+                    text={searchResultsText(storeName, query, hits)}
+                    label="واتساب"
+                    showCopy={false}
+                  />
+                </div>
+              </div>
+              {groupHitsByKind(hits).map((group) => {
+                const GroupIcon = KIND_ICON[group.kind];
+                return (
+                  <div key={group.kind} className="space-y-2">
+                    {/* رأس الصفحة */}
+                    <div className={`flex items-center justify-between rounded-2xl border px-3 py-2 ${KIND_TONE[group.kind]}`}>
+                      <span className="text-xs font-black flex items-center gap-2">
+                        <GroupIcon className="w-4 h-4" />
+                        {group.label}
                       </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-sm font-black text-white truncate">{hit.title}</span>
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${KIND_TONE[hit.kind]}`}>
-                            {KIND_LABELS[hit.kind]}
+                      <span className="text-[11px] font-black">{group.hits.length} نتيجة</span>
+                    </div>
+
+                    {group.hits.map((hit) => (
+                      <div
+                        key={`${hit.kind}-${hit.id}`}
+                        className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 space-y-2"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${KIND_TONE[hit.kind]}`}>
+                            <GroupIcon className="w-4 h-4" />
                           </span>
-                          {hit.archived && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-300">
-                              مؤرشف
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5 truncate">{hit.subtitle}</div>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          {hit.date && (
-                            <span className="text-[10px] text-slate-500">{formatInvoiceDate(hit.date)}</span>
-                          )}
-                          {hit.matched.slice(0, 3).map((m) => (
-                            <span key={m} className="text-[9px] text-slate-500 bg-slate-950 border border-slate-800 rounded-md px-1.5 py-0.5">
-                              {m}
-                            </span>
-                          ))}
+                          <button
+                            onClick={() => setSelected(hit)}
+                            className="flex-1 min-w-0 text-right"
+                          >
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm font-black text-white truncate">{hit.title}</span>
+                              {hit.archived && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                                  مؤرشف
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-0.5 truncate">{hit.subtitle}</div>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              {hit.date && (
+                                <span className="text-[10px] text-slate-500">{formatInvoiceDate(hit.date)}</span>
+                              )}
+                              {hit.matched.slice(0, 3).map((m) => (
+                                <span key={m} className="text-[9px] text-slate-500 bg-slate-950 border border-slate-800 rounded-md px-1.5 py-0.5">
+                                  {m}
+                                </span>
+                              ))}
+                            </div>
+                          </button>
+                          <div className="text-left shrink-0 flex flex-col items-end gap-1">
+                            {hit.amount !== undefined && hit.amount > 0 && (
+                              <>
+                                <div className="text-sm font-black font-mono text-amber-300">{fmtNum(hit.amount)}</div>
+                                <div className="text-[9px] text-slate-500">{kCurrency}</div>
+                              </>
+                            )}
+                            <button
+                              onClick={() => copyHit(hit)}
+                              className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 hover:text-amber-300"
+                              title="نسخ التفاصيل"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      {hit.amount !== undefined && hit.amount > 0 && (
-                        <div className="text-left shrink-0">
-                          <div className="text-sm font-black font-mono text-amber-300">{fmtNum(hit.amount)}</div>
-                          <div className="text-[9px] text-slate-500">{kCurrency}</div>
-                        </div>
-                      )}
-                    </div>
-                  </button>
+                    ))}
+                  </div>
                 );
               })}
             </>
