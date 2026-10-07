@@ -13,6 +13,7 @@ import {
   loanText,
   summarizeLoans,
 } from '../src/core/loans';
+import { DEFAULT_STORE_NAME, normalizeStoreName } from '../src/core/branding';
 import { Loan } from '../src/types';
 
 const TODAY = new Date('2026-10-06T10:00:00Z');
@@ -144,6 +145,13 @@ test('loanText يحتوي المتبقي والإجمالي', () => {
   assert.match(text, /المبلغ الأصلي: 500,000/);
   assert.match(text, /المسدَّد: 150,000/);
   assert.match(text, /المتبقي: 350,000/);
+});
+
+test('رسالة السلفة تستخدم الاسم الافتراضي الجديد «محلات أبو أحمد»', () => {
+  const text = loanText(loan({}), DEFAULT_STORE_NAME);
+  assert.match(text, /^\*محلات أبو أحمد\*$/m);
+  const migrated = loanText(loan({}), normalizeStoreName('مجوهرات الذهب'));
+  assert.match(migrated, /^\*محلات أبو أحمد\*$/m);
 });
 
 test('loanReceiptText يوضح المتبقي بعد الدفعة ويعلن الإكمال', () => {

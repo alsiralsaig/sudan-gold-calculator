@@ -33,6 +33,7 @@ export const ExpensesScreen: React.FC = () => {
     deleteExpense,
     addLoan,
     loanSummary,
+    storeName,
   } = useGoldStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -327,7 +328,7 @@ export const ExpensesScreen: React.FC = () => {
             <div className="pt-1">
               <ShareButtons
                 text={partnerExpenseText(
-                  'مجوهرات الذهب',
+                  storeName,
                   {
                     target: selectedLabel,
                     isGeneral: filterTarget === 'عام',

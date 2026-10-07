@@ -16,6 +16,7 @@ import {
   Sale,
 } from '../types';
 import { mergeRecordsWithTombstones } from '../core/merge';
+import { DEFAULT_STORE_NAME, normalizeStoreName } from '../core/branding';
 import {
   Financials,
   Inventory,
@@ -381,7 +382,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [pinCode, setPinCodeState] = useState<string>('');
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [userEmail, setUserEmailState] = useState<string>('');
-  const [storeName, setStoreNameState] = useState<string>('مجوهرات الذهب');
+  const [storeName, setStoreNameState] = useState<string>(DEFAULT_STORE_NAME);
   const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [isCloudSignedIn, setIsCloudSignedIn] = useState<boolean>(false);
@@ -480,10 +481,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           setIsLocked(true);
         }
         if (data.userEmail && !hadSampleAccount) setUserEmailState(data.userEmail);
-        if (data.storeName && !hadSampleAccount) setStoreNameState(data.storeName);
+        if (data.storeName && !hadSampleAccount) setStoreNameState(normalizeStoreName(data.storeName));
         if (hadSampleAccount) {
           setUserEmailState('');
-          setStoreNameState('مجوهرات الذهب');
+          setStoreNameState(normalizeStoreName(''));
           setIsCloudSignedIn(false);
         }
         if (Array.isArray(data.ratesHistory)) setRatesHistory(data.ratesHistory.slice(-200));
@@ -1389,7 +1390,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       return {
         version: 6,
-        storeName: local?.storeName || cloud?.storeName || 'مجوهرات الذهب',
+        storeName: normalizeStoreName(local?.storeName || cloud?.storeName || ''),
         userEmail: local?.userEmail || cloud?.userEmail || '',
         purchases: purchasesMerge.items,
         sales: salesMerge.items,
@@ -2025,7 +2026,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (data.tombstones && typeof data.tombstones === 'object') setTombstones(data.tombstones);
       if (data.rates && typeof data.rates === 'object') setRates((prev) => ({ ...prev, ...data.rates }));
       if (data.userEmail) setUserEmailState(String(data.userEmail));
-      if (data.storeName) setStoreNameState(String(data.storeName));
+      if (data.storeName) setStoreNameState(normalizeStoreName(String(data.storeName)));
       return true;
     } catch {
       return false;

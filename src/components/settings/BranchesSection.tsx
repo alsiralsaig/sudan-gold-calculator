@@ -394,7 +394,7 @@ export const BranchesSection: React.FC = () => {
               <input
                 value={receiptName}
                 onChange={(e) => setReceiptName(e.target.value)}
-                placeholder="مجوهرات الذهب — فرع الخرطوم"
+                placeholder="محلات أبو أحمد — فرع الخرطوم"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500"
               />
             </div>

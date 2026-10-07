@@ -21,11 +21,13 @@ import {
   Timer,
   Trash2,
   UserPlus,
+  Store,
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { BranchesSection } from '../settings/BranchesSection';
 import { NotificationsSection } from '../settings/NotificationsSection';
 import { fmtNum } from '../../core/format';
+import { DEFAULT_STORE_NAME, normalizeStoreName } from '../../core/branding';
 import { APP_VERSION_LABEL } from '../../core/version';
 
 interface SettingsScreenProps {
@@ -68,6 +70,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     rates,
     setLocalPremium,
     deletedCount,
+    storeName,
+    setStoreName,
   } = useGoldStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,6 +98,23 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   const [cloudInfo, setCloudInfo] = useState<string>('');
   const [checkingCloud, setCheckingCloud] = useState(false);
   const [syncToast, setSyncToast] = useState('');
+
+  // اسم المحل — مسودة محلية تُحفظ بضغطة
+  const [storeNameDraft, setStoreNameDraft] = useState(storeName);
+  useEffect(() => {
+    setStoreNameDraft(storeName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeName]);
+
+  const storeNameDirty = normalizeStoreName(storeNameDraft) !== storeName;
+
+  const saveStoreName = () => {
+    const clean = normalizeStoreName(storeNameDraft);
+    setStoreName(clean);
+    setStoreNameDraft(clean);
+    setSyncToast(`تم حفظ اسم المحل: ${clean}`);
+    setTimeout(() => setSyncToast(''), 2500);
+  };
 
   // تعديل سعر السوق المحلي
   const [premiumInput, setPremiumInput] = useState(String(rates.localPremiumPercent ?? 0));
@@ -334,6 +355,62 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   return (
     <div className="space-y-6 pb-6 animate-in fade-in duration-200">
       
+      {/* 0. SECTION: اسم المحل — يظهر في كل الرسائل والفواتير */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 space-y-3 shadow-md">
+        <div className="flex items-center gap-2">
+          <div className="p-2 bg-amber-500/15 border border-amber-500/30 rounded-xl">
+            <Store className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-extrabold text-sm text-white">اسم المحل</h3>
+            <p className="text-[11px] text-slate-400">يظهر في ترويسة رسائل الواتساب، الفواتير، التقارير، والتذكيرات</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            value={storeNameDraft}
+            onChange={(e) => setStoreNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveStoreName();
+            }}
+            placeholder={DEFAULT_STORE_NAME}
+            className="flex-1 min-w-0 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none"
+          />
+          <button
+            onClick={saveStoreName}
+            disabled={!storeNameDirty}
+            className={`shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-black transition-colors ${
+              storeNameDirty
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            }`}
+          >
+            <Save className="w-3.5 h-3.5" />
+            حفظ
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          <span className="text-slate-400">هكذا تظهر الترويسة في الرسالة:</span>
+          <span className="font-black text-amber-300 truncate">{'*' + normalizeStoreName(storeNameDraft) + '*'}</span>
+        </div>
+
+        {normalizeStoreName(storeNameDraft) !== DEFAULT_STORE_NAME && (
+          <button
+            onClick={() => {
+              setStoreNameDraft(DEFAULT_STORE_NAME);
+              setStoreName(DEFAULT_STORE_NAME);
+              setSyncToast(`تمت استعادة الاسم الافتراضي: ${DEFAULT_STORE_NAME}`);
+              setTimeout(() => setSyncToast(''), 2500);
+            }}
+            className="text-[11px] font-bold text-slate-400 hover:text-amber-300 transition-colors"
+          >
+            استعادة الاسم الافتراضي ({DEFAULT_STORE_NAME})
+          </button>
+        )}
+      </div>
+
       {/* 1. SECTION: الأمان وقفل التطبيق */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden divide-y divide-slate-800/80 shadow-md">
         
