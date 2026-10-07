@@ -40,6 +40,7 @@ import { sortRecords } from '../../core/recordOrder';
 import { useRecordOrder } from '../../hooks/useRecordOrder';
 import { RecordOrderToggle } from '../common/RecordOrderToggle';
 import { StickyActionBar } from '../layout/StickyActionBar';
+import { useBackClose } from '../../lib/backStack';
 
 export const SalesScreen: React.FC = () => {
   const {
@@ -88,6 +89,11 @@ export const SalesScreen: React.FC = () => {
   const [payModal, setPayModal] = useState<Sale | null>(null);
   const [payAmount, setPayAmount] = useState('');
   const [payNote, setPayNote] = useState('');
+
+  // زر الرجوع في التلفون يقفل النوافذ بدل الخروج من التطبيق
+  useBackClose(showAddModal, () => { setShowAddModal(false); setEditingSale(null); });
+  useBackClose(selectedSale, () => setSelectedSale(null));
+  useBackClose(payModal, () => setPayModal(null));
 
   // Auto-calculate Total Sell & Buy Amounts when Weight or Price changes
   const handleWeightOrPriceChange = (

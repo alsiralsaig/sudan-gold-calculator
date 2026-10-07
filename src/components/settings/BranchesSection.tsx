@@ -18,6 +18,7 @@ import { useGoldStore } from '../../context/GoldStoreContext';
 import { ALL_BRANCHES, branchStats, suggestBranchCode } from '../../core/branches';
 import { fmtNum } from '../../core/format';
 import { Branch } from '../../types';
+import { useBackClose } from '../../lib/backStack';
 
 /**
  * قسم الفروع في الإعدادات.
@@ -53,6 +54,9 @@ export const BranchesSection: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [toast, setToast] = useState('');
   const [assignTarget, setAssignTarget] = useState('');
+
+  // زر الرجوع في التلفون يقفل النوافذ بدل الخروج من التطبيق
+  useBackClose(showForm, () => setShowForm(false));
 
   const stats = useMemo(
     () => branchStats(branches.filter((b) => !b.archived), allPurchases, allSales, allExpenses),

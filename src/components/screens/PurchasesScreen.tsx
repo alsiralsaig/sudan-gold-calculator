@@ -38,6 +38,7 @@ import { SmartSearchBar } from '../common/SmartSearchBar';
 import { sortRecords } from '../../core/recordOrder';
 import { useRecordOrder } from '../../hooks/useRecordOrder';
 import { RecordOrderToggle } from '../common/RecordOrderToggle';
+import { useBackClose } from '../../lib/backStack';
 
 export const PurchasesScreen: React.FC = () => {
   const {
@@ -83,6 +84,12 @@ export const PurchasesScreen: React.FC = () => {
   // Payment Modal State
   const [newPayAmount, setNewPayAmount] = useState('');
   const [newPayNote, setNewPayNote] = useState('');
+
+  // زر الرجوع في التلفون يقفل النوافذ بدل الخروج من التطبيق
+  useBackClose(showAddModal, () => { setShowAddModal(false); setEditingPurchase(null); });
+  useBackClose(selectedPurchase, () => setSelectedPurchase(null));
+  useBackClose(showPaymentModal, () => setShowPaymentModal(null));
+  useBackClose(showBulkEdit, () => setShowBulkEdit(false));
 
   // Auto-calculate Total Amount when Weight or Price changes
   const handleWeightOrPriceChange = (

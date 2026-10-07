@@ -5,6 +5,7 @@ import { Printer, X, Share2, Copy, Check } from 'lucide-react';
 import { PrintableInvoice, invoiceText } from '../../core/invoice';
 import { shareText, openWhatsApp } from '../../core/share';
 import { InvoiceSheet } from './InvoiceSheet';
+import { useBackClose } from '../../lib/backStack';
 
 type Props = {
   invoice: PrintableInvoice | null;
@@ -18,6 +19,7 @@ type Props = {
  * نفس الورقة الحالية تُستخدم كمعاينة على الشاشة وكورقة A4 عند الطباعة.
  */
 export const InvoicePrintModal: React.FC<Props> = ({ invoice, currency = 'ج.س', onClose }) => {
+  useBackClose(invoice, onClose);
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
 

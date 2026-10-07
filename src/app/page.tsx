@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GoldStoreProvider, useGoldStore } from '../context/GoldStoreContext';
 import { Navbar } from '../components/layout/Navbar';
 import { AutoUpdate } from '../components/common/AutoUpdate';
@@ -23,6 +23,9 @@ import { PwaInstallPrompt } from '../components/common/PwaInstallPrompt';
 import { StoreNamePrompt } from '../components/onboarding/StoreNamePrompt';
 import { BranchScopedNotice } from '../components/layout/BranchScopedNotice';
 import { NotificationsHealthBanner } from '../components/common/NotificationsHealthBanner';
+import { PullToRefresh } from '../components/common/PullToRefresh';
+import { useBackButton } from '../hooks/useBackButton';
+import { useBackClose } from '../lib/backStack';
 
 const KNOWN_TABS = [
   'dashboard',
@@ -42,10 +45,36 @@ const KNOWN_TABS = [
 ];
 
 function MainAppContent() {
-  const { isLocked } = useGoldStore();
+  const { isLocked, refreshFromCloud, refreshRates, isCloudSignedIn } = useGoldStore();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const scrollRef = useRef<HTMLElement>(null);
+
+  // زر الرجوع: يقفل النافذة/القائمة أو يرجع للشاشة السابقة بدل الخروج
+  const { navigate, exitHint } = useBackButton({
+    activeTab,
+    setActiveTab,
+    menuOpen: isMenuOpen,
+    setMenuOpen: setIsMenuOpen,
+  });
+  useBackClose(showInstallModal, () => setShowInstallModal(false));
+
+  // كل شاشة جديدة تبدأ من أعلاها
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [activeTab]);
+
+  /** السحب للتحديث: بيانات السحابة + الأسعار + فحص نسخة جديدة من التطبيق */
+  const handlePullRefresh = useCallback(async (): Promise<boolean> => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+    navigator.serviceWorker?.ready.then((reg) => reg.update()).catch(() => undefined);
+    const [cloud, rates] = await Promise.all([
+      isCloudSignedIn ? refreshFromCloud(false) : Promise.resolve({ ok: true, changed: false }),
+      refreshRates().catch(() => false),
+    ]);
+    return isCloudSignedIn ? cloud.ok : Boolean(rates);
+  }, [isCloudSignedIn, refreshFromCloud, refreshRates]);
 
   /**
    * فتح الشاشة المطلوبة عند الضغط على إشعار النظام:
@@ -55,7 +84,7 @@ function MainAppContent() {
     if (typeof window === 'undefined') return;
 
     const applyTab = (tab?: string | null) => {
-      if (tab && KNOWN_TABS.includes(tab)) setActiveTab(tab);
+      if (tab && KNOWN_TABS.includes(tab)) navigate(tab);
     };
 
     const params = new URLSearchParams(window.location.search);
@@ -68,7 +97,7 @@ function MainAppContent() {
 
     navigator.serviceWorker?.addEventListener('message', onMessage);
     return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
-  }, []);
+  }, [navigate]);
 
   if (isLocked) {
     return <LockScreen />;
@@ -80,26 +109,27 @@ function MainAppContent() {
       {/* Top Header Navbar with Dropdown Menu Drawer */}
       <Navbar
         activeTab={activeTab}
-        onNavigate={setActiveTab}
+        onNavigate={navigate}
         onOpenInstallModal={() => setShowInstallModal(true)}
         isMenuOpen={isMenuOpen}
         setIsMenuOpen={setIsMenuOpen}
       />
 
       {/* Main Content Area */}
-      <main className="app-scroll w-full p-3 sm:p-6 pb-0">
+      <main ref={scrollRef} className="app-scroll w-full p-3 sm:p-6 pb-0">
+        <PullToRefresh scrollRef={scrollRef} onRefresh={handlePullRefresh} disabled={isMenuOpen} />
         <div className="max-w-4xl mx-auto">
         {/* تنبيه: الفرع النشط يخفي سجلات موجودة — ضغطة واحدة ترجّعها */}
         <BranchScopedNotice />
         {/* صحة الإشعارات: يظهر فقط لو الإشعارات مفعّلة وفيها خلل */}
         <NotificationsHealthBanner />
-        {activeTab === 'dashboard' && <DashboardScreen onNavigate={setActiveTab} />}
+        {activeTab === 'dashboard' && <DashboardScreen onNavigate={navigate} />}
         {activeTab === 'calculator' && <CalculatorScreen />}
         {activeTab === 'partners' && <PartnersScreen />}
         {activeTab === 'purchases' && <PurchasesScreen />}
         {activeTab === 'sales' && <SalesScreen />}
         {activeTab === 'expenses' && <ExpensesScreen />}
-        {activeTab === 'search' && <SearchScreen onNavigate={setActiveTab} />}
+        {activeTab === 'search' && <SearchScreen onNavigate={navigate} />}
         {activeTab === 'gold_price' && <GoldPriceScreen />}
         {activeTab === 'reports' && <ReportsScreen />}
         {activeTab === 'analytics' && <AnalyticsScreen />}
@@ -121,6 +151,15 @@ function MainAppContent() {
         isOpen={showInstallModal}
         onClose={() => setShowInstallModal(false)}
       />
+
+      {/* تنبيه الخروج: ضغطة رجوع ثانية تخرج من التطبيق */}
+      {exitHint && (
+        <div className="pointer-events-none fixed inset-x-0 z-[90] flex justify-center px-4" style={{ bottom: 'calc(var(--sab-h, 0px) + 20px)' }} role="status">
+          <div className="rounded-full bg-slate-800/95 border border-slate-600 px-4 py-2.5 text-xs font-bold text-white shadow-xl shadow-black/50">
+            اضغط رجوع مرة تانية للخروج
+          </div>
+        </div>
+      )}
 
     </div>
   );

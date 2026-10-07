@@ -19,6 +19,7 @@ import {
 import { APP_VERSION_LABEL } from '../../core/version';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { AppNotification, NotificationKind, relativeArabic } from '../../core/notifications';
+import { useBackClose } from '../../lib/backStack';
 
 /**
  * مركز الإشعارات — لوحة تُفتح من الجرس في الأعلى.
@@ -53,6 +54,7 @@ interface Props {
 }
 
 export const NotificationsSheet: React.FC<Props> = ({ open, onClose, onNavigate }) => {
+  useBackClose(open, onClose);
   const {
     notifications,
     unreadNotifications,

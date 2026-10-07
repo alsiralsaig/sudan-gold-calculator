@@ -35,6 +35,7 @@ import { openWhatsApp } from '../../core/share';
 import { daysBetween, relativeDays, startOfDay, toDateInputValue } from '../../core/dates';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { branchName } from '../../core/branches';
+import { useBackClose } from '../../lib/backStack';
 
 type FilterKey = 'all' | 'lent' | 'borrowed' | 'overdue' | 'settled';
 
@@ -81,6 +82,10 @@ export const LoansScreen: React.FC = () => {
   const [payNote, setPayNote] = useState('');
   const [sendReceipt, setSendReceipt] = useState(false);
   const [toast, setToast] = useState('');
+
+  // زر الرجوع في التلفون يقفل النوافذ بدل الخروج من التطبيق
+  useBackClose(showForm, () => setShowForm(false));
+  useBackClose(payLoan, () => setPayLoan(null));
 
   const flash = (msg: string) => {
     setToast(msg);

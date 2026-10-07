@@ -33,6 +33,7 @@ import {
 import { fmtNum, formatInvoiceDate, kCurrency, unitsToGhJ, unitsToGramsDecimal } from '../../core/format';
 import { ShareButtons } from '../common/ShareButtons';
 import { ALL_BRANCHES } from '../../core/branches';
+import { useBackClose } from '../../lib/backStack';
 
 interface SearchScreenProps {
   onNavigate: (tab: string) => void;
@@ -86,6 +87,9 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onNavigate }) => {
   const [copiedAll, setCopiedAll] = useState(false);
   const [scope, setScope] = useState<'branch' | 'all'>('branch');
   const [notice, setNotice] = useState('');
+
+  // زر الرجوع في التلفون يقفل النوافذ بدل الخروج من التطبيق
+  useBackClose(selected, () => setSelected(null));
   const inputRef = useRef<HTMLInputElement>(null);
 
   const flash = (message: string) => {

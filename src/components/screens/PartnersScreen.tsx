@@ -11,6 +11,7 @@ import { smartMatch } from '../../core/globalSearch';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { fmtMoney, fmtNum, kCurrency } from '../../core/format';
 import { Partner } from '../../types';
+import { useBackClose } from '../../lib/backStack';
 
 export const PartnersScreen: React.FC = () => {
   const {
@@ -46,6 +47,9 @@ export const PartnersScreen: React.FC = () => {
   const [profitPercent, setProfitPercent] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
+
+  // زر الرجوع في التلفون يقفل النوافذ بدل الخروج من التطبيق
+  useBackClose(showAddModal, () => setShowAddModal(false));
 
   const handleOpenAdd = () => {
     setName('');

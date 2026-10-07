@@ -31,6 +31,7 @@ import { fmtNum } from '../../core/format';
 import { DEFAULT_STORE_NAME, normalizeStoreName } from '../../core/branding';
 import { describeSnapshot, isAccountSwitch } from '../../core/session';
 import { APP_VERSION_LABEL } from '../../core/version';
+import { useBackClose } from '../../lib/backStack';
 
 interface SettingsScreenProps {
   onOpenInstallModal?: () => void;
@@ -129,6 +130,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
 
   // تعديل سعر السوق المحلي
   const [premiumInput, setPremiumInput] = useState(String(rates.localPremiumPercent ?? 0));
+
+  // زر الرجوع في التلفون يقفل النوافذ بدل الخروج من التطبيق
+  useBackClose(showPinModal, () => setShowPinModal(false));
+  useBackClose(showAutoLockModal, () => setShowAutoLockModal(false));
 
   // Load auto lock timeout from storage
   useEffect(() => {

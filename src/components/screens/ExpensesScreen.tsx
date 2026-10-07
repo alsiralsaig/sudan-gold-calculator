@@ -27,6 +27,7 @@ import { sortRecords } from '../../core/recordOrder';
 import { useRecordOrder } from '../../hooks/useRecordOrder';
 import { RecordOrderToggle } from '../common/RecordOrderToggle';
 import { ShareButtons } from '../common/ShareButtons';
+import { useBackClose } from '../../lib/backStack';
 
 export const ExpensesScreen: React.FC = () => {
   const {
@@ -62,6 +63,10 @@ export const ExpensesScreen: React.FC = () => {
   const [loanDirection, setLoanDirection] = useState<LoanDirection>('lent');
   const [loanPhone, setLoanPhone] = useState('');
   const [loanDueDate, setLoanDueDate] = useState('');
+
+  // زر الرجوع في التلفون يقفل النوافذ بدل الخروج من التطبيق
+  useBackClose(showAddModal, () => setShowAddModal(false));
+  useBackClose(selectedExpense, () => setSelectedExpense(null));
 
   const handleOpenAdd = () => {
     setName('');
