@@ -17,6 +17,7 @@ import {
 } from '../types';
 import { mergeRecordsWithTombstones } from '../core/merge';
 import { DEFAULT_STORE_NAME, normalizeStoreName } from '../core/branding';
+import { SessionSnapshotMeta, totalRecords } from '../core/session';
 import {
   Financials,
   Inventory,
@@ -219,9 +220,22 @@ interface GoldStoreContextType {
   setLastSyncTime: (timeStr: string) => void;
 
   // Cloud Auth & Sync
-  signInCloud: (email: string, pass: string) => Promise<{ success: boolean; message: string }>;
-  signUpCloud: (email: string, pass: string) => Promise<{ success: boolean; message: string }>;
-  signOutCloud: () => void;
+  signInCloud: (email: string, pass: string, opts?: { clearLocal?: boolean }) => Promise<{ success: boolean; message: string }>;
+  signUpCloud: (email: string, pass: string, opts?: { clearLocal?: boolean }) => Promise<{ success: boolean; message: string }>;
+  /** تسجيل الخروج: يحفظ لقطة ثم يفرّغ بيانات الحساب من الجهاز */
+  signOutCloud: () => SessionSnapshotMeta | null;
+  /** حساب السحابة المسجّل على هذا الجهاز آخر مرة */
+  lastAccountEmail: string;
+  /** لقطة ما قبل الخروج/تبديل الحساب (إن وُجدت) */
+  snapshotMeta: SessionSnapshotMeta | null;
+  /** هل توجد سجلات محلية على الجهاز؟ */
+  hasLocalRecords: boolean;
+  /** ترجيع لقطة ما قبل الخروج إلى الجهاز */
+  restoreSnapshot: () => { ok: boolean; total: number };
+  /** حذف لقطة ما قبل الخروج نهائياً */
+  discardSnapshot: () => void;
+  /** عمل لقطة يدوية من بيانات الجهاز */
+  createSnapshot: () => SessionSnapshotMeta;
   syncWithCloud: (silent?: boolean) => Promise<boolean>;
 
   addPurchase: (p: Omit<Purchase, 'id' | 'payments' | 'updatedAt'>) => void;
@@ -292,6 +306,26 @@ const GoldStoreContext = createContext<GoldStoreContextType | undefined>(undefin
 
 const STORAGE_KEY = 'golden_calculator_db_v6';
 const LEGACY_KEYS = ['golden_calculator_db_v5', 'golden_calculator_db_v4'];
+/** حساب السحابة الذي سُجّل على هذا الجهاز آخر مرة */
+const LAST_ACCOUNT_KEY = 'gold_last_account_email_v1';
+/** لقطة كاملة تُحفظ قبل الخروج أو تبديل الحساب — قابلة للاسترجاع */
+const SNAPSHOT_KEY = 'gold_preswitch_snapshot_v1';
+
+/** حِمل فارغ (نظيف) للبدء بحساب جديد أو لدمج حساب بلا بيانات محلية */
+const emptyDbPayload = (userEmail = '', storeName = '') => ({
+  version: 6,
+  storeName,
+  userEmail,
+  purchases: [],
+  sales: [],
+  expenses: [],
+  partners: [],
+  branches: [],
+  loans: [],
+  invoiceCounters: { sale: 0, purchase: 0 },
+  rates: INITIAL_RATES,
+  tombstones: {},
+});
 const LOCKOUT_KEY = 'gold_pin_lockout';
 const NOTIFICATIONS_KEY = 'gold_notifications_v1';
 const DISMISSED_NOTIFICATIONS_KEY = 'gold_dismissed_notifications_v1';
@@ -387,6 +421,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [isCloudSignedIn, setIsCloudSignedIn] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastAccountEmail, setLastAccountEmail] = useState<string>('');
+  const [snapshotMeta, setSnapshotMeta] = useState<SessionSnapshotMeta | null>(null);
   const [ratesMeta, setRatesMeta] = useState<RatesMeta>({
     ok: false,
     stale: true,
@@ -1306,6 +1342,148 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (pinCode) setIsLocked(true);
   };
 
+  /* -------- جلسة الحساب: من سجّل هنا آخر مرة + لقطة ما قبل الخروج -------- */
+
+  useEffect(() => {
+    try {
+      const savedAccount = localStorage.getItem(LAST_ACCOUNT_KEY);
+      if (savedAccount) setLastAccountEmail(savedAccount);
+      const rawSnap = localStorage.getItem(SNAPSHOT_KEY);
+      if (rawSnap) {
+        const parsed = JSON.parse(rawSnap);
+        if (parsed?.meta) setSnapshotMeta(parsed.meta as SessionSnapshotMeta);
+      }
+    } catch {
+      /* تجاهل: تخزين غير متاح */
+    }
+  }, []);
+
+  const hasLocalRecords = useMemo(
+    () =>
+      totalRecords({
+        purchases: allPurchases,
+        sales: allSales,
+        expenses: allExpenses,
+        partners,
+        loans: allLoans,
+      }) > 0,
+    [allPurchases, allSales, allExpenses, partners, allLoans]
+  );
+
+  const rememberAccount = useCallback((email: string) => {
+    const clean = String(email || '').trim().toLowerCase();
+    setLastAccountEmail((prev) => (clean || prev));
+    try {
+      if (clean) localStorage.setItem(LAST_ACCOUNT_KEY, clean);
+    } catch {
+      /* تجاهل */
+    }
+  }, []);
+
+  /** لقطة كاملة من حالة الجهاز الحالية — تُحفظ محلياً قبل أي مسح */
+  const createSnapshot = useCallback((): SessionSnapshotMeta => {
+    const meta: SessionSnapshotMeta = {
+      email: userEmail || lastAccountEmail || '',
+      storeName,
+      at: new Date().toISOString(),
+      counts: {
+        purchases: allPurchases.length,
+        sales: allSales.length,
+        expenses: allExpenses.length,
+        partners: partners.length,
+        loans: allLoans.length,
+        branches: branches.length,
+      },
+    };
+    const payload = {
+      version: 6,
+      storeName,
+      userEmail,
+      purchases: allPurchases,
+      sales: allSales,
+      expenses: allExpenses,
+      partners,
+      branches,
+      loans: allLoans,
+      invoiceCounters,
+      rates,
+      tombstones,
+    };
+    try {
+      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ meta, payload }));
+    } catch {
+      /* تجاهل: مساحة ممتلئة */
+    }
+    setSnapshotMeta(meta);
+    return meta;
+  }, [
+    userEmail,
+    lastAccountEmail,
+    storeName,
+    allPurchases,
+    allSales,
+    allExpenses,
+    partners,
+    allLoans,
+    branches,
+    invoiceCounters,
+    rates,
+    tombstones,
+  ]);
+
+  /** تفريغ سجلات الحساب من حالة التطبيق (بلا لمس الإعدادات) */
+  const resetLocalRecords = useCallback(() => {
+    setAllPurchases([]);
+    setAllSales([]);
+    setAllExpenses([]);
+    setPartners([]);
+    setBranches([]);
+    setAllLoans([]);
+    setActiveBranchIdState(ALL_BRANCHES);
+    setInvoiceCounters({ sale: 0, purchase: 0 });
+    setTombstones({});
+    setStoreNameState(DEFAULT_STORE_NAME);
+  }, []);
+
+  /** ترجيع لقطة ما قبل الخروج إلى الجهاز */
+  const restoreSnapshot = useCallback((): { ok: boolean; total: number } => {
+    try {
+      const raw = localStorage.getItem(SNAPSHOT_KEY);
+      if (!raw) return { ok: false, total: 0 };
+      const parsed = JSON.parse(raw);
+      const p = parsed?.payload || {};
+      setAllPurchases(safeArray<Purchase>(p.purchases));
+      setAllSales(safeArray<Sale>(p.sales));
+      setAllExpenses(safeArray<Expense>(p.expenses));
+      setPartners(safeArray<Partner>(p.partners));
+      setBranches(safeArray<Branch>(p.branches));
+      setAllLoans(safeArray<Loan>(p.loans));
+      if (p.invoiceCounters && typeof p.invoiceCounters === 'object') {
+        setInvoiceCounters({
+          sale: Math.max(0, Number(p.invoiceCounters.sale) || 0),
+          purchase: Math.max(0, Number(p.invoiceCounters.purchase) || 0),
+        });
+      }
+      if (p.tombstones && typeof p.tombstones === 'object') setTombstones(p.tombstones as AppTombstones);
+      if (p.storeName) setStoreNameState(normalizeStoreName(String(p.storeName)));
+      localStorage.removeItem(SNAPSHOT_KEY);
+      setSnapshotMeta(null);
+      return { ok: true, total: totalRecords(p) };
+    } catch {
+      return { ok: false, total: 0 };
+    }
+  }, []);
+
+  /** حذف لقطة ما قبل الخروج نهائياً */
+  const discardSnapshot = useCallback(() => {
+    try {
+      localStorage.removeItem(SNAPSHOT_KEY);
+    } catch {
+      /* تجاهل */
+    }
+    setSnapshotMeta(null);
+  }, []);
+
   /* ------------------------- المزامنة السحابية ------------------------- */
 
   const syncPayload = useCallback(
@@ -1826,7 +2004,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, []);
 
-  const signInCloud = async (email: string, pass: string) => {
+  const signInCloud = async (email: string, pass: string, opts?: { clearLocal?: boolean }) => {
     if (!email.trim() || pass.length < 6) {
       return { success: false, message: 'يرجى كتابة بريد صحيح وكلمة مرور من 6 خانات على الأقل' };
     }
@@ -1842,10 +2020,16 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const trimmedEmail = email.trim().toLowerCase();
       setUserEmailState(trimmedEmail);
       setIsCloudSignedIn(true);
+      rememberAccount(trimmedEmail);
+
+      // تبديل حساب: نبدأ من حِمل فارغ حتى لا ترث بيانات جهاز صاحبه القديم،
+      // وبيانات الحساب الجديد تُنزَّل من السحابة.
+      if (opts?.clearLocal) resetLocalRecords();
 
       const cloud = await fetch('/api/sync', { cache: 'no-store' });
       const cloudResult = await cloud.json();
-      const merged = mergePayloads({ ...syncPayload(), userEmail: trimmedEmail }, cloudResult.payload || {});
+      const basePayload = opts?.clearLocal ? emptyDbPayload('') : syncPayload();
+      const merged = mergePayloads({ ...basePayload, userEmail: trimmedEmail }, cloudResult.payload || {});
       applyCloudPayload(merged);
       const put = await fetch('/api/sync', {
         method: 'PUT',
@@ -1860,7 +2044,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const signUpCloud = async (email: string, pass: string) => {
+  const signUpCloud = async (email: string, pass: string, opts?: { clearLocal?: boolean }) => {
     if (!email.trim() || pass.length < 6) {
       return { success: false, message: 'يرجى كتابة بريد صحيح وكلمة مرور من 6 خانات على الأقل' };
     }
@@ -1872,12 +2056,21 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       const result = await response.json();
       if (!response.ok) return { success: false, message: result.message || 'تعذر إنشاء الحساب' };
-      setUserEmailState(email.trim().toLowerCase());
+      const trimmedEmail = email.trim().toLowerCase();
+      setUserEmailState(trimmedEmail);
       setIsCloudSignedIn(true);
+      rememberAccount(trimmedEmail);
+
+      // حساب جديد بعد حساب آخر: الجهاز يبدأ نظيفاً — بيانات الحساب القديم لا تُرفع لهذا الحساب
+      const signUpPayload = opts?.clearLocal
+        ? { ...emptyDbPayload(trimmedEmail), storeName: DEFAULT_STORE_NAME }
+        : { ...syncPayload(), userEmail: trimmedEmail };
+      if (opts?.clearLocal) resetLocalRecords();
+
       const put = await fetch('/api/sync', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(syncPayload()),
+        body: JSON.stringify(signUpPayload),
       });
       if (!put.ok) return { success: false, message: 'تم إنشاء الحساب لكن فشل رفع البيانات' };
       setLastSyncTime(syncTimeLabel());
@@ -1887,11 +2080,28 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const signOutCloud = () => {
-    fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
-    setIsCloudSignedIn(false);
+  /**
+   * تسجيل الخروج:
+   * 1) تُحفظ لقطة كاملة من بيانات الجهاز (قابلة للاسترجاع بضغطة).
+   * 2) يُفرَّغ الجهاز — بيانات الحساب لا تبقى لمن يستعمله بعده.
+   * 3) تُنهى جلسة السيرفر. البريد يُحفظ للمقارنة عند الدخول بحساب مختلف.
+   */
+  const signOutCloud = useCallback(() => {
+    const account = userEmail || lastAccountEmail;
+    const meta = createSnapshot();
+    resetLocalRecords();
+    setUserEmailState('');
     setLastSyncTime('');
-  };
+    setIsCloudSignedIn(false);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* تجاهل */
+    }
+    rememberAccount(account);
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+    return meta;
+  }, [userEmail, lastAccountEmail, createSnapshot, resetLocalRecords, rememberAccount]);
 
   /* ------------------------- النسخ الاحتياطي ------------------------- */
 
@@ -2494,6 +2704,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     signInCloud,
     signUpCloud,
     signOutCloud,
+    lastAccountEmail,
+    snapshotMeta,
+    hasLocalRecords,
+    restoreSnapshot,
+    discardSnapshot,
+    createSnapshot,
     syncWithCloud,
 
     addPurchase,

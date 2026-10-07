@@ -22,12 +22,14 @@ import {
   Trash2,
   UserPlus,
   Store,
+  History,
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { BranchesSection } from '../settings/BranchesSection';
 import { NotificationsSection } from '../settings/NotificationsSection';
 import { fmtNum } from '../../core/format';
 import { DEFAULT_STORE_NAME, normalizeStoreName } from '../../core/branding';
+import { describeSnapshot, isAccountSwitch } from '../../core/session';
 import { APP_VERSION_LABEL } from '../../core/version';
 
 interface SettingsScreenProps {
@@ -72,6 +74,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     deletedCount,
     storeName,
     setStoreName,
+    lastAccountEmail,
+    snapshotMeta,
+    hasLocalRecords,
+    restoreSnapshot,
+    discardSnapshot,
   } = useGoldStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -107,6 +114,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   }, [storeName]);
 
   const storeNameDirty = normalizeStoreName(storeNameDraft) !== storeName;
+
+  /** إجمالي السجلات المحلية على الجهاز */
+  const localRecordCount =
+    allPurchases.length + allSales.length + allExpenses.length + partners.length + allLoans.length;
 
   const saveStoreName = () => {
     const clean = normalizeStoreName(storeNameDraft);
@@ -187,10 +198,26 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   const handleCloudAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
+
+    // تبديل حساب: الجهاز فيه بيانات حساب آخر — نحفظ نسخة ونبدأ نظيفاً
+    const targetEmail = inputEmail.trim().toLowerCase();
+    const switching = isAccountSwitch(lastAccountEmail, targetEmail) && hasLocalRecords;
+    let clearLocal = false;
+    if (switching) {
+      const okSwitch = confirm(
+        `تنبيه: هذا الجهاز مسجّل عليه حساب آخر (${lastAccountEmail}).\n\n` +
+          `الدخول بحساب مختلف هيبدأ بحساب نظيف، وبيانات الجهاز (${fmtNum(localRecordCount)} سجل) لن تُرفع للحساب الجديد.\n\n` +
+          `سنحفظ نسخة داخلية كاملة تقدر ترجّعها بضغطة من «الإعدادات ← البيانات»، وهيتم تنزيل ملف نسخة احتياطية كمان.\n\nمتابعة؟`
+      );
+      if (!okSwitch) return;
+      exportData();
+      clearLocal = true;
+    }
+
     setIsSyncing(true);
 
     if (authMode === 'login') {
-      const res = await signInCloud(inputEmail, inputPassword);
+      const res = await signInCloud(inputEmail, inputPassword, { clearLocal });
       setIsSyncing(false);
       if (res.success) {
         setSyncToast(res.message);
@@ -199,7 +226,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
         setAuthError(res.message);
       }
     } else {
-      const res = await signUpCloud(inputEmail, inputPassword);
+      const res = await signUpCloud(inputEmail, inputPassword, { clearLocal });
       setIsSyncing(false);
       if (res.success) {
         setSyncToast(res.message);
@@ -287,12 +314,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     );
   };
 
+  /**
+   * تسجيل الخروج: بيانات الحساب تختفي من الجهاز (زي أي تطبيق محترم)،
+   * لكن قبلها نسخة كاملة تلقائياً: لقطة داخلية + ملف نسخة احتياطية.
+   */
   const handleSignOut = () => {
-    if (confirm('تسجيل الخروج: سيتم إيقاف المزامنة السحابية على هذا الجهاز وستبقى بياناتك المحلية محفوظة. هل تريد المتابعة؟')) {
-      signOutCloud();
-      setSyncToast('تم تسجيل الخروج بنجاح');
-      setTimeout(() => setSyncToast(''), 2500);
-    }
+    const msg = hasLocalRecords
+      ? `تسجيل الخروج: بيانات هذا الجهاز (${fmtNum(localRecordCount)} سجل) هتختفي من الجهاز — لأن نسختك الأصلية محفوظة في حسابك السحابي (${userEmail || 'حسابك'}).\n\n` +
+        'قبل الخروج: نسحفظ نسخة داخلية تقدر ترجّعها بضغطة، وهيتم تنزيل ملف نسخة احتياطية كمان.\n\nمتابعة؟'
+      : 'تسجيل الخروج من الحساب السحابي على هذا الجهاز؟';
+    if (!confirm(msg)) return;
+    if (hasLocalRecords) exportData();
+    const meta = signOutCloud();
+    setSyncToast(
+      meta
+        ? `تم الخروج — نُسخت ${fmtNum(localRecordCount)} سجل إلى نسخة الاسترجاع`
+        : 'تم تسجيل الخروج بنجاح'
+    );
+    setTimeout(() => setSyncToast(''), 3500);
   };
 
   // Clipboard Actions
@@ -871,6 +910,47 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
         <div className="flex items-center gap-2 px-1 text-rose-400 font-black text-sm border-r-4 border-rose-500 pr-2">
           <span>البيانات</span>
         </div>
+
+        {/* نسخة آخر خروج/تبديل حساب — قابلة للاسترجاع بضغطة */}
+        {snapshotMeta && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-amber-500/15 text-amber-400 rounded-2xl">
+                <History className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-extrabold text-sm text-amber-300">نسخة آخر خروج / تبديل حساب</h4>
+                <p className="text-[11px] text-slate-300 mt-0.5">{describeSnapshot(snapshotMeta).title}</p>
+                <p className="text-[11px] text-slate-500">{describeSnapshot(snapshotMeta).breakdown}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const res = restoreSnapshot();
+                  if (res.ok) {
+                    setSyncToast(`تم استرجاع ${fmtNum(res.total)} سجل إلى الجهاز`);
+                    setTimeout(() => setSyncToast(''), 3000);
+                  } else {
+                    setSyncToast('تعذر الاسترجاع — لا توجد نسخة');
+                    setTimeout(() => setSyncToast(''), 3000);
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-colors"
+              >
+                استرجاع الآن
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm('حذف نسخة الاسترجاع نهائياً؟')) discardSnapshot();
+                }}
+                className="shrink-0 px-3 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold transition-colors"
+              >
+                حذف النسخة
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
           <div
