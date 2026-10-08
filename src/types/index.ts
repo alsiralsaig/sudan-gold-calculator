@@ -60,7 +60,7 @@ export interface Loan {
 export interface Purchase {
   id: string;
   date: string;
-  units: number; // total units (1g = 100 sub-units = 4 habba = 40 juz)
+  units: number; // total units (1g = 10 habba = 100 juz)
   purity: number; // karat (18, 21, 22, 24) or fineness (e.g. 650, 875)
   amount: number; // total buy amount in SDG
   pendingAmount: number; // remaining debt to seller

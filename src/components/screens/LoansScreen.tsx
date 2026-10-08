@@ -17,6 +17,7 @@ import {
   Phone,
   CalendarDays,
 } from 'lucide-react';
+import { ArchiveShortcut } from '../common/ArchiveShortcut';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { Loan, LoanDirection } from '../../types';
 import { matchLoanQuery } from '../../core/globalSearch';
@@ -288,6 +289,7 @@ export const LoansScreen: React.FC = () => {
           })}
           </div>
         </SmartSearchBar>
+      <ArchiveShortcut kind="loan" />
       </div>
 
       {/* القائمة */}

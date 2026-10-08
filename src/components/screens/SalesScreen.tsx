@@ -9,6 +9,7 @@ import {
   HandCoins,
   Wallet
 } from 'lucide-react';
+import { ArchiveShortcut } from '../common/ArchiveShortcut';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import {
   weightToUnits,
@@ -320,6 +321,7 @@ export const SalesScreen: React.FC = () => {
         ))}
         <RecordOrderToggle order={recordOrder} onToggle={toggleRecordOrder} />
       </SmartSearchBar>
+      <ArchiveShortcut kind="sale" />
 
       {filteredSales.length > 0 && <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">
         <div className="text-[11px] text-slate-400">إجراءات الصفحة على السجلات الظاهرة فقط</div>

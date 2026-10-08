@@ -4,10 +4,12 @@ import {
   Plus,
   Printer,
   Archive,
+  Trash2,
   Edit2,
   Filter,
   AlertTriangle
 } from 'lucide-react';
+import { ArchiveShortcut } from '../common/ArchiveShortcut';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import {
   weightToUnits,
@@ -288,6 +290,7 @@ export const PurchasesScreen: React.FC = () => {
         ))}
         <RecordOrderToggle order={recordOrder} onToggle={toggleRecordOrder} />
       </SmartSearchBar>
+      <ArchiveShortcut kind="purchase" />
 
       {/* Bulk actions apply to the currently visible filtered records only */}
       {filteredPurchases.length > 0 && <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">
@@ -797,10 +800,22 @@ export const PurchasesScreen: React.FC = () => {
                     setSelectedPurchase(null);
                   }
                 }}
-                className="py-2.5 px-4 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40"
+                className="py-2.5 px-3 bg-amber-600/15 hover:bg-amber-600/25 text-amber-300 font-bold rounded-xl text-xs border border-amber-600/40 flex items-center gap-1"
               >
                 <Archive className="w-4 h-4" />
                 أرشفة
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm('حذف نهائي لهذه الفاتورة؟ لا يمكن استعادتها بعد الحذف.')) {
+                    deletePurchase(selectedPurchase.id);
+                    setSelectedPurchase(null);
+                  }
+                }}
+                className="py-2.5 px-3 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40 flex items-center gap-1"
+              >
+                <Trash2 className="w-4 h-4" />
+                حذف
               </button>
             </div>
           </div>

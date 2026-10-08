@@ -1604,6 +1604,25 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     a.length === b.length &&
     a.every((item, i) => item?.id === b[i]?.id && item?.updatedAt === b[i]?.updatedAt);
 
+  /**
+   * تطبيق نتيجة المزامنة بدمجها مع الحالة *الحالية* (تحديث وظيفي) لا استبدالها.
+   * السبب: الحِمل المدموج بُني من لقطة محلية أُخذت قبل انتظار الشبكة؛ لو عدّل المستخدم
+   * شيئاً أثناء الطلب (استعادة من الأرشيف، أرشفة، تعديل، حذف) كان الاستبدال يمحو تعديله.
+   * الآن: الأحدث `updatedAt` يفوز، وسجلات الحذف المحلية الأحدث تُحترم.
+   */
+  const tombstonesRef = useRef<AppTombstones>({});
+  tombstonesRef.current = tombstones;
+  const mergeInto = <T extends { id: string; updatedAt?: string }>(
+    prev: T[],
+    incoming: T[],
+    cloudTombstones: AppTombstones,
+    sort: boolean
+  ): T[] => {
+    const items = mergeRecordsWithTombstones<T>(prev, incoming, tombstonesRef.current, cloudTombstones).items;
+    const next = sort ? sortRecords(items) : items;
+    return sameRecords(prev, next) ? prev : next;
+  };
+
   const applyCloudPayload = (payload: any) => {
     if (!payload) return;
     const nextPurchases = safeArray<Purchase>(payload.purchases);
@@ -1612,13 +1631,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const nextPartners = safeArray<Partner>(payload.partners);
     const nextBranches = safeArray<Branch>(payload.branches);
     const nextLoans = safeArray<Loan>(payload.loans);
+    const ct: AppTombstones = payload.tombstones && typeof payload.tombstones === 'object' ? payload.tombstones : {};
 
-    setAllPurchases((prev) => (sameRecords(prev, nextPurchases) ? prev : nextPurchases));
-    setAllSales((prev) => (sameRecords(prev, nextSales) ? prev : nextSales));
-    setAllExpenses((prev) => (sameRecords(prev, nextExpenses) ? prev : nextExpenses));
-    setPartners((prev) => (sameRecords(prev, nextPartners) ? prev : nextPartners));
-    setBranches((prev) => (sameRecords(prev, nextBranches) ? prev : nextBranches));
-    setAllLoans((prev) => (sameRecords(prev, nextLoans) ? prev : nextLoans));
+    setAllPurchases((prev) => mergeInto(prev, nextPurchases, ct, true));
+    setAllSales((prev) => mergeInto(prev, nextSales, ct, true));
+    setAllExpenses((prev) => mergeInto(prev, nextExpenses, ct, true));
+    setPartners((prev) => mergeInto(prev, nextPartners, ct, false));
+    setBranches((prev) => mergeInto(prev, nextBranches, ct, false));
+    setAllLoans((prev) => mergeInto(prev, nextLoans, ct, true));
     if (payload.invoiceCounters && typeof payload.invoiceCounters === 'object') {
       setInvoiceCounters((prev) => ({
         sale: Math.max(prev.sale, Number(payload.invoiceCounters.sale) || 0),
@@ -1626,7 +1646,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }));
     }
     if (payload.tombstones && typeof payload.tombstones === 'object') {
-      setTombstones((prev) => ({ ...prev, ...payload.tombstones }));
+      setTombstones((prev) => {
+        const out: AppTombstones = { ...prev };
+        Object.entries(payload.tombstones as AppTombstones).forEach(([id, at]) => {
+          if (!out[id] || new Date(at) > new Date(out[id])) out[id] = at;
+        });
+        return out;
+      });
     }
     if (typeof payload.storeName === 'string' && payload.storeName) {
       setStoreNameState(payload.storeName);

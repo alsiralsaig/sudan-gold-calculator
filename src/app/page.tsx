@@ -1,5 +1,6 @@
 'use client';
 
+import { OPEN_ARCHIVE_EVENT } from '../core/archiveNav';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GoldStoreProvider, useGoldStore } from '../context/GoldStoreContext';
 import { Navbar } from '../components/layout/Navbar';
@@ -97,6 +98,13 @@ function MainAppContent() {
 
     navigator.serviceWorker?.addEventListener('message', onMessage);
     return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
+  }, [navigate]);
+
+  // زر «الأرشيف» داخل أي شاشة يفتح تبويب قسمه مباشرة
+  useEffect(() => {
+    const onOpen = () => navigate('archive');
+    window.addEventListener(OPEN_ARCHIVE_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_ARCHIVE_EVENT, onOpen);
   }, [navigate]);
 
   if (isLocked) {

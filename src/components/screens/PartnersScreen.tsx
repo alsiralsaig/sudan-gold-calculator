@@ -5,6 +5,7 @@ import {
   Edit2,
   Trash2
 } from 'lucide-react';
+import { ArchiveShortcut } from '../common/ArchiveShortcut';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { SmartSearchBar } from '../common/SmartSearchBar';
 import { smartMatch } from '../../core/globalSearch';
@@ -183,6 +184,7 @@ export const PartnersScreen: React.FC = () => {
         onChange={setPartnerQuery}
         placeholder="ابحث بين الشركاء: اسم، هاتف، رأس المال، نسبة الربح..."
       />
+      <ArchiveShortcut kind="partner" />
 
       {/* Header and Add Partner Action */}
       <div className="flex items-center justify-between">

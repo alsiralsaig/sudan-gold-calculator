@@ -9,6 +9,7 @@ import {
   ArrowLeftRight,
   Info
 } from 'lucide-react';
+import { ArchiveShortcut } from '../common/ArchiveShortcut';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import {
@@ -195,6 +196,7 @@ export const ExpensesScreen: React.FC = () => {
         placeholder="بحث بالبيان أو الشريك أو المبلغ..."
         accent="rose"
       />
+      <ArchiveShortcut kind="expense" />
 
       {/* 2. فلترة الجهة: الكل / عامة / خاصة */}
       <div className="grid grid-cols-3 gap-2">
