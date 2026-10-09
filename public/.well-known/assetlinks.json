@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "sd.gold.calculator",
+      "sha256_cert_fingerprints": ["7E:CB:84:48:71:67:A4:A8:35:88:A5:86:DA:CC:A9:2F:6D:93:1A:64:22:06:47:E7:65:34:5C:59:95:74:3A:70"]
+    }
+  }
+]
