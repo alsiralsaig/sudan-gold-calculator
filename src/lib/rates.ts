@@ -102,8 +102,10 @@ function inRange(value: number | null, min: number, max: number): value is numbe
   return value !== null && value >= min && value <= max;
 }
 
-/** جلب نص مع مهلة زمنية وشعار تعريف */
-export async function fetchText(url: string, timeoutMs = 9000): Promise<string | null> {
+/** مواقع بتحجب سيرفرات Vercel (Cloudflare) — لو الجلب المباشر فشل بنجرّب عبر قارئ وسيط */
+const PROXY_HOSTS = /(^|\.)(sudanakhbar\.com|almashhadalsudani\.com)$/i;
+
+async function fetchDirect(url: string, timeoutMs: number): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: {
@@ -112,6 +114,29 @@ export async function fetchText(url: string, timeoutMs = 9000): Promise<string |
         'Accept-Language': 'ar,en;q=0.8',
       },
       signal: AbortSignal.timeout(timeoutMs),
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    // صفحة تحدّي Cloudflare بدل المحتوى
+    if (/Just a moment\.\.\.|cf-browser-verification|challenge-platform/i.test(text.slice(0, 4000))) return null;
+    return text;
+  } catch {
+    return null;
+  }
+}
+
+/** جلب نص مع مهلة زمنية وشعار تعريف (+ قارئ وسيط احتياطي للمواقع المحجوبة) */
+export async function fetchText(url: string, timeoutMs = 9000): Promise<string | null> {
+  const direct = await fetchDirect(url, timeoutMs);
+  if (direct) return direct;
+  let host = '';
+  try { host = new URL(url).hostname; } catch { return null; }
+  if (!PROXY_HOSTS.test(host)) return null;
+  try {
+    const res = await fetch(`https://r.jina.ai/${url}`, {
+      headers: { 'X-Return-Format': 'html', Accept: 'text/html' },
+      signal: AbortSignal.timeout(Math.max(timeoutMs, 15000)),
       cache: 'no-store',
     });
     if (!res.ok) return null;
