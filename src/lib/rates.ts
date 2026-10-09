@@ -24,7 +24,8 @@ export interface RatesResult {
   fetchedAt: string;
   global: { ounceUsd: number; gramUsd: number; source: string; ok: boolean };
   usd: { sell: number; buy: number | null; source: string; ok: boolean };
-  banks: { sell: number | null; source: string };
+  /** بنك الخرطوم (تحويلات): شراء/بيع */
+  banks: { sell: number | null; buy: number | null; bank: string; source: string };
   cross: { sar: number | null; aed: number | null; egp: number | null; source: string };
   karat21: number;
   karat24: number;
@@ -177,6 +178,7 @@ interface SudanSnapshot {
   usdSell: number;
   usdBuy: number | null;
   bankSell: number | null;
+  bankBuy?: number | null;
   sar: number | null;
   aed: number | null;
   egp: number | null;
@@ -242,6 +244,26 @@ export function extractBankRate(text: string): number | null {
   return null;
 }
 
+/**
+ * سعر بنك الخرطوم من جدول «سعر صرف الدولار ... للتحويلات في 17 بنك سوداني»:
+ * الشكل: "بنك الخرطوم | 4200.00 | 4231.50 | مستقر" (شراء ثم بيع).
+ * لازم رقمين ورا اسم البنك مباشرة (بين فواصل/مسافات بس) عشان ما نلقط أرقام من فقرات النص.
+ */
+export function extractKhartoumBank(text: string): { buy: number; sell: number } | null {
+  const re = /بنك\s*الخرطوم[\s|]+([\d,]+(?:\.\d+)?)[\s|]+([\d,]+(?:\.\d+)?)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const a = toNumber(m[1]);
+    const b = toNumber(m[2]);
+    if (inRange(a, 500, 50_000) && inRange(b, 500, 50_000)) {
+      const buy = Math.min(a!, b!);
+      const sell = Math.max(a!, b!);
+      if (sell / buy < 1.2) return { buy, sell };
+    }
+  }
+  return null;
+}
+
 function parseSudanArticle(text: string, url: string): SudanSnapshot | null {
   const usdPair = extractCurrencyPair(text, ALIAS.usd);
   let usdSell = usdPair.sell;
@@ -304,40 +326,55 @@ async function fetchSudanRates(): Promise<SudanSnapshot | null> {
   if (sectionHtml) {
     const links = articleLinks(sectionHtml);
 
-    // 1) مقال السوق الموازي/الأسود (المصدر الأساسي)
-    const parallel =
-      links.find((l) => /السوق\s*(الأسود|السوداء|الموازي)|السوداء|الموازي/.test(l.title)) ||
-      links.find((l) => !/البنوك|بنك/.test(l.title));
+    // 1) مقال السوق الموازي/الأسود — بعض المقالات أخبار بدون جدول، فنجرّب أكتر من مرشح
+    const parallelCandidates = [
+      ...links.filter((l) => /السوق\s*(الأسود|السوداء|الموازي)|السوداء|الموازي/.test(l.title) && !/البنوك|بنك/.test(l.title)),
+      ...links.filter((l) => !/البنوك|بنك|المصري/.test(l.title)),
+    ]
+      .filter((l, i, arr) => arr.findIndex((x) => x.url === l.url) === i)
+      // المقالات اليومية البتحتوي الجدول ("سعر الدولار في السودان اليوم ... السوق السوداء") أولاً
+      .sort((a, b) => {
+        const score = (t: string) => (/سعر الدولار في السودان اليوم|أسعار العملات مقابل الجنيه/.test(t) ? 0 : 1);
+        return score(a.title) - score(b.title);
+      })
+      .slice(0, 5);
 
-    if (parallel) {
-      const html = await fetchText(parallel.url);
-      if (html) {
-        const snapshot = parseSudanArticle(htmlToText(html), parallel.url);
-        if (snapshot) {
-          // 2) مقال البنوك (للمقارنة فقط) — نجرّب عدة مرشحين لأن بعض العناوين
-          // تخص بنكاً واحداً ولا تحتوي متوسط السعر.
-          const bankCandidates = links
-            .filter((l) => l.url !== parallel.url && /البنوك|بنك/.test(l.title))
-            .sort((a, b) => {
-              const score = (t: string) => (/من البنوك|البنوك السودانية|متوسط/.test(t) ? 0 : 1);
-              return score(a.title) - score(b.title);
-            })
-            .slice(0, 3);
+    let snapshot: SudanSnapshot | null = null;
+    for (const cand of parallelCandidates) {
+      const html = await fetchText(cand.url);
+      if (!html) continue;
+      const snap = parseSudanArticle(htmlToText(html), cand.url);
+      if (!snap) continue;
+      if (snap.usdBuy !== null) { snapshot = snap; break; } // جدول كامل (شراء/بيع)
+      if (!snapshot) snapshot = snap; // احتياطي: سعر بيع بس
+    }
 
-          for (const candidate of bankCandidates) {
-            const bankHtml = await fetchText(candidate.url);
-            if (!bankHtml) continue;
-            const bankRate = extractBankRate(htmlToText(bankHtml));
-            if (bankRate) {
-              snapshot.bankSell = bankRate;
-              break;
-            }
-          }
-          setCache('sudan', snapshot);
-          lastGood.sudan = { value: snapshot, at: Date.now() };
-          return snapshot;
+    if (snapshot) {
+      // 2) مقال البنوك: سعر بنك الخرطوم (شراء/بيع) من جدول التحويلات
+      const bankCandidates = links
+        .filter((l) => /البنوك|بنك/.test(l.title))
+        .sort((a, b) => {
+          const score = (t: string) => (/من البنوك|في البنوك|البنوك السودانية|متوسط/.test(t) ? 0 : 1);
+          return score(a.title) - score(b.title);
+        })
+        .slice(0, 4);
+
+      for (const candidate of bankCandidates) {
+        const bankHtml = await fetchText(candidate.url);
+        if (!bankHtml) continue;
+        const text = htmlToText(bankHtml);
+        const bok = extractKhartoumBank(text);
+        if (bok) {
+          snapshot.bankSell = bok.sell;
+          snapshot.bankBuy = bok.buy;
+          break;
         }
+        const bankRate = extractBankRate(text);
+        if (bankRate && !snapshot.bankSell) snapshot.bankSell = bankRate;
       }
+      setCache('sudan', snapshot);
+      lastGood.sudan = { value: snapshot, at: Date.now() };
+      return snapshot;
     }
   }
 
@@ -393,6 +430,7 @@ export async function getRates(): Promise<RatesResult> {
   let usdSource: string;
   let usdOk = true;
   let bankSell: number | null = null;
+  let bankBuy: number | null = null;
   let sar: number | null = null;
   let aed: number | null = null;
   let egp: number | null = null;
@@ -417,6 +455,7 @@ export async function getRates(): Promise<RatesResult> {
     usdSell = sudan.usdSell;
     usdBuy = sudan.usdBuy;
     bankSell = sudan.bankSell;
+    bankBuy = sudan.bankBuy ?? null;
     sar = sudan.sar;
     aed = sudan.aed;
     egp = sudan.egp;
@@ -427,6 +466,7 @@ export async function getRates(): Promise<RatesResult> {
     usdSell = snap.usdSell;
     usdBuy = snap.usdBuy;
     bankSell = snap.bankSell;
+    bankBuy = snap.bankBuy ?? null;
     sar = snap.sar;
     aed = snap.aed;
     egp = snap.egp;
@@ -479,7 +519,7 @@ export async function getRates(): Promise<RatesResult> {
       source: usdSource,
       ok: usdOk,
     },
-    banks: { sell: bankSell, source: bankSell ? 'اخبار السودان (البنوك)' : '' },
+    banks: { sell: bankSell, buy: bankBuy, bank: 'بنك الخرطوم', source: bankSell ? 'اخبار السودان (البنوك)' : '' },
     cross: { sar, aed, egp, source: crossSource },
     karat21,
     karat24,

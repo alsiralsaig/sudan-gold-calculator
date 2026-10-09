@@ -31,6 +31,7 @@ import { fmtNum } from '../../core/format';
 import { APP_VERSION_LABEL } from '../../core/version';
 import { ALL_BRANCHES, UNASSIGNED_BRANCH } from '../../core/branches';
 import { NotificationsSheet } from '../common/NotificationsSheet';
+import { PriceTicker } from './PriceTicker';
 
 interface NavbarProps {
   activeTab: string;
@@ -386,19 +387,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         </div>
 
-        {/* سطر السعر — صف كامل تحت الأزرار عشان ما يتغطّى في الشاشات الصغيرة */}
-          <p className="max-w-4xl mx-auto mt-1.5 text-[11px] sm:text-xs text-slate-400 font-mono flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1">
-            <span
-              className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
-                rates.isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'
-              }`}
-              title={rates.isStale ? 'الأسعار تحتاج تحديث' : 'الأسعار محدّثة'}
-            />
-            <span className="text-amber-300 font-bold">عيار 21 (الرسمي):</span>
-            <span className="text-amber-400 font-bold">{fmtNum(rates.karat21)}</span>
-            <span>ج.س • $</span>
-            <span className="text-white font-bold">{fmtNum(rates.usdRate)}</span>
-          </p>
+        {/* شريط الأسعار المتحرك — صف كامل تحت الأزرار */}
+        <PriceTicker rates={rates} />
 
         {/* شريط حالة الشبكة والمزامنة */}
         {(!isOnline || pendingSync) && (

@@ -298,3 +298,16 @@ html.light .sticky-action-bar .text-slate-200 {
   .no-print, header, nav, button, .print\:hidden { display: none !important; }
   @page { size: A4; margin: 12mm; }
 }
+
+/* الشريط المتحرك للأسعار — في الواجهة العربية (RTL) بيتحرك من الشمال لليمين زي شريط الأخبار */
+@keyframes price-ticker-rtl {
+  from { transform: translateX(0); }
+  to { transform: translateX(50%); }
+}
+.price-ticker-track {
+  animation: price-ticker-rtl 45s linear infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .price-ticker-track { animation-duration: 120s; }
+}
