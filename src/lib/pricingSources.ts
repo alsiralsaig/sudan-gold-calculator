@@ -8,7 +8,7 @@
  * (شذوذ، اتفاق، ثقة) موكول إلى محرك التحقق في core/pricing.ts.
  */
 
-import { fetchText, htmlToText, normalizeDigits } from './rates';
+import { fetchText, htmlToText, normalizeDigits, fetchSudanRates } from './rates';
 import type { SourceReading } from '../core/pricing';
 
 export interface SourceBundle {
@@ -331,32 +331,23 @@ export function parseSudanakhbarArticle(text: string): { buy: number | null; sel
 }
 
 async function fetchSudanakhbarReading(): Promise<{ reading: SourceReading | null; error: string | null }> {
-  const section = await fetchTextRetry('https://www.sudanakhbar.com/latestnews/dollar-prices', 12000);
-  if (!section) return { reading: null, error: 'اخبار السودان: تعذّر الوصول' };
-  const links = Array.from(section.matchAll(/href="(https:\/\/www\.sudanakhbar\.com\/\d+)"/g)).map((m) => m[1]);
-  const unique = Array.from(new Set(links)).slice(0, 4);
-  for (const url of unique) {
-    const html = await fetchText(url, 12000);
-    if (!html) continue;
-    const title = (html.match(/<title>([^<]{5,180})<\/title>/i) || [])[1] || '';
-    if (!/دولار/i.test(title)) continue;
-    const parsed = parseSudanakhbarArticle(htmlToText(html));
-    if (parsed.sell) {
-      return {
-        reading: {
-          source: 'اخبار السودان',
-          kind: 'parallel',
-          buy: parsed.buy,
-          sell: parsed.sell,
-          at: nowIso(),
-          url,
-          label: title.trim(),
-        },
-        error: null,
-      };
-    }
+  // نفس القارئ المستعمل في /api/rates: بيجرّب أكتر من مقال ويفضّل الفيه جدول شراء/بيع (+ قارئ وسيط لو محجوب)
+  const snap = await fetchSudanRates().catch(() => null);
+  if (!snap || !/اخبار السودان/.test(snap.source)) {
+    return { reading: null, error: snap ? 'اخبار السودان: لم يُعثر على سعر في المقالات' : 'اخبار السودان: تعذّر الوصول' };
   }
-  return { reading: null, error: 'اخبار السودان: لم يُعثر على سعر في المقالات' };
+  return {
+    reading: {
+      source: 'اخبار السودان',
+      kind: 'parallel',
+      buy: snap.usdBuy,
+      sell: snap.usdSell,
+      at: nowIso(),
+      url: snap.articleUrl,
+      label: 'سعر الدولار في السوق الموازي',
+    },
+    error: null,
+  };
 }
 
 /* ------------------------------------------------------------------ */

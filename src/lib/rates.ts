@@ -199,7 +199,7 @@ async function fetchOunce(): Promise<{ value: number; source: string } | null> {
 
 /* --------------------------- السوق السوداني --------------------------- */
 
-interface SudanSnapshot {
+export interface SudanSnapshot {
   usdSell: number;
   usdBuy: number | null;
   bankSell: number | null;
@@ -343,7 +343,7 @@ function articleLinks(sectionHtml: string): { url: string; title: string }[] {
   return links;
 }
 
-async function fetchSudanRates(): Promise<SudanSnapshot | null> {
+export async function fetchSudanRates(): Promise<SudanSnapshot | null> {
   const fromCache = cached<SudanSnapshot>('sudan', 300_000);
   if (fromCache) return fromCache;
 
