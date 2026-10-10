@@ -51,7 +51,8 @@ const weightWords = (units: number): string => {
   const grams = unitsToGrams(units);
   const whole = Math.floor(grams + 1e-9);
   const habba = Math.round((grams - whole) * 10);
-  if (habba > 0) return `${whole} غرام و ${habba} حبة`;
+  if (habba > 0 && whole > 0) return `${whole} غرام و ${habba} حبة`;
+  if (habba > 0) return `${habba} حبة`;
   return `${grams.toFixed(grams % 1 ? 2 : 0)} غرام`;
 };
 
@@ -116,6 +117,8 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
         return { perGram: market, total: market * grams, how: 'بسعر السوق' };
       };
       const dueDateFrom = (days?: number) => (days ? new Date(Date.now() + days * 86400000).toISOString() : undefined);
+      /** العيار في الكلام: يتذكر فقط لو المستخدم قاله بنفسه */
+      const karatPart = (c: { purity: number; purityExplicit: boolean }) => (c.purityExplicit ? ` ${purityLabel(c.purity)}` : '');
 
       switch (cmd.type) {
         case 'gold_price': {
@@ -143,7 +146,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
             nonce: Date.now(),
           });
           onNavigate('calculator');
-          const text = `${weightWords(cmd.units)} ${purityLabel(cmd.purity)} = ${fmtNum(r.total)} جنيه`;
+          const text = `${weightWords(cmd.units)}${karatPart(cmd)} = ${fmtNum(r.total)} جنيه`;
           return { kind: 'ok', text, say: text };
         }
         case 'calc_weight': {
@@ -159,7 +162,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
             nonce: Date.now(),
           });
           onNavigate('calculator');
-          const text = `${fmtNum(cmd.money)} تجيب ${weightWords(r.units)} (${unitsToGrams(r.units).toFixed(2)} جرام) ${purityLabel(cmd.purity)}`;
+          const text = `${fmtNum(cmd.money)} تجيب ${weightWords(r.units)} (${unitsToGrams(r.units).toFixed(2)} جرام)${karatPart(cmd)}`;
           return { kind: 'ok', text, say: text };
         }
         case 'calc_karat': {
@@ -221,7 +224,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
             dueDate: undefined,
           });
           onNavigate('purchases');
-          const text = `سجلت في المشتريات ✓ ${weightWords(cmd.units)} ${purityLabel(cmd.purity)} = ${fmtNum(total)} جنيه (${fmtNum(pr.perGram)}/جرام)${cmd.person ? ` من ${cmd.person}` : ''}${cmd.deferred ? ' — آجل' : ''}`;
+          const text = `سجلت في المشتريات ✓ ${weightWords(cmd.units)}${karatPart(cmd)} = ${fmtNum(total)} جنيه${cmd.person ? ` من ${cmd.person}` : ''}${cmd.deferred ? ' — آجل' : ''}`;
           return { kind: 'ok', text, say: text };
         }
         case 'add_sale': {
@@ -241,7 +244,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
             pendingAmount: cmd.deferred ? total : 0,
           });
           onNavigate('sales');
-          const text = `سجلت في المبيعات ✓ ${weightWords(cmd.units)} ${purityLabel(cmd.purity)} = ${fmtNum(total)} جنيه (${fmtNum(pr.perGram)}/جرام)${cmd.person ? ` لـ${cmd.person}` : ''}${cmd.deferred ? ' — آجل' : ''}`;
+          const text = `سجلت في المبيعات ✓ ${weightWords(cmd.units)}${karatPart(cmd)} = ${fmtNum(total)} جنيه${cmd.person ? ` لـ${cmd.person}` : ''}${cmd.deferred ? ' — آجل' : ''}`;
           return { kind: 'ok', text, say: text };
         }
         case 'add_expense': {
@@ -404,11 +407,13 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
           >
             {listening ? (
               <span>{heard || 'بسمعك... اتكلم'}</span>
-            ) : (
+            ) : reply ? (
               <>
-                {heard && !reply && <span className="block text-slate-400 text-[11px]">{heard}</span>}
-                <span>{reply?.text ?? heard}</span>
+                {heard && <span className="block text-slate-500 text-[11px] leading-snug">{heard}</span>}
+                <span>{reply.text}</span>
               </>
+            ) : (
+              <span>{heard}</span>
             )}
           </div>
         </div>

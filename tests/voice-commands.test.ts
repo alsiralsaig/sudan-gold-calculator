@@ -44,25 +44,25 @@ test('readWeight: غرام وحبة ومثقال', () => {
 /* ------------------------------- حساب القيمة ------------------------------- */
 
 test('calc_value: صيغ مختلفة', () => {
-  assert.deepEqual(v('احسب 10 غرام عيار 21'), { type: 'calc_value', units: 1000, purity: 21 });
-  assert.deepEqual(v('احسب عشرين غرام عيار 18'), { type: 'calc_value', units: 2000, purity: 18 });
-  assert.deepEqual(v('قيمة 5 غرام دهب'), { type: 'calc_value', units: 500, purity: 21 });
-  assert.deepEqual(v('احسب ٥ غرام عيار ٢١'), { type: 'calc_value', units: 500, purity: 21 });
-  assert.deepEqual(v('احسب خمسة غرام عيار واحد وعشرين'), { type: 'calc_value', units: 500, purity: 21 });
-  assert.deepEqual(v('شحال 10 غرام عيار 24'), { type: 'calc_value', units: 1000, purity: 24 });
-  assert.deepEqual(v('احسب 22 غرام و 6 حبات عيار 21'), { type: 'calc_value', units: 2260, purity: 21 });
-  assert.deepEqual(v('10 غرام عيار 21'), { type: 'calc_value', units: 1000, purity: 21 }); // بدون فعل
-  assert.deepEqual(v('احسب 3 مثقال عيار 21'), { type: 'calc_value', units: 1500, purity: 21 });
+  assert.deepEqual(v('احسب 10 غرام عيار 21'), { type: 'calc_value', units: 1000, purity: 21, purityExplicit: true });
+  assert.deepEqual(v('احسب عشرين غرام عيار 18'), { type: 'calc_value', units: 2000, purity: 18, purityExplicit: true });
+  assert.deepEqual(v('قيمة 5 غرام دهب'), { type: 'calc_value', units: 500, purity: 21, purityExplicit: false });
+  assert.deepEqual(v('احسب ٥ غرام عيار ٢١'), { type: 'calc_value', units: 500, purity: 21, purityExplicit: true });
+  assert.deepEqual(v('احسب خمسة غرام عيار واحد وعشرين'), { type: 'calc_value', units: 500, purity: 21, purityExplicit: true });
+  assert.deepEqual(v('شحال 10 غرام عيار 24'), { type: 'calc_value', units: 1000, purity: 24, purityExplicit: true });
+  assert.deepEqual(v('احسب 22 غرام و 6 حبات عيار 21'), { type: 'calc_value', units: 2260, purity: 21, purityExplicit: true });
+  assert.deepEqual(v('10 غرام عيار 21'), { type: 'calc_value', units: 1000, purity: 21, purityExplicit: true }); // بدون فعل
+  assert.deepEqual(v('احسب 3 مثقال عيار 21'), { type: 'calc_value', units: 1500, purity: 21, purityExplicit: true });
 });
 
 /* ------------------------------- الوزن من المبلغ ------------------------------- */
 
 test('calc_weight: شحال غرام بمبلغ...', () => {
-  assert.deepEqual(v('شحال غرام بميه الف'), { type: 'calc_weight', money: 100000, purity: 21 });
-  assert.deepEqual(v('شحال غرام بخمسميه الف عيار 21'), { type: 'calc_weight', money: 500000, purity: 21 });
-  assert.deepEqual(v('شحال غرام ب 200 الف'), { type: 'calc_weight', money: 200000, purity: 21 });
-  assert.deepEqual(v('كام غرام بمليون'), { type: 'calc_weight', money: 1000000, purity: 21 });
-  assert.deepEqual(v('شحال غرام دهب بميه الف'), { type: 'calc_weight', money: 100000, purity: 21 });
+  assert.deepEqual(v('شحال غرام بميه الف'), { type: 'calc_weight', money: 100000, purity: 21, purityExplicit: false });
+  assert.deepEqual(v('شحال غرام بخمسميه الف عيار 21'), { type: 'calc_weight', money: 500000, purity: 21, purityExplicit: true });
+  assert.deepEqual(v('شحال غرام ب 200 الف'), { type: 'calc_weight', money: 200000, purity: 21, purityExplicit: false });
+  assert.deepEqual(v('كام غرام بمليون'), { type: 'calc_weight', money: 1000000, purity: 21, purityExplicit: false });
+  assert.deepEqual(v('شحال غرام دهب بميه الف'), { type: 'calc_weight', money: 100000, purity: 21, purityExplicit: false });
 });
 
 /* ------------------------------- تحويل العيار ------------------------------- */
@@ -137,11 +137,11 @@ test('normalizeVoiceText: همزات وتشكيل وأرقام عربية', () =
 test('add_purchase: سجل مشتريات', () => {
   assert.deepEqual(
     v('سجل في المشتريات 2 غرام عيار 21 بسعر 104 الف'),
-    { type: 'add_purchase', units: 200, purity: 21, price: 104000, priceMode: 'auto', person: '', deferred: false }
+    { type: 'add_purchase', units: 200, purity: 21, purityExplicit: true, price: 104000, priceMode: 'auto', person: '', deferred: false }
   );
   assert.deepEqual(
     v('سجل مشتريات 2 غرام بسعر 104 الف للجرام'),
-    { type: 'add_purchase', units: 200, purity: 21, price: 104000, priceMode: 'per_gram', person: '', deferred: false }
+    { type: 'add_purchase', units: 200, purity: 21, purityExplicit: false, price: 104000, priceMode: 'per_gram', person: '', deferred: false }
   );
   const c = v('شريت من ابوجويه 5 غرام بمبلغ 500 الف');
   assert.equal(c.type, 'add_purchase');
@@ -155,6 +155,7 @@ test('add_purchase: سجل مشتريات', () => {
   assert.equal(d.type, 'add_purchase');
   if (d.type === 'add_purchase') {
     assert.equal(d.purity, 18);
+    assert.equal(d.purityExplicit, true);
     assert.equal(d.price, undefined);
     assert.equal(d.deferred, true);
   }
@@ -175,6 +176,7 @@ test('add_sale: سجل مبيعات بوزن مركب واسم', () => {
   if (d.type === 'add_sale') {
     assert.equal(d.units, 500);
     assert.equal(d.purity, 24);
+    assert.equal(d.purityExplicit, true);
     assert.equal(d.deferred, true);
   }
 });
@@ -221,8 +223,8 @@ test('add_payment: دفعة/تسديد', () => {
 });
 
 test('الأوامر القديمة ما اتكسرتش', () => {
-  assert.deepEqual(v('احسب 10 غرام عيار 21'), { type: 'calc_value', units: 1000, purity: 21 });
-  assert.deepEqual(v('شحال غرام بمية ألف'), { type: 'calc_weight', money: 100000, purity: 21 });
+  assert.deepEqual(v('احسب 10 غرام عيار 21'), { type: 'calc_value', units: 1000, purity: 21, purityExplicit: true });
+  assert.deepEqual(v('شحال غرام بمية ألف'), { type: 'calc_weight', money: 100000, purity: 21, purityExplicit: false });
   assert.equal(v('افتح المبيعات')!.type, 'navigate');
   assert.equal(v('سعر الذهب')!.type, 'gold_price');
 });
@@ -231,8 +233,8 @@ test('الأوامر القديمة ما اتكسرتش', () => {
 
 test('سوداني: كام و قديه و شنو و ما فهمت', () => {
   // «كام» بدل «شحال»
-  assert.deepEqual(v('كام غرام بمية ألف'), { type: 'calc_weight', money: 100000, purity: 21 });
-  assert.deepEqual(v('كام غرام عيار 21 بمليون'), { type: 'calc_weight', money: 1000000, purity: 21 });
+  assert.deepEqual(v('كام غرام بمية ألف'), { type: 'calc_weight', money: 100000, purity: 21, purityExplicit: false });
+  assert.deepEqual(v('كام غرام عيار 21 بمليون'), { type: 'calc_weight', money: 1000000, purity: 21, purityExplicit: true });
   // «قد إيه» و«قديه»
   assert.equal(v('الذهب قد إيه')!.type, 'gold_price');
   assert.equal(v('قديه 10 غرام عيار 24')!.type, 'calc_value');
@@ -242,5 +244,18 @@ test('سوداني: كام و قديه و شنو و ما فهمت', () => {
   // «ما فهمت» ما بتبوّظش أمر
   assert.equal(v('ما فهمت')!.type, 'unknown');
   // القديمة برضه شغالة (بعض المناطق بتقولها)
-  assert.deepEqual(v('شحال غرام بمية ألف'), { type: 'calc_weight', money: 100000, purity: 21 });
+  assert.deepEqual(v('شحال غرام بمية ألف'), { type: 'calc_weight', money: 100000, purity: 21, purityExplicit: false });
+});
+
+test('حالة الزول: اتنين حبة من غير عيار — ما يتذكرش العيار', () => {
+  const c = v('سجل في المشتريات اتنين حبه بسعر خمسين الف');
+  assert.equal(c.type, 'add_purchase');
+  if (c.type === 'add_purchase') {
+    assert.equal(c.units, 20);           // 2 حبة = 0.2 غرام
+    assert.equal(c.price, 50000);
+    assert.equal(c.purityExplicit, false); // ما قالش عيار — الرد ما يذكرهش
+  }
+  const d = v('كام غرام بمية ألف');
+  assert.equal(d.type, 'calc_weight');
+  if (d.type === 'calc_weight') assert.equal(d.purityExplicit, false);
 });

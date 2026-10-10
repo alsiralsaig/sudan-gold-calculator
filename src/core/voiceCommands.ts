@@ -12,13 +12,13 @@
 export type VoiceCommand =
   | { type: 'gold_price' }
   | { type: 'usd_price' }
-  | { type: 'calc_value'; units: number; purity: number }
-  | { type: 'calc_weight'; money: number; purity: number }
+  | { type: 'calc_value'; units: number; purity: number; purityExplicit: boolean }
+  | { type: 'calc_weight'; money: number; purity: number; purityExplicit: boolean }
   | { type: 'calc_karat'; units: number; from: number; to: number }
   | { type: 'calc_sum'; items: { units: number; purity: number }[] }
   | { type: 'navigate'; tab: string }
-  | { type: 'add_purchase'; units: number; purity: number; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean }
-  | { type: 'add_sale'; units: number; purity: number; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean }
+  | { type: 'add_purchase'; units: number; purity: number; purityExplicit: boolean; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean }
+  | { type: 'add_sale'; units: number; purity: number; purityExplicit: boolean; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean }
   | { type: 'add_expense'; amount: number; name: string }
   | { type: 'add_loan'; amount: number; person: string; direction: 'lent' | 'borrowed'; dueDays?: number }
   | { type: 'add_payment'; amount: number; person: string }
@@ -256,22 +256,23 @@ export function findWeight(tokens: string[]): WeightPhrase | null {
 
 /* ============================ العيار ============================ */
 
-const readPurity = (tokens: string[]): number => {
+const readPurityState = (tokens: string[]): { purity: number; explicit: boolean } => {
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i] === 'عيار' || tokens[i] === 'نقاوه') {
       const r = readNumber(tokens, i + 1);
-      if (r && r.value > 0) return r.value;
+      if (r && r.value > 0) return { purity: r.value, explicit: true };
     }
   }
   // رقم عيار صريح بعد الوحدة مباشرة: «احسب 10 غرام 21»
   for (let i = 0; i < tokens.length; i++) {
     if (unitGrams(tokens[i]) !== null) {
       const r = readNumber(tokens, i + 1);
-      if (r && r.value > 0 && r.value <= 24) return r.value;
+      if (r && r.value > 0 && r.value <= 24) return { purity: r.value, explicit: true };
     }
   }
-  return 21; // العيار الأساسي في السودان
+  return { purity: 21, explicit: false }; // العيار الأساسي في السودان — بس ما بنقولش عليه
 };
+const readPurity = (tokens: string[]): number => readPurityState(tokens).purity;
 
 /* ============================ المبلغ ============================ */
 
@@ -468,7 +469,7 @@ export function parseCommand(raw: string): VoiceCommand {
   const hasNavVerb = tokens.some((t) => NAV_VERBS.includes(t));
   if (!hasNavVerb) {
   const weightRec = findWeight(tokens);
-  const purityRec = readPurity(tokens);
+  const purityRec = readPurityState(tokens);
   const person = capturePerson(tokens);
   const priceInfo = capturePrice(tokens);
   const deferred = captureDeferred(tokens);
@@ -508,7 +509,8 @@ export function parseCommand(raw: string): VoiceCommand {
     return {
       type: 'add_purchase',
       units: weightRec.units,
-      purity: purityRec,
+      purity: purityRec.purity,
+      purityExplicit: purityRec.explicit,
       price: priceInfo.price,
       priceMode: priceInfo.mode,
       person,
@@ -522,7 +524,8 @@ export function parseCommand(raw: string): VoiceCommand {
     return {
       type: 'add_sale',
       units: weightRec.units,
-      purity: purityRec,
+      purity: purityRec.purity,
+      purityExplicit: purityRec.explicit,
       price: priceInfo.price,
       priceMode: priceInfo.mode,
       person,
@@ -584,7 +587,8 @@ export function parseCommand(raw: string): VoiceCommand {
     const m = scanMoney(tokens, searchFrom);
     const bigNumber = m.value >= 1000;
     if ((m.hasB || bigNumber) && m.value > 0) {
-      return { type: 'calc_weight', money: m.value, purity: readPurity(tokens) };
+      const ps = readPurityState(tokens);
+      return { type: 'calc_weight', money: m.value, purity: ps.purity, purityExplicit: ps.explicit };
     }
   }
 
@@ -608,7 +612,8 @@ export function parseCommand(raw: string): VoiceCommand {
 
   /* ---------- 6) حساب القيمة (قبل السعر عشان «احسب قيمة الذهب» تتحسب) ---------- */
   if (weight && (isCalcWord || bareWeight)) {
-    return { type: 'calc_value', units: weight.units, purity: readPurity(tokens) };
+    const ps = readPurityState(tokens);
+    return { type: 'calc_value', units: weight.units, purity: ps.purity, purityExplicit: ps.explicit };
   }
 
   /* ---------- 7) سعر الذهب / الدولار ---------- */
