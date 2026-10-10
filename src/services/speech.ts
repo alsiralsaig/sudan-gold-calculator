@@ -49,7 +49,7 @@ export function listenOnce(handlers: ListenHandlers): () => void {
   rec.interimResults = true;
   rec.maxAlternatives = 1;
 
-  const SILENCE_MS = 1500; // سكوت ثانية ونص = الجملة خلصت
+  const SILENCE_MS = 2600; // سكوت 2.6 ثانية = الجملة خلصت (صبور مع التلعثم)
   const MAX_MS = 30000;
   const startedAt = Date.now();
   let silence: ReturnType<typeof setTimeout> | null = null;

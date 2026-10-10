@@ -455,7 +455,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
             onClick={() => { setReply(null); setHeard(''); }}
           >
             {listening ? (
-              <span>{heard ? (heard.length > 70 ? `…${heard.slice(-70)}` : heard) : 'بسمعك... اتكلم'}</span>
+              <span>{heard ? (heard.length > 70 ? `…${heard.slice(-70)}` : heard) : 'بسمعك... اتكلم براحتك — خلاص لما تسكت'}</span>
             ) : reply ? (
               <>
                 {heard && <span className="block text-slate-500 text-[11px] leading-snug">{heard}</span>}
