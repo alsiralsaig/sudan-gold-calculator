@@ -520,7 +520,7 @@ export function parseCommand(raw: string): VoiceCommand {
   if (hasPaymentKw) {
     const amount = captureAmount(tokens);
     if (amount && person) return { type: 'add_payment', amount, person };
-    if (amount && !person) return { type: 'add_expense', amount, name: captureExpenseName(tokens) || 'دفعة' };
+    if (amount && !person) return { type: 'add_expense', amount, name: captureExpenseName(tokens) || 'دفعة', waitingPerson: false };
   }
 
   // سلفة: «سلفة 100 الف لخالد» / «استلفيت من عمر 200 الف»
