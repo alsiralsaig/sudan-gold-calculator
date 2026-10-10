@@ -31,8 +31,8 @@ export const VOICE_EXAMPLES = [
   'سجل مشتريات 2 غرام بسعر كده',
   'سجل مبيعات 30 غرام واتنين حبة',
   'سلفة 100 الف لخالد',
-  'شحال غرام بمية ألف؟',
-  'سعر الذهب؟',
+  'كام غرام بمية ألف؟',
+  'الذهب كام؟',
   'افتح المبيعات',
 ];
 
@@ -460,7 +460,7 @@ export function parseCommand(raw: string): VoiceCommand {
 
   /* ---------- 1) مساعدة ---------- */
   if (hasAnySub(tokens, ['مساعده', 'ساعدني', 'امثله', 'اوامر']) ||
-      (hasAnyExact(tokens, ['تعرف', 'تعرفه']) && hasAnySub(tokens, ['ايه', 'ايش', 'شو']))) {
+      (hasAnySub(tokens, ['تعرف']) && hasAnySub(tokens, ['ايه', 'ايش', 'شو', 'شنو']))) {
     return { type: 'help' };
   }
 
@@ -602,7 +602,8 @@ export function parseCommand(raw: string): VoiceCommand {
 
   const mentionsGold = hasAnySub(tokens, ['دهب', 'ذهب']);
   const mentionsUsd = hasAnySub(tokens, ['دولار', 'دولر', 'عمله', 'عملات']);
-  const isCalcWord = hasAnySub(tokens, ['احسب', 'حسب', 'قيمه', 'شكد', 'شحال', 'كام', 'كم', 'قدايه']);
+  const isCalcWord = hasAnySub(tokens, ['احسب', 'حسب', 'قيمه', 'شكد', 'شحال', 'كام', 'كم', 'قدايه', 'قديه'])
+    || (tokens.includes('قد') && tokens.includes('ايه'));
   const bareWeight = weight && tokens.length <= 4; // «10 غرام عيار 21» بدون فعل
 
   /* ---------- 6) حساب القيمة (قبل السعر عشان «احسب قيمة الذهب» تتحسب) ---------- */

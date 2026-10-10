@@ -226,3 +226,21 @@ test('الأوامر القديمة ما اتكسرتش', () => {
   assert.equal(v('افتح المبيعات')!.type, 'navigate');
   assert.equal(v('سعر الذهب')!.type, 'gold_price');
 });
+
+/* ==================== السوداني الصافي 🇸🇩 ==================== */
+
+test('سوداني: كام و قديه و شنو و ما فهمت', () => {
+  // «كام» بدل «شحال»
+  assert.deepEqual(v('كام غرام بمية ألف'), { type: 'calc_weight', money: 100000, purity: 21 });
+  assert.deepEqual(v('كام غرام عيار 21 بمليون'), { type: 'calc_weight', money: 1000000, purity: 21 });
+  // «قد إيه» و«قديه»
+  assert.equal(v('الذهب قد إيه')!.type, 'gold_price');
+  assert.equal(v('قديه 10 غرام عيار 24')!.type, 'calc_value');
+  // «شنو»
+  assert.equal(v('شنو سعر الذهب؟')!.type, 'gold_price');
+  assert.equal(v('شنو اللي بتعرفه؟')!.type, 'help');
+  // «ما فهمت» ما بتبوّظش أمر
+  assert.equal(v('ما فهمت')!.type, 'unknown');
+  // القديمة برضه شغالة (بعض المناطق بتقولها)
+  assert.deepEqual(v('شحال غرام بمية ألف'), { type: 'calc_weight', money: 100000, purity: 21 });
+});
