@@ -20,6 +20,53 @@ export interface ListenHandlers {
   onEnd?: () => void;
 }
 
+/* ============================ دمج المقاطع الذكي ============================ */
+
+const splitWords = (s: string): string[] => s.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+
+/**
+ * المايك بيرجّع الجملة على مقاطع — ولو كررت بدايتك (أو رجّع صدى) بتراكب المقاطع فوق بعض:
+ * «سجل سجل سجل في المبيعات 15 سجل في المبيعات 20…».
+ * الدمج الذكي بدل الترقيم الأحمق:
+ *  1. المقطع الجديد بيكمّل القديم (القديم بدايتو) → خد الجديد الأشمل
+ *  2. الجديد أصلاً جوه القديم → تجاهلو
+ *  3. كررت بداية الجملة → آخر محاولة هي قصدك النهائي → بدّل بيه خالص
+ *  4. آخر كلمات القديم = أول كلمات الجديد (تراكب) → ادمج من غير تكرار
+ *  5. غير كده → ضمّ عادي
+ */
+export function mergeFinals(acc: string, incoming: string): string {
+  const A = splitWords(acc);
+  const B = splitWords(incoming);
+  if (!B.length) return A.join(' ');
+  if (!A.length) return B.join(' ');
+  const aStr = A.join(' ');
+  const bStr = B.join(' ');
+  // (1) القديم بداية الجديد → الجديد أطول وأشمل
+  if (B.length >= A.length && B.slice(0, A.length).join(' ') === aStr) return bStr;
+  // (2) الجديد مكرر جوه القديم → عنديو خلاص
+  if (aStr.includes(bStr)) return aStr;
+  // (3) بداية مكررة: أول كلمتين من الجديد موجودين متتاليين في أول القديم → إعادة محاولة، خد الأخيرة
+  const head2 = B.slice(0, 2).join(' ');
+  const headZone = A.slice(0, Math.max(2, Math.ceil(A.length * 0.4))).join(' ');
+  if (head2.length > 1 && headZone.includes(head2)) return bStr;
+  // (3.5) كلمات الجديد كلها موجودة في آخر القديم (صدى معكوس زي «عيار 680» ← «680 جرام عيار») → ما عندو جديد
+  const tailZone = new Set(A.slice(Math.max(0, A.length - B.length - 2)));
+  if (B.every((w) => tailZone.has(w))) return aStr;
+  // (4) تراكب: آخر k كلمات من القديم = أول k كلمات من الجديد → ادمج عندها
+  for (let k = Math.min(A.length, B.length, 5); k >= 1; k--) {
+    if (A.slice(A.length - k).join(' ') === B.slice(0, k).join(' ')) {
+      return [...A.slice(0, A.length - k), ...B].join(' ');
+    }
+  }
+  // (5) ضمّ عادي
+  return `${aStr} ${bStr}`;
+}
+
+/* كلمة الختام: قول «تمام» (أو «خلاص»/«نفذ») في آخر الجملة → تنفيذ فوري من غير انتظار السكوت */
+const END_WORDS = /(^|\s)(تمام|خلاص|نفذ|نفّذ)(?=\s|$)/;
+const stripEndWords = (s: string): string =>
+  s.replace(/(^|\s)(تمام|خلاص|نفذ|نفّذ)(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
+
 const ERROR_MESSAGES: Record<string, string> = {
   'not-allowed': 'إذن المايك مقفول — افتحه من إعدادات المتصفح',
   'service-not-allowed': 'إذن المايك مقفول — افتحه من إعدادات المتصفح',
@@ -31,7 +78,8 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 /**
  * يسمع الجملة كاملة — ما بستعجلش:
- * بيستنى سكوت ثانية ونص قبل ما ينفذ، فبتقدر تقول الجملة براحتك وبوقفات.
+ * قول جملتك براحتك وبوقفات — وبمجرد ما تقول «تمام» بينفذ فوراً.
+ * لو ما قلتها: بيسكت 4 ثواني وينفذ. الضغطة التانية على المايك كمان = «خلصت، نفّذ».
  * بيرجّع دالة للإيقاف اليدوي.
  */
 export function listenOnce(handlers: ListenHandlers): () => void {
@@ -42,7 +90,6 @@ export function listenOnce(handlers: ListenHandlers): () => void {
   }
   let finished = false;
   let finalText = '';
-  let lastFinal = '';
   const rec = new Ctor();
   rec.lang = 'ar-SA';
   rec.continuous = true; // بيسمع على طول — ما بيقاطعش بعد أول كلمتين
@@ -51,7 +98,6 @@ export function listenOnce(handlers: ListenHandlers): () => void {
 
   const SILENCE_MS = 4000; // سكوت 4 ثواني = الجملة خلصت (صبور جداً مع الوقفات)
   const MAX_MS = 30000;
-  const startedAt = Date.now();
   let silence: ReturnType<typeof setTimeout> | null = null;
   let gotAny = false;
 
@@ -86,21 +132,17 @@ export function listenOnce(handlers: ListenHandlers): () => void {
       const text = String(res[0]?.transcript ?? '').trim();
       if (!text) continue;
       if (res.isFinal) {
-        // حارس الصدى المحكم: أي جزء بيتكرر (نفس المقطة / تكرار في الآخر / بداية متكررة) ينرفض
-        const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
-        const head = (s: string, n = 12) => norm(s).slice(0, n);
-        const dup =
-          norm(text) === norm(lastFinal) ||
-          finalText.includes(norm(text)) ||
-          norm(finalText).endsWith(norm(text)) ||
-          (head(text) !== '' && finalText.endsWith(head(text)));
-        if (!dup) {
-          finalText = `${finalText} ${norm(text)}`.trim();
-          lastFinal = norm(text);
-        }
+        // الدمج الذكي: الامتداد/التراكب/إعادة المحاولة — بدل ما يتراكب المكرر فوق بعض
+        finalText = mergeFinals(finalText, text);
       } else {
         interim += ` ${text}`;
       }
+    }
+    // «تمام» = خلصت — نفّذ حالاً من غير انتظار السكوت
+    if (!finished && END_WORDS.test(`${finalText} ${interim}`)) {
+      finalText = stripEndWords(mergeFinals(finalText, interim));
+      finish();
+      return;
     }
     // حارس الضوضاء: الكلام اتكتر عن اللزوم — نفذ اللي عندنا وخلاص
     if (finalText.length > 220) { finish(); return; }
@@ -142,9 +184,8 @@ export function listenOnce(handlers: ListenHandlers): () => void {
 
   return () => {
     if (finished) return;
-    finished = true;
-    clearTimers();
-    try { rec.stop(); } catch { /* تجاهل */ }
+    // الضغطة التانية على المايك = «خلصت، نفّذ» — ما نضيّع الكلام المسموع
+    finish();
   };
 }
 

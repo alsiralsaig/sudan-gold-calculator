@@ -6,7 +6,7 @@
  * لو المايك مش متاح، تظهر سطر كتابة رفيع بداله.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Mic, Send, Keyboard, X, Square } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import {
@@ -36,20 +36,25 @@ import {
   isSpeechRecognitionSupported,
 } from '../../services/speech';
 import {
-  aiParseCommand,
+  aiParseFull,
   sanitizeAiCommand,
   teachPhrase,
   lookupLearned,
+  shouldDistrustLocal,
+  type AiContext,
 } from '../../services/voiceAi';
 
 type Props = {
   onNavigate: (tab: string) => void;
   onCalc: (req: RestoreRequest) => void;
+  /** الصفحة المفتوحة الآن — سياق للـAI (سجل في المبيعات وهو واقف في المبيعات = بيع) */
+  tab?: string;
 };
 
 type Reply = { kind: 'ok' | 'err' | 'info'; text: string; say?: string };
 
 const HELP_TEXT =
+  'قول جملتك براحتك — وخلصت؟ قول «تمام» وينفذ فوراً ⚡ (أو دوس المايك تاني)\n' +
   'حساب: «احسب 10 غرام عيار 21» • «كام غرام بمية ألف»\n' +
   'تسجيل: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» • «بعت 5 غرام عيار 21 بسعر 105 الف واشتريتو بـ500 الف» • «سجل المشتري ابوجويه 5 غرام بـ105 الف»\n' +
   'منصرف: «صرفت 50 الف كهرباء» (عام) — «منصرف خاص على أحمد 50 الف» (من حصة أحمد) • «سلفة 100 الف لخالد» • «سجل دفعة 50 الف لأحمد»\n' +
@@ -70,7 +75,7 @@ const purityLabel = (p: number): string => {
   return `نقاوة ${p} (عيار ${finenessToKarat(p).toFixed(1)})`;
 };
 
-export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
+export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => {
   const store = useGoldStore();
   const { rates, approvedPrice } = store;
   const [listening, setListening] = useState(false);
@@ -88,6 +93,21 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(() => setReply(null), 6000);
   }, []);
+
+  /** أسماء الناس المعروفة عندنا — سياق للـAI يصحح بيه (احمد/أحمد، تاج السر…) */
+  const peopleCtx = useMemo(() => {
+    const names = new Set<string>();
+    const add = (n?: string) => {
+      const v = (n ?? '').trim();
+      if (v && v !== 'عام') names.add(v);
+    };
+    (store.partners ?? []).forEach((p) => add(p.name));
+    (store.sales ?? []).forEach((s) => add(s.buyer));
+    (store.purchases ?? []).forEach((p) => add(p.seller));
+    (store.loans ?? []).forEach((l) => add(l.person));
+    (store.expenses ?? []).forEach((e) => add(e.target));
+    return Array.from(names).slice(0, 60);
+  }, [store.partners, store.sales, store.purchases, store.loans, store.expenses]);
 
   const stopListening = useCallback(() => {
     stopListenRef.current?.();
@@ -359,31 +379,56 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
           if (safe) cmd = safe;
         }
       }
-      if (cmd.type !== 'unknown') {
+      /* الجملة فيها كلمات تسجيل والمحلي فهمها «حاسبة»؟ هو غالباً غلطان — للـAI فوراً */
+      const distrust = shouldDistrustLocal(clean, cmd);
+      if (cmd.type !== 'unknown' && !distrust) {
         const r = execCommand(cmd);
         setReply(r);
         flashHide();
         if (r.say) speak(r.say);
         return;
       }
-      /* المحلي ما فهمش — ندور على الـAI (والفقاعة تبقى «بفكر...») */
+      /* المحلي ما فهمش (ولا ما بنثق فيه) — ندور على الـAI (والفقاعة تبقى «بفكر...») */
       setReply({ kind: 'info', text: 'بفكر... ثواني 🤔' });
       flashHide();
       (async () => {
         try {
-          const ai = await aiParseCommand(normalizeVoiceText(clean));
-          const safe = ai ? sanitizeAiCommand(ai) : null;
-          if (safe) {
-            teachPhrase(clean, ai as Record<string, unknown>);
-            const r = execCommand(safe);
-            setReply(r);
-            flashHide();
-            if (r.say) speak(r.say);
-          } else {
+          const ctx: AiContext = {
+            tab: tab || 'dashboard',
+            people: peopleCtx,
+            today: new Date().toISOString().slice(0, 10),
+            goldPrice21: Number(rates.karat21) || undefined,
+          };
+          const ai = await aiParseFull(normalizeVoiceText(clean), ctx);
+          const commands = (ai?.commands ?? [])
+            .map((c) => sanitizeAiCommand(c))
+            .filter((c): c is VoiceCommand => !!c && c.type !== 'unknown');
+          if (!commands.length) {
+            /* الـAI سأل سؤال توضيح؟ اعرضو — أحسن من تنفيذ بالغلط */
+            if (ai?.clarify) {
+              const r: Reply = { kind: 'info', text: `❓ ${ai.clarify}`, say: ai.clarify };
+              setReply(r);
+              flashHide();
+              if (r.say) speak(r.say);
+              return;
+            }
             const r: Reply = { kind: 'err', text: 'ما فهمت — دوس ⌨ واكتبها أو قولها بطريقة تانية' };
             setReply(r);
             flashHide();
+            return;
           }
+          /* جملة واحدة نظيفة → علّمها للمحلي (يشغلها بلا نت المرة الجاية) */
+          if (commands.length === 1 && ai) teachPhrase(clean, ai.commands[0]);
+          /* نفّذ كل الأوامر بالترتيب — الجملة الواحدة ممكن يكون فيها أكتر من أمر */
+          const replies = commands.map((c) => execCommand(c));
+          const text = replies.map((r) => r.text).join(' • ');
+          const say = replies.map((r) => r.say || r.text).join('، ');
+          const okAll = replies.every((r) => r.kind !== 'err');
+          const hint = ai?.clarify ? ` • ❓ ${ai.clarify}` : '';
+          const r: Reply = { kind: okAll ? 'ok' : 'err', text: text + hint, say };
+          setReply(r);
+          flashHide();
+          if (r.say) speak(r.say);
         } catch {
           const r: Reply = { kind: 'err', text: 'الذكاء الاصطناعي مش متاح دلوقتي — جرّب تاني' };
           setReply(r);
@@ -391,7 +436,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
         }
       })();
     },
-    [execCommand, flashHide]
+    [execCommand, flashHide, tab, peopleCtx, rates.karat21]
   );
 
   const startListening = useCallback(() => {

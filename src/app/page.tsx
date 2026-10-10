@@ -176,6 +176,7 @@ function MainAppContent() {
 
       {/* المساعد الصوتي: مايك في كل الشاشات — أوامر حساب وأسعار وتنقل */}
       <VoiceAssistant
+        tab={activeTab}
         onNavigate={navigate}
         onCalc={(req) => {
           setVoiceCalc(req);
