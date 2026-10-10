@@ -301,3 +301,20 @@ test('البيع بالكلفة والربح + سجل المشتري = بيع', 
   assert.equal(v('سجل مشتريات 5 غرام')!.type, 'add_purchase');
   assert.equal(v('شريت من فلان 3 غرام')!.type, 'add_purchase');
 });
+
+test('الاسم في أول الجملة: ابوجيقه سجل في المبيعات', () => {
+  const c = v('ابوجيقه سجل في المبيعات وزن 5 غرام عيار 21 وكلفته 100 الف');
+  assert.equal(c.type, 'add_sale');
+  if (c.type === 'add_sale') {
+    assert.equal(c.person, 'ابوجيقه');
+    assert.equal(c.units, 500);
+    assert.equal(c.buyPrice, 100000);
+  }
+  const d = v('ابوجيقه بعتو 5 غرام عيار 21 بسعر 105 الف');
+  assert.equal(d.type, 'add_sale');
+  if (d.type === 'add_sale') assert.equal(d.person, 'ابوجيقه');
+  // والجمل العادية ما بتتأثرش
+  assert.equal(v('احسب 10 غرام عيار 21')!.type, 'calc_value');
+  const e = v('سجل في المبيعات 5 غرام عيار 21 لابوجيقه');
+  if (e.type === 'add_sale') assert.equal(e.person, 'ابوجيقه');
+});

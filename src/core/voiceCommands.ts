@@ -500,7 +500,7 @@ export function parseCommand(raw: string): VoiceCommand {
   if (!hasNavVerb) {
   const weightRec = findWeight(tokens);
   const purityRec = readPurityState(tokens);
-  const person = capturePerson(tokens);
+  let person = capturePerson(tokens);
   const priceInfo = capturePrice(tokens);
   const deferred = captureDeferred(tokens);
   const dueDays = captureDueDays(tokens);
@@ -536,6 +536,16 @@ export function parseCommand(raw: string): VoiceCommand {
   // مبيعات أولاً — عشان جمل زي «سجل المشتري فلان...» و«بعت... واشتريتو...» ما تروحش للمشتريات
   const hasSaleKw = tokens.some((t) => isSaleWord(stripWaw(t)));
   const hasPurchaseKw = tokens.some((t) => isPurchaseWord(stripWaw(t)));
+  // الاسم في أول الجملة: «ابوجيقه سجل في المبيعات...» — أول كلمة اسم مش فعل = صاحب العملية
+  if (!person) {
+    const first = tokens[0];
+    const actionIdx = tokens.findIndex((t) =>
+      hasSaleKw && (isSaleWord(t) || isPurchaseWord(t)) ||
+      ['سجل', 'سجلي', 'بعت', 'بعته', 'شريت', 'اشتريت', 'صرفت', 'دفعيت'].includes(stripWaw(t)));
+    if (actionIdx > 0 && tokens.slice(0, actionIdx).every((t) => isNameLike(stripWaw(t)))) {
+      person = tokens.slice(0, actionIdx).map((t) => stripNamePrefix(stripWaw(t))).join(' ');
+    }
+  }
   // «المشتري/الزبون» في الجملة = بتاع بيع (ما عادش مشتريات)
   const buyerWord = tokens.some((t) => ['مشتري', 'المشتري'].includes(stripWaw(t)));
   if ((hasSaleKw || (buyerWord && !hasPurchaseKw)) && weightRec) {
