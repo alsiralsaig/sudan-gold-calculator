@@ -16,7 +16,7 @@ type Mode = 'gold' | 'standard';
  * شاشة الحاسبة: حاسبة عادية متطورة + حاسبة ذهب بست أدوات + سجل حسابات مشترك.
  * آخر وضع وأداة وكل المدخلات تُحفظ على الجهاز.
  */
-export const CalculatorScreen: React.FC = () => {
+export const CalculatorScreen: React.FC<{ voiceRestore?: RestoreRequest | null }> = ({ voiceRestore }) => {
   const { rates, approvedPrice, storeName } = useGoldStore();
   const { tape, add, remove, clear } = useCalcTape();
 
@@ -61,6 +61,11 @@ export const CalculatorScreen: React.FC = () => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 1800);
   }, []);
+
+  // أمر صوتي: نعبّي الأداة المطلوبة بنفس آلية الاستعادة من السجل
+  useEffect(() => {
+    if (voiceRestore?.nonce) setRestore({ ...voiceRestore });
+  }, [voiceRestore?.nonce]);
 
   const price21 = Number(rates.karat21) || 0;
   const approved = approvedPrice ? { buy: approvedPrice.buy, sell: approvedPrice.sell } : null;

@@ -3,6 +3,8 @@
 import { OPEN_ARCHIVE_EVENT } from '../core/archiveNav';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GoldStoreProvider, useGoldStore } from '../context/GoldStoreContext';
+import type { RestoreRequest } from '../components/calculator/GoldCalculator';
+import { VoiceAssistant } from '../components/common/VoiceAssistant';
 import { Navbar } from '../components/layout/Navbar';
 import { AutoUpdate } from '../components/common/AutoUpdate';
 import { DashboardScreen } from '../components/screens/DashboardScreen';
@@ -50,6 +52,7 @@ function MainAppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [voiceCalc, setVoiceCalc] = useState<RestoreRequest | null>(null);
   const scrollRef = useRef<HTMLElement>(null);
 
   // زر الرجوع: يقفل النافذة/القائمة أو يرجع للشاشة السابقة بدل الخروج
@@ -132,7 +135,7 @@ function MainAppContent() {
         {/* صحة الإشعارات: يظهر فقط لو الإشعارات مفعّلة وفيها خلل */}
         <NotificationsHealthBanner />
         {activeTab === 'dashboard' && <DashboardScreen onNavigate={navigate} />}
-        {activeTab === 'calculator' && <CalculatorScreen />}
+        {activeTab === 'calculator' && <CalculatorScreen voiceRestore={voiceCalc} />}
         {activeTab === 'partners' && <PartnersScreen />}
         {activeTab === 'purchases' && <PurchasesScreen />}
         {activeTab === 'sales' && <SalesScreen />}
@@ -147,6 +150,15 @@ function MainAppContent() {
         {activeTab === 'settings' && <SettingsScreen onOpenInstallModal={() => setShowInstallModal(true)} />}
         </div>
       </main>
+
+      {/* المساعد الصوتي: مايك في كل الشاشات — أوامر حساب وأسعار وتنقل */}
+      <VoiceAssistant
+        onNavigate={navigate}
+        onCalc={(req) => {
+          setVoiceCalc(req);
+          navigate('calculator');
+        }}
+      />
 
       {/* Clean 4-Tab Bottom Navigation + Menu Drawer Button */}
       {/* PWA iOS/Android Install Modal */}
