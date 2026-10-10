@@ -162,7 +162,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
             nonce: Date.now(),
           });
           onNavigate('calculator');
-          const text = `${fmtNum(cmd.money)} تجيب ${weightWords(r.units)} (${unitsToGrams(r.units).toFixed(2)} جرام)${karatPart(cmd)}`;
+          const text = `${fmtNum(cmd.money)} تجيب ${weightWords(r.units)}${karatPart(cmd)}`;
           return { kind: 'ok', text, say: text };
         }
         case 'calc_karat': {

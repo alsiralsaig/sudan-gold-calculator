@@ -55,7 +55,7 @@ const tokenize = (raw: string): string[] => normalizeVoiceText(raw).toLowerCase(
 /* ============================ كلمات الأرقام ============================ */
 
 const ONES: Record<string, number> = {
-  صفر: 0, واحد: 1, واحده: 1, اتنين: 2, اثنين: 2, تلاته: 3, ثلاثه: 3,
+  صفر: 0, واحد: 1, واحده: 1, اتنين: 2, اثنين: 2, اتني: 2, تنتين: 2, تلاته: 3, ثلاثه: 3,
   اربعه: 4, خمسه: 5, سته: 6, سبعه: 7, تمنيه: 8, ثمانيه: 8, تسعه: 9,
   عشره: 10, عشر: 10,
 };
@@ -317,6 +317,9 @@ const NAV_VERBS = ['افتح', 'فوت', 'ودني', 'وديني', 'روح', 'ر
 
 const PURCHASE_WORDS = ['مشتريات', 'المشتريات', 'شراء', 'الشراء', 'اشتريت', 'شريت', 'اشتري', 'شري', 'بنشري'];
 const SALE_WORDS = ['مبيعات', 'المبيعات', 'بيع', 'البيع', 'بعت', 'بعته', 'بعتو', 'ابيع', 'نبيع'];
+/** النطق بيختلف: مشتريات/مشتروات/مشتريات... — نقبض العائلة كلها */
+const isPurchaseWord = (t: string) => PURCHASE_WORDS.includes(t) || t.includes('مشترو') || t.includes('مشتري');
+const isSaleWord = (t: string) => SALE_WORDS.includes(t) || t.includes('مبيع') || t.startsWith('بعت');
 const EXPENSE_WORDS = ['مصروف', 'مصاريف', 'المصروفات', 'المصاريف', 'صرفت', 'دفعيت', 'انفقت'];
 const LOAN_WORDS = ['سلفه', 'سلف', 'اسلف', 'سلفيت', 'استلفيت', 'ادين', 'دين'];
 const PAYMENT_WORDS = ['دفعه', 'تسديد', 'سدد', 'سددت', 'اقسط', 'قسط'];
@@ -504,7 +507,7 @@ export function parseCommand(raw: string): VoiceCommand {
   }
 
   // مشتريات: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» / «شريت من فلان 5 غرام»
-  const hasPurchaseKw = tokens.some((t) => PURCHASE_WORDS.includes(stripWaw(t)));
+  const hasPurchaseKw = tokens.some((t) => isPurchaseWord(stripWaw(t)));
   if (hasPurchaseKw && weightRec) {
     return {
       type: 'add_purchase',
@@ -519,7 +522,7 @@ export function parseCommand(raw: string): VoiceCommand {
   }
 
   // مبيعات: «سجل مبيعات 30 غرام واتنين حبة عيار 21 بسعر 89 الف لفراس»
-  const hasSaleKw = tokens.some((t) => SALE_WORDS.includes(stripWaw(t)));
+  const hasSaleKw = tokens.some((t) => isSaleWord(stripWaw(t)));
   if (hasSaleKw && weightRec) {
     return {
       type: 'add_sale',

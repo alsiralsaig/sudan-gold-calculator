@@ -259,3 +259,18 @@ test('حالة الزول: اتنين حبة من غير عيار — ما يت�
   assert.equal(d.type, 'calc_weight');
   if (d.type === 'calc_weight') assert.equal(d.purityExplicit, false);
 });
+
+test('المشتروات بالواو ونطق اتني', () => {
+  const c = v('سجل في المشتروات اتنين حبه بسعر 50,000');
+  assert.equal(c.type, 'add_purchase');
+  if (c.type === 'add_purchase') {
+    assert.equal(c.units, 20);
+    assert.equal(c.price, 50000);
+    assert.equal(c.purityExplicit, false);
+  }
+  const d = v('سجل في المشتروات اتني حبه بسعر 50 الف');
+  assert.equal(d.type, 'add_purchase');
+  if (d.type === 'add_purchase') assert.equal(d.units, 20);
+  const e = v('سجل مبيعات تنتين حبة عيار 21');
+  assert.equal(e.type, 'add_sale');
+});
