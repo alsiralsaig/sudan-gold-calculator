@@ -554,14 +554,16 @@ export function parseCommand(raw: string): VoiceCommand {
   // مبيعات أولاً — عشان جمل زي «سجل المشتري فلان...» و«بعت... واشتريتو...» ما تروحش للمشتريات
   const hasSaleKw = tokens.some((t) => isSaleWord(stripWaw(t)));
   const hasPurchaseKw = tokens.some((t) => isPurchaseWord(stripWaw(t)));
-  // الاسم في أول الجملة: «ابوجيقه سجل في المبيعات...» — أول كلمة اسم مش فعل = صاحب العملية
-  if (!person) {
-    const first = tokens[0];
+  // الاسم في أول الجملة: «ابوجيقه سجل في المبيعات...» أو «ابوجيقه 5 غرام بسعر...»
+  // أول كلمتين اسم مش فعل = صاحب العملية (زبون بيع أو مورد شراء)
+  if (!person && weightRec) {
     const actionIdx = tokens.findIndex((t) =>
-      hasSaleKw && (isSaleWord(t) || isPurchaseWord(t)) ||
-      ['سجل', 'سجلي', 'بعت', 'بعته', 'شريت', 'اشتريت', 'صرفت', 'دفعيت'].includes(stripWaw(t)));
-    if (actionIdx > 0 && tokens.slice(0, actionIdx).every((t) => isNameLike(stripWaw(t)))) {
-      person = tokens.slice(0, actionIdx).map((t) => stripNamePrefix(stripWaw(t))).join(' ');
+      ['سجل', 'سجلي', 'بعت', 'بعته', 'شريت', 'اشتريت', 'صرفت', 'دفعيت'].includes(stripWaw(t)) ||
+      isSaleWord(t) || isPurchaseWord(t));
+    const cut = actionIdx > 0 ? actionIdx : Math.min(2, tokens.length);
+    const head = tokens.slice(0, cut).map((t) => stripWaw(t));
+    if (cut > 0 && head.every((t) => isNameLike(t))) {
+      person = head.map((t) => stripNamePrefix(t)).join(' ');
     }
   }
   // «المشتري/الزبون» في الجملة = بتاع بيع (ما عادش مشتريات)
@@ -645,6 +647,26 @@ export function parseCommand(raw: string): VoiceCommand {
 
   /* ---------- 4) الوزن من المبلغ ---------- */
   const weight = findWeight(tokens);
+  const isHowMuch = hasAnySub(tokens, ['شحال', 'شقد', 'شكد', 'كام', 'كم']);
+  /* اسم في البداية + وزن + سعر → عملية بيع/شراء على شخص (حتى من غير فعل):
+     «ابوجيقه 15 غرام عيار 21 بسعر 105 الف وكلفني 100 الف» */
+  if (weight && !isHowMuch) {
+    const personLed = (() => {
+      const first = stripWaw(tokens[0]);
+      if (!isNameLike(first)) return null;
+      const priceRec = capturePrice(tokens);
+      const costRec = captureCost(tokens);
+      if ((priceRec.price || costRec.price) && priceRec.price !== costRec.price) {
+        const ps = readPurityState(tokens);
+        const isBuy = tokens.some((t) => ['شريت', 'اشتريت'].includes(stripWaw(t)));
+        return isBuy
+          ? { type: 'add_purchase', units: weight.units, purity: ps.purity, purityExplicit: ps.explicit, price: priceRec.price, priceMode: priceRec.mode, person: stripNamePrefix(first), deferred: captureDeferred(tokens) }
+          : { type: 'add_sale', units: weight.units, purity: ps.purity, purityExplicit: ps.explicit, price: priceRec.price, priceMode: priceRec.mode, person: stripNamePrefix(first), deferred: captureDeferred(tokens), buyPrice: costRec.price, buyPriceMode: costRec.mode };
+      }
+      return null;
+    })();
+    if (personLed) return personLed;
+  }
   if (weight) {
     const searchFrom = weight.lastUnitIndex >= 0 ? weight.lastUnitIndex + 1 : weight.endIndex;
     const m = scanMoney(tokens, searchFrom);

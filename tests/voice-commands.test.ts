@@ -359,3 +359,22 @@ test('البيع بدون سعر بيع — ما يضربش بمزاجه', () =>
   const d = v('سجل مبيعات 5 غرام عيار 21 بسعر 105 الف للجرام');
   if (d.type === 'add_sale') assert.equal(d.price, 105000);
 });
+
+test('اسم في البداية من غير فعل: ابوجيقه 15 غرام بسعر وكلفة', () => {
+  const c = v('ابوجيقه 15 غرام عيار 21 بسعر 105 الف للجرام وكلفني 100 الف للجرام');
+  assert.equal(c.type, 'add_sale');
+  if (c.type === 'add_sale') {
+    assert.equal(c.person, 'ابوجيقه');
+    assert.equal(c.units, 1500);
+    assert.equal(c.price, 105000);
+    assert.equal(c.priceMode, 'per_gram');
+    assert.equal(c.buyPrice, 100000);
+  }
+  const d = v('احمد 3 غرام عيار 21 بسعر 105 الف');
+  assert.equal(d.type, 'add_sale');
+  if (d.type === 'add_sale') assert.equal(d.person, 'احمد');
+  // والأوامر العادية ما تتأثرش
+  assert.equal(v('كام غرام بمية ألف')!.type, 'calc_weight');
+  assert.equal(v('سعر الذهب')!.type, 'gold_price');
+  assert.equal(v('احسب 10 غرام عيار 21')!.type, 'calc_value');
+});
