@@ -15,6 +15,7 @@ import {
   normalizeVoiceText,
   capturePrice,
   readNumber,
+  tokenize,
   type VoiceCommand,
 } from '../../core/voiceCommands';
 import {
@@ -55,15 +56,20 @@ type Props = {
 
 type Reply = { kind: 'ok' | 'err' | 'info'; text: string; say?: string };
 
-/** بيع ناقص سعر البيع — مستنيين الرد: «بعتها بـ 15 مليون» */
+/** بيع ناقص معلومات — حوار خطوة بخطوة: العيار ← الكلفة ← سعر البيع */
 type PendingSale = {
   units: number;
   purity: number;
   purityExplicit: boolean;
+  purityAnswered: boolean;
   buyPrice?: number;
   buyPriceMode: 'per_gram' | 'total' | 'auto';
+  costAnswered: boolean;
+  price?: number;
+  priceMode: 'per_gram' | 'total' | 'auto';
   person?: string;
   deferred: boolean;
+  step: 'purity' | 'cost' | 'price';
 };
 
 const HELP_TEXT =
@@ -271,20 +277,31 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
           return { kind: 'ok', text, say: text };
         }
         case 'add_sale': {
-          // ما عنديش سعر البيع؟ ما أضربش بمزاجي — أحفظ الوزن/العيار/الكلفة وأسأل: بعتها بكم؟
-          if (!cmd.price) {
+          // ناقص عيار أو كلفة أو سعر؟ ما نكمل بالمزاج — حوار خطوة بخطوة
+          if (!cmd.price || !cmd.purityExplicit || !cmd.buyPrice) {
+            const step: PendingSale['step'] = !cmd.purityExplicit ? 'purity' : !cmd.buyPrice ? 'cost' : 'price';
             pendingSaleRef.current = {
               units: cmd.units,
               purity: cmd.purity,
               purityExplicit: cmd.purityExplicit,
+              purityAnswered: cmd.purityExplicit,
               buyPrice: cmd.buyPrice,
               buyPriceMode: cmd.buyPriceMode,
+              costAnswered: Boolean(cmd.buyPrice),
+              price: cmd.price,
+              priceMode: cmd.priceMode,
               person: cmd.person,
               deferred: cmd.deferred,
+              step,
             };
-            const costPart = cmd.buyPrice ? ` — كلفة ${fmtNum(cmd.buyPrice)} ج.س حفظتها ✓` : '';
-            const text = `${weightWords(cmd.units)}${karatPart(cmd)}${costPart} — بعتها بكم؟ قول: «بعتها بـ 15 مليون»`;
-            return { kind: 'info', text, say: 'بعتها بكم؟' };
+            const q = step === 'purity' ? 'عيار كام؟' : step === 'cost' ? 'مشتراها بكم؟ (كلفة الشراء)' : 'بعتها بكم؟';
+            const known = [
+              weightWords(cmd.units),
+              ...(cmd.purityExplicit ? [purityLabel(cmd.purity)] : []),
+              ...(cmd.buyPrice ? [`كلفة ${fmtNum(cmd.buyPrice)} ✓`] : []),
+            ].join(' • ');
+            const text = `${known} — ${q}`;
+            return { kind: 'info', text, say: q };
           }
           const grams = unitsToGrams(cmd.units);
           const pr = resolvePrice(cmd, grams);
@@ -395,38 +412,68 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
       const clean = text.trim();
       if (!clean) return;
       stopSpeaking();
-      /* بيع ناقص سعره مستني الرد — «بعتها بـ 15 مليون» / «الغي» / أو أمر جديد */
+      /* بيع ناقص معلومات — حوار خطوة بخطوة: العيار ← الكلفة ← سعر البيع */
       const pending = pendingSaleRef.current;
       if (pending) {
         const isCancel = /(الغاء|الغي|الغيها|اتلغى|كنسل|اسقط|اسقطها|سيبها|ما سجلت|رجعت)/.test(clean);
+        const isSkip = /(بدون|ما عندي|ما ادكر|مش مهم|بعدين)/.test(clean);
         const hasOwnSubject = /(جرام|غرام|حب[هة]|مثقال|احسب|كام|سجل|صرفت|سلفت|افتح|سعر)/.test(clean);
-        const tokens = normalizeVoiceText(clean.replace(/ب(\d)/g, 'ب $1')).toLowerCase().split(' ').filter(Boolean);
-        const pr = capturePrice(tokens);
-        let price = pr.price;
-        let mode = pr.mode;
-        if (price === undefined) {
-          const rn = readNumber(tokens, 0);
-          if (rn && rn.next >= tokens.length - 1) { price = rn.value; mode = 'total'; }
-        }
-        if (isCancel) {
+        const tokens = tokenize(clean);
+        const deferredNow = pending.deferred || /(آجل|على الحساب|على الكتاب|بكرة)/.test(clean);
+        const validPurity = (v: number): number | undefined =>
+          (Number.isInteger(v) && v >= 6 && v <= 24) || (v >= 300 && v <= 999) ? v : undefined;
+        /* عيار من الرد: «عيار 680» / «680» / «واحد وعشرين» */
+        const purityFromReply = (): number | undefined => {
+          for (let i = 0; i + 1 < tokens.length; i++) {
+            if (tokens[i] === 'عيار') {
+              const rn = readNumber(tokens, i + 1);
+              if (rn) { const v = validPurity(rn.value); if (v) return v; }
+            }
+          }
+          if (tokens.length <= 3) {
+            const rn = readNumber(tokens, 0);
+            if (rn && rn.next >= tokens.length - 1) return validPurity(rn.value);
+          }
+          return undefined;
+        };
+        /* مبلغ من الرد: «بـ 15 مليون» / «بخمستاشر مليون» / «مشتراها بتلاتاشر مليون» / رقم بس */
+        const amountFromReply = (): { price?: number; mode: 'per_gram' | 'total' | 'auto' } => {
+          const pr = capturePrice(tokens);
+          if (pr.price !== undefined) return pr;
+          for (let i = 0; i < tokens.length; i++) {
+            const rn = readNumber(tokens, i);
+            if (rn && rn.next >= tokens.length - 1) return { price: rn.value, mode: 'total' };
+          }
+          return { mode: 'auto' };
+        };
+        const nextStep = (): PendingSale['step'] | null => {
+          if (!pending.purityAnswered) return 'purity';
+          if (pending.buyPrice === undefined && !pending.costAnswered) return 'cost';
+          if (pending.price === undefined) return 'price';
+          return null;
+        };
+        const askText = (s: PendingSale['step']): string =>
+          s === 'purity' ? 'عيار كام؟' : s === 'cost' ? 'مشتراها بكم؟ (كلفة الشراء)' : 'بعتها بكم؟';
+        const askSay = (s: PendingSale['step']): string =>
+          s === 'purity' ? 'عيار كام؟' : s === 'cost' ? 'مشتراها بكم؟' : 'بعتها بكم؟';
+        const ackText = (): string => {
+          const bits = [weightWords(pending.units)];
+          if (pending.purityAnswered) bits.push(purityLabel(pending.purity));
+          if (pending.buyPrice !== undefined) bits.push(`كلفة ${fmtNum(pending.buyPrice)} ✓`);
+          if (pending.price !== undefined) bits.push(`بيع ${fmtNum(pending.price)} ✓`);
+          return bits.join(' • ');
+        };
+        const finishPending = () => {
           pendingSaleRef.current = null;
-          const r: Reply = { kind: 'info', text: 'تمام — اتلغى البيع، ما سجلت شي' };
-          setReply(r);
-          flashHide();
-          return;
-        }
-        if (price !== undefined && !hasOwnSubject) {
-          pendingSaleRef.current = null;
-          const deferred = pending.deferred || /(آجل|على الحساب|على الكتاب|بكرة)/.test(clean);
           const full: VoiceCommand = {
             type: 'add_sale',
             units: pending.units,
             purity: pending.purity,
-            purityExplicit: pending.purityExplicit,
-            price,
-            priceMode: mode,
+            purityExplicit: true,
+            price: pending.price,
+            priceMode: pending.priceMode,
             person: pending.person,
-            deferred,
+            deferred: pending.deferred,
             buyPrice: pending.buyPrice,
             buyPriceMode: pending.buyPriceMode,
           };
@@ -434,9 +481,71 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
           setReply(r);
           flashHide();
           if (r.say) speak(r.say);
+        };
+        const askNext = () => {
+          const s = nextStep();
+          if (!s) { finishPending(); return; }
+          pending.step = s;
+          const r: Reply = { kind: 'info', text: `${ackText()} — ${askText(s)}`, say: askSay(s) };
+          setReply(r);
+          flashHide();
+          speak(askSay(s));
+        };
+
+        if (isCancel) {
+          pendingSaleRef.current = null;
+          const r: Reply = { kind: 'info', text: 'تمام — اتلغى البيع، ما سجلت شي' };
+          setReply(r);
+          flashHide();
           return;
         }
-        /* ما في رقم = كلام تاني — نقفل الاستنى ونكمل كأمر عادي */
+        if (isSkip) {
+          if (pending.step === 'purity') { pending.purityAnswered = true; pending.purityExplicit = true; }
+          if (pending.step === 'cost') pending.costAnswered = true;
+          pending.deferred = deferredNow;
+          askNext();
+          return;
+        }
+        const purityVal = purityFromReply();
+        const amt = amountFromReply();
+        const saysCost = /(مشتراها|مشتريها|شريتها|اشتريتها|كلفني|كلفتني|كلفته|بتكلفه|اشتريتو|كلف)/.test(clean);
+        const saysPrice = /(بعتها|بعته|بالبيع|سعر البيع)/.test(clean);
+        const looksMoney = (v?: number): v is number => v !== undefined && v >= 1000;
+        let acted = false;
+        if (purityVal !== undefined && !pending.purityAnswered) {
+          pending.purity = purityVal;
+          pending.purityExplicit = true;
+          pending.purityAnswered = true;
+          acted = true;
+        }
+        if (amt.price !== undefined) {
+          if (saysCost && pending.buyPrice === undefined && looksMoney(amt.price)) {
+            pending.buyPrice = amt.price; pending.buyPriceMode = amt.mode; pending.costAnswered = true; acted = true;
+          } else if (saysPrice && pending.price === undefined && looksMoney(amt.price)) {
+            pending.price = amt.price; pending.priceMode = amt.mode; acted = true;
+          } else if (!saysCost && !saysPrice) {
+            /* رد على سؤال الخطوة الحالية — لازم يشبه فلوس عشان ما نلخبطش العيار بالكلفة */
+            if (pending.step === 'cost' && pending.buyPrice === undefined && looksMoney(amt.price)) {
+              pending.buyPrice = amt.price; pending.buyPriceMode = amt.mode; pending.costAnswered = true; acted = true;
+            } else if (pending.step === 'price' && pending.price === undefined && looksMoney(amt.price)) {
+              pending.price = amt.price; pending.priceMode = amt.mode; acted = true;
+            }
+          }
+        }
+        if (acted) {
+          pending.deferred = deferredNow;
+          askNext();
+          return;
+        }
+        /* ما فهمت من الرد — أعيد السؤال */
+        if (!hasOwnSubject) {
+          const r: Reply = { kind: 'info', text: `ما فهمت — ${askText(pending.step)}`, say: askSay(pending.step) };
+          setReply(r);
+          flashHide();
+          speak(askSay(pending.step));
+          return;
+        }
+        /* كلام تاني ليه موضوعو — نقفل الاستنى ونكمل كأمر عادي */
         pendingSaleRef.current = null;
       }
       let cmd = parseCommand(clean);

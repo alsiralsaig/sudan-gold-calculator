@@ -50,7 +50,7 @@ export function normalizeVoiceText(raw: string): string {
     .trim();
 }
 
-const tokenize = (raw: string): string[] =>
+export const tokenize = (raw: string): string[] =>
   normalizeVoiceText(raw)
     .toLowerCase()
     .split(' ')
