@@ -38,7 +38,8 @@ const SYSTEM = `انت محرك أوامر لتطبيق محاسبة لتجار 
 5. «سلفة/سلفيت لفلان»=add_loan direction="lent". «استلفيت من فلان»=direction="borrowed". «يستحق بعد N يوم/أسبوع/شهر»=dueDays.
 6. «دفعة/تسديد لفلان»=add_payment.
 7. أسماء الناس انقلها كما نطقتها بدون ل/لل/من.
-8. كلام مش متعلق بالتطبيق = unknown. ما تخترعش أرقام.`;
+8. كلام مش متعلق بالتطبيق = unknown. ما تخترعش أرقام.
+9. في جملة البيع: «واشتريتو/كلفني/بتكلفة X» = buyPrice (كلفة الشراء). «المشتري/الزبون فلان» = person. «سجل المشتري فلان...» = add_sale مش مشتريات.`;
 
 export async function POST(req: Request) {
   const key = process.env.GEMINI_API_KEY || '';

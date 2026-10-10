@@ -30,8 +30,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 /**
- * يسمع جملة واحدة ويرجّع دالة للإيقاف.
- * onFinal بتتنادى بالجملة النهائية، onInterim أثناء الكلام.
+ * يسمع الجملة كاملة — ما بستعجلش:
+ * بيستنى سكوت ثانية ونص قبل ما ينفذ، فبتقدر تقول الجملة براحتك وبوقفات.
+ * بيرجّع دالة للإيقاف اليدوي.
  */
 export function listenOnce(handlers: ListenHandlers): () => void {
   const Ctor = getRecognitionCtor();
@@ -40,57 +41,92 @@ export function listenOnce(handlers: ListenHandlers): () => void {
     return () => {};
   }
   let finished = false;
+  let finalText = '';
   const rec = new Ctor();
   rec.lang = 'ar-SA';
-  rec.continuous = false;
+  rec.continuous = true; // بيسمع على طول — ما بيقاطعش بعد أول كلمتين
   rec.interimResults = true;
   rec.maxAlternatives = 1;
 
-  const stopTimer = setTimeout(() => {
-    try { rec.stop(); } catch { /* تجاهل */ }
-  }, 15000);
+  const SILENCE_MS = 1500; // سكوت ثانية ونص = الجملة خلصت
+  const MAX_MS = 30000;
+  const startedAt = Date.now();
+  let silence: ReturnType<typeof setTimeout> | null = null;
+  let gotAny = false;
 
-  const cleanup = () => {
+  const clearTimers = () => {
+    if (silence) { clearTimeout(silence); silence = null; }
+    if (hardStop) { clearTimeout(hardStop); hardStop = null; }
+  };
+  let hardStop: ReturnType<typeof setTimeout> | null = null;
+
+  const finish = () => {
+    if (finished) return;
     finished = true;
-    clearTimeout(stopTimer);
+    clearTimers();
+    try { rec.stop(); } catch { /* تجاهل */ }
+    const text = finalText.trim();
+    if (text) handlers.onFinal(text);
+    else handlers.onEnd();
   };
 
+  const armSilence = () => {
+    if (silence) clearTimeout(silence);
+    silence = setTimeout(finish, SILENCE_MS);
+  };
+
+  hardStop = setTimeout(finish, MAX_MS);
+
   rec.onresult = (event: any) => {
+    gotAny = true;
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const res = event.results[i];
       const text = String(res[0]?.transcript ?? '').trim();
       if (!text) continue;
-      if (res.isFinal) {
-        cleanup();
-        handlers.onFinal(text);
-        return;
-      }
-      interim += ` ${text}`;
+      if (res.isFinal) finalText = `${finalText} ${text}`.trim();
+      else interim += ` ${text}`;
     }
-    if (interim.trim()) handlers.onInterim?.(interim.trim());
+    const shown = `${finalText} ${interim}`.trim();
+    if (shown) handlers.onInterim?.(shown);
+    // لسه بيتكلم؟ نأجل الحكم — لين يسكت
+    if (!finished) armSilence();
   };
   rec.onerror = (event: any) => {
-    cleanup();
-    const msg = ERROR_MESSAGES[String(event?.error)] ?? 'حصلت مشكلة في المايك — جرّب تاني';
-    if (msg) handlers.onError(msg);
+    const code = String(event?.error);
+    if (finished) return;
+    if (code === 'aborted') return; // بنوقفو احنا — عادي
+    finished = true;
+    clearTimers();
+    try { rec.stop(); } catch { /* تجاهل */ }
+    const msg = ERROR_MESSAGES[code] ?? 'حصلت مشكلة في المايك — جرّب تاني';
+    if (finalText) handlers.onFinal(finalText);
+    else if (msg) handlers.onError(msg);
+    handlers.onEnd?.();
   };
   rec.onend = () => {
-    const wasFinished = finished;
-    cleanup();
+    if (finished) { handlers.onEnd?.(); return; }
+    // المتصفح قفل السمع لوحده — لو عندي كلام ننفذو، وإلا نقول ما سمعنا
+    finished = true;
+    clearTimers();
+    const text = finalText.trim();
+    if (text) handlers.onFinal(text);
+    else handlers.onError(gotAny ? 'ما فهمت الكلام — قرّب المايك وجرّب تاني' : 'ما سمعت صوت — قرّب المايك وجرّب تاني');
     handlers.onEnd?.();
-    if (!wasFinished) handlers.onError('ما سمعت صوت — قرّب المايك وجرّب تاني');
   };
 
   try {
     rec.start();
   } catch {
-    cleanup();
+    clearTimers();
+    finished = true;
     handlers.onError('ما قدرت أشغّل المايك — جرّب تاني');
   }
 
   return () => {
-    cleanup();
+    if (finished) return;
+    finished = true;
+    clearTimers();
     try { rec.stop(); } catch { /* تجاهل */ }
   };
 }

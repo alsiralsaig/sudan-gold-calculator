@@ -18,7 +18,7 @@ export type VoiceCommand =
   | { type: 'calc_sum'; items: { units: number; purity: number }[] }
   | { type: 'navigate'; tab: string }
   | { type: 'add_purchase'; units: number; purity: number; purityExplicit: boolean; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean }
-  | { type: 'add_sale'; units: number; purity: number; purityExplicit: boolean; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean }
+  | { type: 'add_sale'; units: number; purity: number; purityExplicit: boolean; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean; buyPrice?: number; buyPriceMode: 'per_gram' | 'total' | 'auto' }
   | { type: 'add_expense'; amount: number; name: string }
   | { type: 'add_loan'; amount: number; person: string; direction: 'lent' | 'borrowed'; dueDays?: number }
   | { type: 'add_payment'; amount: number; person: string }
@@ -318,7 +318,8 @@ const NAV_VERBS = ['افتح', 'فوت', 'ودني', 'وديني', 'روح', 'ر
 const PURCHASE_WORDS = ['مشتريات', 'المشتريات', 'شراء', 'الشراء', 'اشتريت', 'شريت', 'اشتري', 'شري', 'بنشري'];
 const SALE_WORDS = ['مبيعات', 'المبيعات', 'بيع', 'البيع', 'بعت', 'بعته', 'بعتو', 'ابيع', 'نبيع'];
 /** النطق بيختلف: مشتريات/مشتروات/مشتريات... — نقبض العائلة كلها */
-const isPurchaseWord = (t: string) => PURCHASE_WORDS.includes(t) || t.includes('مشترو') || t.includes('مشتري');
+// ملاحظة: «المشتري» = الزبون (بتاع البيع) — ما بتدخلش في كلمات المشتريات أبداً
+const isPurchaseWord = (t: string) => PURCHASE_WORDS.includes(t) || t.includes('مشترو');
 const isSaleWord = (t: string) => SALE_WORDS.includes(t) || t.includes('مبيع') || t.startsWith('بعت');
 const EXPENSE_WORDS = ['مصروف', 'مصاريف', 'المصروفات', 'المصاريف', 'صرفت', 'دفعيت', 'انفقت'];
 const LOAN_WORDS = ['سلفه', 'سلف', 'اسلف', 'سلفيت', 'استلفيت', 'ادين', 'دين'];
@@ -330,6 +331,7 @@ const NAME_STOP = new Set([
   'مبلغ', 'بمبلغ', 'اجمالي', 'باجمالي', 'للجرام', 'للغرام', 'للغرامات', 'كاش', 'اجل', 'حساب',
   'الكتاب', 'سجل', 'سجلي', 'في', 'يستحق', 'بعد', 'مدفوع', 'وزن', 'الوزن', 'فلان', 'كده', 'ده',
   'دهب', 'ذهب', 'دولار', 'دولر', 'اليوم', 'امس', 'من', 'ل', 'لل', 'لس', 'لز', 'علي', 'مع',
+  'مشتري', 'المشتري', 'المشتريه', 'البايع', 'الزبون', 'زبون', 'الكلفه', 'كلفه', 'كلفني', 'اشتريتو', 'شريتو',
 ]);
 
 const isNameLike = (t: string): boolean => {
@@ -350,7 +352,7 @@ export const stripNamePrefix = (t: string): string => {
 
 /** يلفظ الاسم بعد أدوات: ل/لل/لس/من أو ملتصقة: «لاحمد» */
 export function capturePerson(tokens: string[]): string {
-  const MARKERS = ['ل', 'لل', 'لس', 'لز', 'من', 'لصالح', 'لحساب'];
+  const MARKERS = ['ل', 'لل', 'لس', 'لز', 'من', 'لصالح', 'لحساب', 'المشتري', 'مشتري', 'الزبون', 'زبون', 'البايع'];
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (MARKERS.includes(t)) {
@@ -369,7 +371,12 @@ export function capturePrice(tokens: string[]): { price?: number; mode: 'per_gra
   let price: number | undefined;
   let mentionsForGram = false;
   let mentionsTotal = false;
+  // لو في كلمة كلفة («اشتريتو/كلفني...») — السعر قبلها بس، اللي بعدها كلفة
+  let limit = tokens.length;
   for (let i = 0; i < tokens.length; i++) {
+    if (COST_MARKERS.includes(stripWaw(tokens[i]))) { limit = i; break; }
+  }
+  for (let i = 0; i < limit; i++) {
     const t = tokens[i];
     if (['بمبلغ', 'مبلغ', 'اجمالي', 'باجمالي', 'الاجمالي'].includes(t)) {
       const r = readNumber(tokens, i + 1);
@@ -385,6 +392,26 @@ export function capturePrice(tokens: string[]): { price?: number; mode: 'per_gra
   }
   const mode: 'per_gram' | 'total' | 'auto' = mentionsTotal ? 'total' : mentionsForGram ? 'per_gram' : 'auto';
   return { price, mode };
+}
+
+/** كلفة الشراء في جملة البيع: «واشتريتو بـ500 الف» / «كلفني 100 الف للجرام» */
+const COST_MARKERS = ['كلفني', 'كلفه', 'كلفتو', 'كلفته', 'اشتريتو', 'شريتو', 'بتكلفه', 'تكلفتو', 'الكلفه', 'بتمنو'];
+export function captureCost(tokens: string[]): { price?: number; mode: 'per_gram' | 'total' | 'auto' } {
+  for (let i = 0; i < tokens.length; i++) {
+    if (!COST_MARKERS.includes(stripWaw(tokens[i]))) continue;
+    let k = i + 1;
+    let saidTotal = false;
+    while (k < tokens.length && ['ب', 'بمبلغ', 'مبلغ', 'بلغ'].includes(tokens[k])) {
+      if (tokens[k] !== 'ب') saidTotal = true;
+      k++;
+    }
+    const r = readNumber(tokens, k);
+    if (!r) continue;
+    const after = tokens.slice(r.next, r.next + 2);
+    const perGram = after.includes('للجرام') || after.includes('للغرام');
+    return { price: r.value, mode: perGram ? 'per_gram' : saidTotal ? 'total' : 'auto' };
+  }
+  return { mode: 'auto' as const };
 }
 
 /** آجل؟ («آجل»، «على الحساب»، «على الكتاب») */
@@ -506,11 +533,15 @@ export function parseCommand(raw: string): VoiceCommand {
     if (amount) return { type: 'add_expense', amount, name: captureExpenseName(tokens) || 'مصروف' };
   }
 
-  // مشتريات: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» / «شريت من فلان 5 غرام»
+  // مبيعات أولاً — عشان جمل زي «سجل المشتري فلان...» و«بعت... واشتريتو...» ما تروحش للمشتريات
+  const hasSaleKw = tokens.some((t) => isSaleWord(stripWaw(t)));
   const hasPurchaseKw = tokens.some((t) => isPurchaseWord(stripWaw(t)));
-  if (hasPurchaseKw && weightRec) {
+  // «المشتري/الزبون» في الجملة = بتاع بيع (ما عادش مشتريات)
+  const buyerWord = tokens.some((t) => ['مشتري', 'المشتري'].includes(stripWaw(t)));
+  if ((hasSaleKw || (buyerWord && !hasPurchaseKw)) && weightRec) {
+    const cost = captureCost(tokens);
     return {
-      type: 'add_purchase',
+      type: 'add_sale',
       units: weightRec.units,
       purity: purityRec.purity,
       purityExplicit: purityRec.explicit,
@@ -518,14 +549,15 @@ export function parseCommand(raw: string): VoiceCommand {
       priceMode: priceInfo.mode,
       person,
       deferred,
+      buyPrice: cost.price,
+      buyPriceMode: cost.mode,
     };
   }
 
-  // مبيعات: «سجل مبيعات 30 غرام واتنين حبة عيار 21 بسعر 89 الف لفراس»
-  const hasSaleKw = tokens.some((t) => isSaleWord(stripWaw(t)));
-  if (hasSaleKw && weightRec) {
+  // مشتريات: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» / «شريت من فلان 5 غرام»
+  if (hasPurchaseKw && weightRec) {
     return {
-      type: 'add_sale',
+      type: 'add_purchase',
       units: weightRec.units,
       purity: purityRec.purity,
       purityExplicit: purityRec.explicit,

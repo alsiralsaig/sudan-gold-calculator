@@ -36,6 +36,8 @@ export const AI_SYSTEM_PROMPT = `انت محرك أوامر لتطبيق محا�
 6. «دفعة/تسديد لفلان» = add_payment (يُطابق حساب موجود).
 7. أسماء الناس: انقلها كما نطقتها بدون «ل/لل/من».
 8. أي كلام مش متعلق بالتطبيق = unknown. ما تخترعش أرقام مش موجودة.
+9. في جملة البيع: «واشتريتو/كلفني/بتكلفة X» = سعر الكلفة buyPrice (وbuyPriceMode زي priceMode). «المشتري/الزبون فلان» = person.
+10. «سجل المشتري فلان...» = بيع (add_sale) مش مشتريات.
 أعد JSON فقط.`;
 
 /* ============================ نداء Gemini ============================ */
@@ -91,8 +93,26 @@ export function sanitizeAiCommand(raw: Record<string, unknown>): import('../core
     case 'add_purchase':
     case 'add_sale': {
       if (!units || units <= 0) return null;
-      const cmd = {
-        type,
+      const buyPrice = num('buyPrice') ?? undefined;
+      const buyModeRaw = asStr(raw.buyPriceMode);
+      const buyPriceMode: 'per_gram' | 'total' | 'auto' =
+        buyModeRaw === 'per_gram' || buyModeRaw === 'total' ? buyModeRaw : 'auto';
+      if (type === 'add_sale') {
+        return {
+          type: 'add_sale',
+          units: Math.round(units * 100),
+          purity,
+          purityExplicit: explicit,
+          price: price ?? undefined,
+          priceMode: mode,
+          person: asStr(raw.person),
+          deferred: raw.deferred === true,
+          buyPrice,
+          buyPriceMode,
+        };
+      }
+      return {
+        type: 'add_purchase',
         units: Math.round(units * 100),
         purity,
         purityExplicit: explicit,
@@ -100,8 +120,7 @@ export function sanitizeAiCommand(raw: Record<string, unknown>): import('../core
         priceMode: mode,
         person: asStr(raw.person),
         deferred: raw.deferred === true,
-      } as const;
-      return cmd;
+      };
     }
     case 'calc_value': {
       if (!units || units <= 0) return null;

@@ -50,7 +50,7 @@ type Props = {
 type Reply = { kind: 'ok' | 'err' | 'info'; text: string; say?: string };
 
 const HELP_TEXT =
-  'حساب: «احسب 10 غرام عيار 21» • «كام غرام بمية ألف»\nتسجيل: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» • «سجل مبيعات 30 غرام واتنين حبة بسعر 89 الف لفراس» • «صرفت 50 الف كهرباء» • «سلفة 100 الف لخالد» • «سجل دفعة 50 الف لأحمد»\nأسعار: «الذهب كام؟» • «كام الدولار؟» — وتنقل: «افتح المبيعات»';
+  'حساب: «احسب 10 غرام عيار 21» • «كام غرام بمية ألف»\nتسجيل: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» • «بعت 5 غرام بـ105 الف للجرام واشتريتو بـ500 الف» (بيقولك الربح) • «سجل المشتري ابوجويه 5 غرام بـ105 الف» • «صرفت 50 الف كهرباء» • «سلفة 100 الف لخالد» • «سجل دفعة 50 الف لأحمد»\nأسعار: «الذهب كام؟» • «كام الدولار؟» — وتنقل: «افتح المبيعات»';
 
 /** يلفظ الوزن بشكل مفهوم: «22.6.0» → «22 غرام و 6 حبات» */
 const weightWords = (units: number): string => {
@@ -237,12 +237,18 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
           const grams = unitsToGrams(cmd.units);
           const pr = resolvePrice(cmd, grams);
           const total = Math.round(pr.total);
+          // كلفة الشراء (لو قالها): «واشتريتو بـ500 الف» / «كلفني 100 الف للجرام»
+          const buyPr = cmd.buyPrice
+            ? resolvePrice({ price: cmd.buyPrice, priceMode: cmd.buyPriceMode, purity: cmd.purity }, grams)
+            : null;
+          const buyTotal = buyPr ? Math.round(buyPr.total) : 0;
+          const profit = buyTotal > 0 ? total - buyTotal : null;
           store.addSale({
             date: new Date().toISOString(),
             units: cmd.units,
             purity: cmd.purityExplicit ? cmd.purity : 0,
             sellAmount: total,
-            buyAmount: 0,
+            buyAmount: buyTotal,
             buyer: cmd.person || 'زبون عام',
             buyerPhone: '',
             notes: '🎙️ مسجل بالصوت',
@@ -250,7 +256,8 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
             pendingAmount: cmd.deferred ? total : 0,
           });
           onNavigate('sales');
-          const text = `سجلت في المبيعات ✓ ${weightWords(cmd.units)}${karatPart(cmd)} = ${fmtNum(total)} جنيه${cmd.person ? ` لـ${cmd.person}` : ''}${cmd.deferred ? ' — آجل' : ''}`;
+          const profitPart = profit === null ? '' : profit >= 0 ? ` — الربح ${fmtNum(profit)}` : ` — خسارة ${fmtNum(-profit)}`;
+          const text = `سجلت في المبيعات ✓ ${weightWords(cmd.units)}${karatPart(cmd)} = ${fmtNum(total)} جنيه${buyTotal > 0 ? ` (كلفة ${fmtNum(buyTotal)}${profitPart})` : ''}${cmd.person ? ` لـ${cmd.person}` : ''}${cmd.deferred ? ' — آجل' : ''}`;
           return { kind: 'ok', text, say: text };
         }
         case 'add_expense': {
@@ -384,7 +391,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
       stopListenRef.current?.();
       stopListenRef.current = null;
       setListening(false);
-    }, 16000);
+    }, 32000);
     stopListenRef.current = listenOnce({
       onInterim: (t) => setHeard(t),
       onFinal: (t) => {

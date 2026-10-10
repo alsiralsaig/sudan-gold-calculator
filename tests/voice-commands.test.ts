@@ -274,3 +274,30 @@ test('المشتروات بالواو ونطق اتني', () => {
   const e = v('سجل مبيعات تنتين حبة عيار 21');
   assert.equal(e.type, 'add_sale');
 });
+
+test('البيع بالكلفة والربح + سجل المشتري = بيع', () => {
+  // كلفة إجمالية
+  const c = v('بعت 5 غرام عيار 21 بسعر 105 الف للجرام واشتريتو بمبلغ 500 الف');
+  assert.equal(c.type, 'add_sale');
+  if (c.type === 'add_sale') {
+    assert.equal(c.units, 500);
+    assert.equal(c.price, 105000);
+    assert.equal(c.priceMode, 'per_gram');
+    assert.equal(c.buyPrice, 500000);
+    assert.equal(c.buyPriceMode, 'total');
+  }
+  // كلفة للجرام
+  const d = v('بعت 5 غرام وكلفني 100 الف للجرام');
+  assert.equal(d.type, 'add_sale');
+  if (d.type === 'add_sale') {
+    assert.equal(d.buyPrice, 100000);
+    assert.equal(d.buyPriceMode, 'per_gram');
+  }
+  // «سجل المشتري فلان» = بيع للزبون — مش مشتريات!
+  const e = v('سجل المشتري ابوجويه 5 غرام عيار 21 ب 105 الف');
+  assert.equal(e.type, 'add_sale');
+  if (e.type === 'add_sale') assert.equal(e.person, 'ابوجويه');
+  // والمشتريات العادية شغالة زي ما هي
+  assert.equal(v('سجل مشتريات 5 غرام')!.type, 'add_purchase');
+  assert.equal(v('شريت من فلان 3 غرام')!.type, 'add_purchase');
+});
