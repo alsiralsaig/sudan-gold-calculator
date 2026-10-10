@@ -13,6 +13,7 @@ import { Mic, X, Send, Square } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import {
   parseCommand,
+  stripNamePrefix,
   VOICE_EXAMPLES,
   type VoiceCommand,
 } from '../../core/voiceCommands';
@@ -26,6 +27,10 @@ import {
 } from '../../core/goldCalc';
 import { fmtNum } from '../../core/format';
 import { finenessToKarat } from '../../core/purity';
+import { pricePerGramFor } from '../../core/goldCalc';
+import { loanPending } from '../../core/loans';
+import { salePending, purchasePending } from '../../core/accounting';
+import { normalizeVoiceText } from '../../core/voiceCommands';
 import type { RestoreRequest } from '../calculator/GoldCalculator';
 import {
   listenOnce,
@@ -42,7 +47,7 @@ type Props = {
 type Reply = { kind: 'ok' | 'err' | 'info'; text: string; say?: string };
 
 const HELP_TEXT =
-  'بفهم أوامر زي: «احسب 10 غرام عيار 21» • «شحال غرام بمية ألف» • «حول 10 غرام من 18 إلى 21» • «اجمع 5 و 8 غرام» • «سعر الذهب» • «شحال الدولار» • «افتح المبيعات»';
+  'حساب: «احسب 10 غرام عيار 21» • «شحال غرام بمية ألف» • «حول 10 غرام من 18 إلى 21» • «اجمع 5 و 8 غرام»\nتسجيل: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» • «سجل مبيعات 30 غرام واتنين حبة بسعر 89 الف لفراس» • «صرفت 50 الف كهرباء» • «سلفة 100 الف لخالد يستحق بعد شهر» • «سجل دفعة 50 الف لأحمد»\nأسعار: «سعر الذهب» • «شحال الدولار» — وتنقل: «افتح المبيعات»';
 
 /** يلفظ الوزن بشكل مفهوم: «22.6.0» → «22 غرام و 6 حبات» */
 const weightWords = (units: number): string => {
@@ -59,7 +64,8 @@ const purityLabel = (p: number): string => {
 };
 
 export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
-  const { rates, approvedPrice } = useGoldStore();
+  const store = useGoldStore();
+  const { rates, approvedPrice } = store;
   const [open, setOpen] = useState(false);
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState('');
@@ -92,6 +98,28 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
   const execCommand = useCallback(
     (cmd: VoiceCommand): Reply => {
       const price21 = Number(rates.karat21) || 0;
+      /* يفهم السعر المذكور: للجرام ولا إجمالي؟ (يقارن بقيمة السوق) */
+      const resolvePrice = (c: { price?: number; priceMode: 'per_gram' | 'total' | 'auto'; purity: number }, grams: number) => {
+        const market = pricePerGramFor(price21, c.purity || 21);
+        if (c.priceMode === 'total' && c.price) {
+          return { perGram: grams > 0 ? c.price / grams : c.price, total: c.price, how: 'إجمالي' };
+        }
+        if (c.priceMode === 'per_gram' && c.price) {
+          return { perGram: c.price, total: c.price * grams, how: 'للجرام' };
+        }
+        if (c.price && grams > 0) {
+          const expected = market * grams;
+          const errAsTotal = Math.abs(c.price - expected);
+          const errAsPerGram = Math.abs(c.price * grams - expected);
+          if (errAsTotal < errAsPerGram) {
+            return { perGram: c.price / grams, total: c.price, how: 'إجمالي' };
+          }
+          return { perGram: c.price, total: c.price * grams, how: 'للجرام' };
+        }
+        return { perGram: market, total: market * grams, how: 'بسعر السوق' };
+      };
+      const dueDateFrom = (days?: number) => (days ? new Date(Date.now() + days * 86400000).toISOString() : undefined);
+
       switch (cmd.type) {
         case 'gold_price': {
           const parts = [`جرام عيار 21: ${fmtNum(price21)} جنيه`];
@@ -173,12 +201,117 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
           return { kind: 'ok', text, say: text };
         }
         case 'help':
-          return { kind: 'info', text: HELP_TEXT, say: 'بفهم أوامر زي: احسب 10 غرام عيار 21، شحال غرام بمية ألف، سعر الذهب، وافتح المبيعات' };
+          return { kind: 'info', text: HELP_TEXT, say: 'بفهم أوامر زي: احسب 10 غرام عيار 21، سجل مبيعات 5 غرام، سعر الذهب، وافتح المبيعات' };
+        /* ---------- تسجيل العمليات ---------- */
+        case 'add_purchase': {
+          const grams = unitsToGrams(cmd.units);
+          const pr = resolvePrice(cmd, grams);
+          const total = Math.round(pr.total);
+          store.addPurchase({
+            date: new Date().toISOString(),
+            units: cmd.units,
+            purity: cmd.purity,
+            amount: total,
+            pendingAmount: cmd.deferred ? total : 0,
+            seller: cmd.person || 'بائع عام',
+            sellerPhone: '',
+            bankAccount: '',
+            notes: '🎙️ مسجل بالصوت',
+            dueDate: undefined,
+          });
+          onNavigate('purchases');
+          const text = `سجلت في المشتريات ✓ ${weightWords(cmd.units)} ${purityLabel(cmd.purity)} بإجمالي ${fmtNum(total)} جنيه (${fmtNum(pr.perGram)} للجرام${pr.how === 'بسعر السوق' ? ' — سعر السوق' : ''})${cmd.person ? ` من ${cmd.person}` : ''}${cmd.deferred ? ' — آجل' : ' — كاش'}`;
+          return { kind: 'ok', text, say: text };
+        }
+        case 'add_sale': {
+          const grams = unitsToGrams(cmd.units);
+          const pr = resolvePrice(cmd, grams);
+          const total = Math.round(pr.total);
+          store.addSale({
+            date: new Date().toISOString(),
+            units: cmd.units,
+            purity: cmd.purity,
+            sellAmount: total,
+            buyAmount: 0,
+            buyer: cmd.person || 'زبون عام',
+            buyerPhone: '',
+            notes: '🎙️ مسجل بالصوت',
+            paidAmount: cmd.deferred ? 0 : total,
+            pendingAmount: cmd.deferred ? total : 0,
+          });
+          onNavigate('sales');
+          const text = `سجلت في المبيعات ✓ ${weightWords(cmd.units)} ${purityLabel(cmd.purity)} بإجمالي ${fmtNum(total)} جنيه (${fmtNum(pr.perGram)} للجرام${pr.how === 'بسعر السوق' ? ' — سعر السوق' : ''})${cmd.person ? ` لـ${cmd.person}` : ''}${cmd.deferred ? ' — آجل على الزبون' : ' — كاش'}`;
+          return { kind: 'ok', text, say: text };
+        }
+        case 'add_expense': {
+          store.addExpense({
+            date: new Date().toISOString(),
+            amount: cmd.amount,
+            category: 'منصرفات عامة',
+            target: 'عام',
+            name: cmd.name || 'مصروف',
+            notes: '🎙️ مسجل بالصوت',
+          });
+          onNavigate('expenses');
+          const text = `سجلت المصروف ✓ ${cmd.name || 'مصروف'} — ${fmtNum(cmd.amount)} جنيه`;
+          return { kind: 'ok', text, say: text };
+        }
+        case 'add_loan': {
+          const dueDate = dueDateFrom(cmd.dueDays);
+          store.addLoan({
+            date: new Date().toISOString(),
+            person: cmd.person || 'بدون اسم',
+            amount: cmd.amount,
+            direction: cmd.direction,
+            dueDate,
+            notes: '🎙️ مسجل بالصوت',
+          });
+          onNavigate('loans');
+          const text = cmd.direction === 'lent'
+            ? `سجلت سلفة ✓ ${cmd.person || ''} — ${fmtNum(cmd.amount)} جنيه${dueDate ? ` تستحق ${new Date(dueDate).toLocaleDateString('ar-SD')}` : ''}`
+            : `سجلت استلاف ✓ من ${cmd.person} — ${fmtNum(cmd.amount)} جنيه`;
+          return { kind: 'ok', text, say: text };
+        }
+        case 'add_payment': {
+          const norm = (s: string) => stripNamePrefix(normalizeVoiceText(s));
+          const spoken = norm(cmd.person);
+          const loan = store.loans.find(
+            (l) => !l.archived && loanPending(l) > 0 && (norm(l.person).includes(spoken) || spoken.includes(norm(l.person)))
+          );
+          if (loan) {
+            store.addPaymentToLoan(loan.id, { date: new Date().toISOString(), amount: cmd.amount, note: '🎙️ دفعة بالصوت' });
+            onNavigate('loans');
+            const pending = Math.max(0, loanPending(loan) - cmd.amount);
+            const text = `سجلت دفعة ✓ ${fmtNum(cmd.amount)} جنيه لـ${loan.person} على السلفة${pending > 0 ? ` — باقي عليه ${fmtNum(pending)}` : ' — خلصت السلفة كاملة'}`;
+            return { kind: 'ok', text, say: text };
+          }
+          const purchase = store.purchases.find(
+            (p) => !p.archived && purchasePending(p) > 0 && (norm(p.seller).includes(spoken) || spoken.includes(norm(p.seller)))
+          );
+          if (purchase) {
+            store.addPaymentToPurchase(purchase.id, { date: new Date().toISOString(), amount: cmd.amount, note: '🎙️ دفعة بالصوت' });
+            onNavigate('purchases');
+            const pending = Math.max(0, purchasePending(purchase) - cmd.amount);
+            const text = `سجلت دفعة ✓ ${fmtNum(cmd.amount)} جنيه للمورد ${purchase.seller}${pending > 0 ? ` — باقي ${fmtNum(pending)}` : ' — خلص الحساب'}`;
+            return { kind: 'ok', text, say: text };
+          }
+          const sale = store.sales.find(
+            (s) => !s.archived && salePending(s) > 0 && (norm(s.buyer).includes(spoken) || spoken.includes(norm(s.buyer)))
+          );
+          if (sale) {
+            store.addPaymentToSale(sale.id, { date: new Date().toISOString(), amount: cmd.amount, note: '🎙️ دفعة بالصوت' });
+            onNavigate('sales');
+            const pending = Math.max(0, salePending(sale) - cmd.amount);
+            const text = `سجلت دفعة ✓ ${fmtNum(cmd.amount)} جنيه من ${sale.buyer}${pending > 0 ? ` — باقي عليه ${fmtNum(pending)}` : ' — خلص حسابه'}`;
+            return { kind: 'ok', text, say: text };
+          }
+          return { kind: 'err', text: `ما لقيت سلفة أو دين باسم «${cmd.person}» — اتأكد من الاسم أو سجلها يدوي`, say: `ما لقيت حساب باسم ${cmd.person}` };
+        }
         default:
           return { kind: 'err', text: `ما فهمتش الأمر — جرّب واحد من الأمثلة`, say: 'ما فهمتش، جرّب: احسب 10 غرام عيار 21' };
       }
     },
-    [rates, approvedPrice, onCalc, onNavigate]
+    [store, rates, approvedPrice, onCalc, onNavigate]
   );
 
   const runText = useCallback(

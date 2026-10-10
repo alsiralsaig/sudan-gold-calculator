@@ -17,17 +17,22 @@ export type VoiceCommand =
   | { type: 'calc_karat'; units: number; from: number; to: number }
   | { type: 'calc_sum'; items: { units: number; purity: number }[] }
   | { type: 'navigate'; tab: string }
+  | { type: 'add_purchase'; units: number; purity: number; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean }
+  | { type: 'add_sale'; units: number; purity: number; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean }
+  | { type: 'add_expense'; amount: number; name: string }
+  | { type: 'add_loan'; amount: number; person: string; direction: 'lent' | 'borrowed'; dueDays?: number }
+  | { type: 'add_payment'; amount: number; person: string }
   | { type: 'help' }
   | { type: 'unknown' };
 
 /** أمثلة تُعرض للمستخدم في لوحة الأوامر */
 export const VOICE_EXAMPLES = [
   'احسب 10 غرام عيار 21',
+  'سجل مشتريات 2 غرام بسعر كده',
+  'سجل مبيعات 30 غرام واتنين حبة',
+  'سلفة 100 الف لخالد',
   'شحال غرام بمية ألف؟',
-  'حول 10 غرام من 18 إلى 21',
-  'اجمع 5 و 8 و 10 غرام',
   'سعر الذهب؟',
-  'شحال الدولار؟',
   'افتح المبيعات',
 ];
 
@@ -128,6 +133,7 @@ export function readNumber(tokens: string[], i: number): { value: number; next: 
   let total = 0;
   let current = 0;
   let saw = false;
+  let lastMult = 0;
   let j = i;
   while (j < tokens.length) {
     const raw = tokens[j];
@@ -148,7 +154,9 @@ export function readNumber(tokens: string[], i: number): { value: number; next: 
     if (ONES[t] !== undefined) { current += ONES[t]; saw = true; j++; continue; }
     if (TEENS[t] !== undefined) { current += TEENS[t]; saw = true; j++; continue; }
     if (FRACTIONS[t] !== undefined) {
-      current = current > 0 ? current + FRACTIONS[t] : FRACTIONS[t];
+      // «مليون ونص» = مليون وخمسمية ألف — النصف على المضاعف الأخير
+      if (total > 0 && current === 0 && lastMult > 0) total += lastMult * FRACTIONS[t];
+      else current = current > 0 ? current + FRACTIONS[t] : FRACTIONS[t];
       saw = true; j++; continue;
     }
     if (TENS[t] !== undefined) { current += TENS[t]; saw = true; j++; continue; }
@@ -156,8 +164,8 @@ export function readNumber(tokens: string[], i: number): { value: number; next: 
       current = current >= 1 && current <= 9 ? current * HUNDREDS[t] : current + HUNDREDS[t];
       saw = true; j++; continue;
     }
-    if (THOUSANDS.has(t)) { total += (current || (t === 'الفين' || t === 'الافين' ? 2 : 1)) * 1000; current = 0; saw = true; j++; continue; }
-    if (MILLIONS.has(t)) { total += (current || (t === 'مليونين' ? 2 : 1)) * 1000000; current = 0; saw = true; j++; continue; }
+    if (THOUSANDS.has(t)) { total += (current || (t === 'الفين' || t === 'الافين' ? 2 : 1)) * 1000; lastMult = 1000; current = 0; saw = true; j++; continue; }
+    if (MILLIONS.has(t)) { total += (current || (t === 'مليونين' ? 2 : 1)) * 1000000; lastMult = 1000000; current = 0; saw = true; j++; continue; }
     break;
   }
   if (!saw) return null;
@@ -304,6 +312,143 @@ const SCREEN_WORDS: { tab: string; words: string[] }[] = [
 
 const NAV_VERBS = ['افتح', 'فوت', 'ودني', 'وديني', 'روح', 'روحلي', 'اعرض', 'هات'];
 
+/* ============================ التسجيل (مشتريات/مبيعات/مصروفات/سلف/دفعات) ============================ */
+
+const PURCHASE_WORDS = ['مشتريات', 'المشتريات', 'شراء', 'الشراء', 'اشتريت', 'شريت', 'اشتري', 'شري', 'بنشري'];
+const SALE_WORDS = ['مبيعات', 'المبيعات', 'بيع', 'البيع', 'بعت', 'بعته', 'بعتو', 'ابيع', 'نبيع'];
+const EXPENSE_WORDS = ['مصروف', 'مصاريف', 'المصروفات', 'المصاريف', 'صرفت', 'دفعيت', 'انفقت'];
+const LOAN_WORDS = ['سلفه', 'سلف', 'اسلف', 'سلفيت', 'استلفيت', 'ادين', 'دين'];
+const PAYMENT_WORDS = ['دفعه', 'تسديد', 'سدد', 'سددت', 'اقسط', 'قسط'];
+
+/** كلمات ما تنفعش اسم شخص/وصف */
+const NAME_STOP = new Set([
+  'غرام', 'غرامات', 'حبه', 'حبات', 'مثقال', 'عيار', 'نقاوه', 'بسعر', 'السعر', 'سعر', 'بسعره',
+  'مبلغ', 'بمبلغ', 'اجمالي', 'باجمالي', 'للجرام', 'للغرام', 'للغرامات', 'كاش', 'اجل', 'حساب',
+  'الكتاب', 'سجل', 'سجلي', 'في', 'يستحق', 'بعد', 'مدفوع', 'وزن', 'الوزن', 'فلان', 'كده', 'ده',
+  'دهب', 'ذهب', 'دولار', 'دولر', 'اليوم', 'امس', 'من', 'ل', 'لل', 'لس', 'لز', 'علي', 'مع',
+]);
+
+const isNameLike = (t: string): boolean => {
+  if (!t || t.length < 2 || NAME_STOP.has(t)) return false;
+  if (numWordValue(t) !== null) return false;
+  if (unitGrams(t) !== null) return false;
+  return true;
+};
+
+/** يشيل «ل/ال» من أول الاسم: لاحمد→احمد، للاحمد→احمد */
+export const stripNamePrefix = (t: string): string => {
+  let s = t;
+  if (s.startsWith('لل')) s = s.slice(2);
+  else if (s.startsWith('ل')) s = s.slice(1);
+  if (s.startsWith('ال') && s.length > 3) s = s.slice(2);
+  return s;
+};
+
+/** يلفظ الاسم بعد أدوات: ل/لل/لس/من أو ملتصقة: «لاحمد» */
+export function capturePerson(tokens: string[]): string {
+  const MARKERS = ['ل', 'لل', 'لس', 'لز', 'من', 'لصالح', 'لحساب'];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (MARKERS.includes(t)) {
+      const nxt = tokens[i + 1] ?? '';
+      if (isNameLike(nxt)) return stripNamePrefix(nxt);
+    } else if (t.startsWith('ل') && t.length >= 3) {
+      const bare = stripNamePrefix(t);
+      if (bare !== t && isNameLike(bare)) return bare;
+    }
+  }
+  return '';
+}
+
+/** السعر: «بسعر 89 الف» / «بمبلغ مليون» / «للجرام» يحدد النمط */
+export function capturePrice(tokens: string[]): { price?: number; mode: 'per_gram' | 'total' | 'auto' } {
+  let price: number | undefined;
+  let mentionsForGram = false;
+  let mentionsTotal = false;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (['بمبلغ', 'مبلغ', 'اجمالي', 'باجمالي', 'الاجمالي'].includes(t)) {
+      const r = readNumber(tokens, i + 1);
+      if (r) { price = r.value; mentionsTotal = true; i = r.next - 1; continue; }
+    }
+    if (['بسعر', 'السعر', 'سعر', 'بسعره', 'ب'].includes(t)) {
+      if (price === undefined) {
+        const r = readNumber(tokens, i + 1);
+        if (r) { price = r.value; i = r.next - 1; continue; }
+      }
+    }
+    if (t === 'للجرام' || t === 'للغرام' || t === 'للغرامات') mentionsForGram = true;
+  }
+  const mode: 'per_gram' | 'total' | 'auto' = mentionsTotal ? 'total' : mentionsForGram ? 'per_gram' : 'auto';
+  return { price, mode };
+}
+
+/** آجل؟ («آجل»، «على الحساب»، «على الكتاب») */
+const captureDeferred = (tokens: string[]): boolean =>
+  tokens.some((t) => ['اجل', 'احجل', 'نصب'].includes(t)) ||
+  (tokens.includes('علي') && tokens.some((t) => t === 'الحساب' || t === 'الكتاب' || t === 'حساب'));
+
+/** «يستحق بعد شهر» → 30 يوم */
+export function captureDueDays(tokens: string[]): number | undefined {
+  const UNITS: { words: string[]; mult: number; dual?: number }[] = [
+    { words: ['يوم', 'ايام', 'يومات'], mult: 1, dual: 2 },
+    { words: ['يومين'], mult: 1, dual: 2 },
+    { words: ['اسبوع', 'اسابيع', 'اسبوعات'], mult: 7, dual: 14 },
+    { words: ['اسبوعين'], mult: 7, dual: 14 },
+    { words: ['شهر', 'شهور', 'شهورات'], mult: 30, dual: 60 },
+    { words: ['شهرين'], mult: 30, dual: 60 },
+    { words: ['سنه', 'سنين', 'سنوات'], mult: 365, dual: 730 },
+  ];
+  const daysOf = (unitTok: string, count: number): number | null => {
+    for (const u of UNITS) {
+      if (u.words.includes(unitTok)) {
+        return u.dual && (count === 2 || unitTok.endsWith('ين')) ? u.dual : count * u.mult;
+      }
+    }
+    return null;
+  };
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t !== 'يستحق' && t !== 'بعد' && t !== 'الاستحقاق') continue;
+    let k = i + 1;
+    if (tokens[k] === 'بعد') k++;
+    const r = readNumber(tokens, k);
+    if (r) {
+      const days = daysOf(tokens[r.next] ?? '', r.value);
+      if (days) return days;
+    } else {
+      // «بعد شهر» من غير رقم = واحد
+      const days = daysOf(tokens[k] ?? '', 1);
+      if (days) return days;
+    }
+  }
+  return undefined;
+}
+
+/** أول مبلغ في الجملة (للمصروف/السلف/الدفعة) */
+export function captureAmount(tokens: string[]): number | null {
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (NAME_STOP.has(t)) continue;
+    const r = readNumber(tokens, i);
+    if (r && r.value > 0) return r.value;
+  }
+  return null;
+}
+
+/** وصف المصروف: كلمات بعد المبلغ مش أرقام ولا كلمات مفتاحية */
+function captureExpenseName(tokens: string[]): string {
+  const words: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (EXPENSE_WORDS.includes(t) || ['سجل', 'سجلي', 'في', 'مبلغ', 'بمبلغ'].includes(t)) continue;
+    if (readNumber(tokens, i)) continue;
+    if (isNameLike(t)) words.push(t);
+    if (words.length >= 2) break;
+  }
+  return words.join(' ');
+}
+
 /* ============================ الأمر الرئيسي ============================ */
 
 const hasAnyExact = (tokens: string[], words: string[]) => tokens.some((t) => words.includes(t));
@@ -318,6 +463,78 @@ export function parseCommand(raw: string): VoiceCommand {
       (hasAnyExact(tokens, ['تعرف', 'تعرفه']) && hasAnySub(tokens, ['ايه', 'ايش', 'شو']))) {
     return { type: 'help' };
   }
+
+  /* ---------- 2) تسجيل عمليات (ما تتخطفش أوامر التنقل) ---------- */
+  const hasNavVerb = tokens.some((t) => NAV_VERBS.includes(t));
+  if (!hasNavVerb) {
+  const weightRec = findWeight(tokens);
+  const purityRec = readPurity(tokens);
+  const person = capturePerson(tokens);
+  const priceInfo = capturePrice(tokens);
+  const deferred = captureDeferred(tokens);
+  const dueDays = captureDueDays(tokens);
+
+  // دفعة/تسديد: «سجل دفعة 50 الف لأحمد»
+  const hasPaymentKw = tokens.some((t) => PAYMENT_WORDS.includes(stripWaw(t)));
+  if (hasPaymentKw) {
+    const amount = captureAmount(tokens);
+    if (amount && person) return { type: 'add_payment', amount, person };
+    if (amount && !person) return { type: 'add_expense', amount, name: captureExpenseName(tokens) || 'دفعة' };
+  }
+
+  // سلفة: «سلفة 100 الف لخالد» / «استلفيت من عمر 200 الف»
+  const loanDir = tokens.find((t) => LOAN_WORDS.includes(stripWaw(t)));
+  if (loanDir) {
+    const amount = captureAmount(tokens);
+    if (amount) {
+      const mIdx = tokens.lastIndexOf('من');
+      const borrowed =
+        (mIdx >= 0 && person && tokens[mIdx + 1] && stripNamePrefix(tokens[mIdx + 1]) === person) ||
+        ['استلفيت'].includes(stripWaw(loanDir));
+      return { type: 'add_loan', amount, person: person || 'بدون اسم', direction: borrowed ? 'borrowed' : 'lent', dueDays };
+    }
+  }
+
+  // مصروف: «صرفت 50 الف كهرباء» / «سجل مصروف 20 الف أجرة»
+  const hasExpenseKw = tokens.some((t) => EXPENSE_WORDS.includes(stripWaw(t)));
+  if (hasExpenseKw) {
+    const amount = captureAmount(tokens);
+    if (amount) return { type: 'add_expense', amount, name: captureExpenseName(tokens) || 'مصروف' };
+  }
+
+  // مشتريات: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» / «شريت من فلان 5 غرام»
+  const hasPurchaseKw = tokens.some((t) => PURCHASE_WORDS.includes(stripWaw(t)));
+  if (hasPurchaseKw && weightRec) {
+    return {
+      type: 'add_purchase',
+      units: weightRec.units,
+      purity: purityRec,
+      price: priceInfo.price,
+      priceMode: priceInfo.mode,
+      person,
+      deferred,
+    };
+  }
+
+  // مبيعات: «سجل مبيعات 30 غرام واتنين حبة عيار 21 بسعر 89 الف لفراس»
+  const hasSaleKw = tokens.some((t) => SALE_WORDS.includes(stripWaw(t)));
+  if (hasSaleKw && weightRec) {
+    return {
+      type: 'add_sale',
+      units: weightRec.units,
+      purity: purityRec,
+      price: priceInfo.price,
+      priceMode: priceInfo.mode,
+      person,
+      deferred,
+    };
+  }
+
+  // فيه كلمات تسجيل بس ناقص وزن/مبلغ → ما نفهمش (بدل ما ينفذ حاجة غلط)
+  if (hasPaymentKw || loanDir || hasExpenseKw || hasPurchaseKw || hasSaleKw) {
+    return { type: 'unknown' };
+  }
+  } // نهاية حارس التنقل
 
   /* ---------- 2) جمع الأوزان ---------- */
   const sumIdx = tokens.findIndex((t) => ['اجمع', 'اجمعلي', 'جمع', 'مجموع'].includes(t));

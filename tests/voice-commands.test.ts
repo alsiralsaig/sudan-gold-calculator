@@ -131,3 +131,98 @@ test('normalizeVoiceText: همزات وتشكيل وأرقام عربية', () =
   assert.equal(normalizeVoiceText('أَحسِب ٥ غراماً'), 'احسب 5 غراما');
   assert.equal(normalizeVoiceText('إلى العشرة'), 'الي العشره');
 });
+
+/* ==================== أوامر التسجيل ==================== */
+
+test('add_purchase: سجل مشتريات', () => {
+  assert.deepEqual(
+    v('سجل في المشتريات 2 غرام عيار 21 بسعر 104 الف'),
+    { type: 'add_purchase', units: 200, purity: 21, price: 104000, priceMode: 'auto', person: '', deferred: false }
+  );
+  assert.deepEqual(
+    v('سجل مشتريات 2 غرام بسعر 104 الف للجرام'),
+    { type: 'add_purchase', units: 200, purity: 21, price: 104000, priceMode: 'per_gram', person: '', deferred: false }
+  );
+  const c = v('شريت من ابوجويه 5 غرام بمبلغ 500 الف');
+  assert.equal(c.type, 'add_purchase');
+  if (c.type === 'add_purchase') {
+    assert.equal(c.units, 500);
+    assert.equal(c.person, 'ابوجويه');
+    assert.equal(c.priceMode, 'total');
+    assert.equal(c.price, 500000);
+  }
+  const d = v('سجل مشتريات 3 غرام عيار 18 بسعر كده آجل');
+  assert.equal(d.type, 'add_purchase');
+  if (d.type === 'add_purchase') {
+    assert.equal(d.purity, 18);
+    assert.equal(d.price, undefined);
+    assert.equal(d.deferred, true);
+  }
+});
+
+test('add_sale: سجل مبيعات بوزن مركب واسم', () => {
+  const c = v('سجل في المبيعات وزن 30 غرام واتنين حبة عيار 21 بسعر 89 الف لفراس');
+  assert.equal(c.type, 'add_sale');
+  if (c.type === 'add_sale') {
+    assert.equal(c.units, 3020);
+    assert.equal(c.purity, 21);
+    assert.equal(c.price, 89000);
+    assert.equal(c.person, 'فراس');
+    assert.equal(c.deferred, false);
+  }
+  const d = v('بعت 5 غرام عيار 24 على الحساب');
+  assert.equal(d.type, 'add_sale');
+  if (d.type === 'add_sale') {
+    assert.equal(d.units, 500);
+    assert.equal(d.purity, 24);
+    assert.equal(d.deferred, true);
+  }
+});
+
+test('add_expense: صرفت/مصروف', () => {
+  assert.deepEqual(v('صرفت 50 الف كهرباء'), { type: 'add_expense', amount: 50000, name: 'كهرباء' });
+  assert.deepEqual(v('سجل مصروف 20 الف'), { type: 'add_expense', amount: 20000, name: 'مصروف' });
+  const c = v('دفعيت مليون ونص ايجار الدكان');
+  assert.equal(c.type, 'add_expense');
+  if (c.type === 'add_expense') {
+    assert.equal(c.amount, 1500000);
+    assert.equal(c.name.includes('ايجار'), true);
+  }
+});
+
+test('add_loan: سلفة مع استحقاق', () => {
+  const c = v('سجل سلفة 100 الف لخالد يستحق بعد شهر');
+  assert.equal(c.type, 'add_loan');
+  if (c.type === 'add_loan') {
+    assert.equal(c.amount, 100000);
+    assert.equal(c.person, 'خالد');
+    assert.equal(c.direction, 'lent');
+    assert.equal(c.dueDays, 30);
+  }
+  const d = v('استلفيت من عمر 200 الف');
+  assert.equal(d.type, 'add_loan');
+  if (d.type === 'add_loan') {
+    assert.equal(d.amount, 200000);
+    assert.equal(d.person, 'عمر');
+    assert.equal(d.direction, 'borrowed');
+  }
+  const e = v('سلفة خمسميه الف لس امين بعد اسبوعين');
+  assert.equal(e.type, 'add_loan');
+  if (e.type === 'add_loan') {
+    assert.equal(e.amount, 500000);
+    assert.equal(e.person, 'امين');
+    assert.equal(e.dueDays, 14);
+  }
+});
+
+test('add_payment: دفعة/تسديد', () => {
+  assert.deepEqual(v('سجل دفعة 50 الف لأحمد'), { type: 'add_payment', amount: 50000, person: 'احمد' });
+  assert.deepEqual(v('تسديد 200 الف لعمر'), { type: 'add_payment', amount: 200000, person: 'عمر' });
+});
+
+test('الأوامر القديمة ما اتكسرتش', () => {
+  assert.deepEqual(v('احسب 10 غرام عيار 21'), { type: 'calc_value', units: 1000, purity: 21 });
+  assert.deepEqual(v('شحال غرام بمية ألف'), { type: 'calc_weight', money: 100000, purity: 21 });
+  assert.equal(v('افتح المبيعات')!.type, 'navigate');
+  assert.equal(v('سعر الذهب')!.type, 'gold_price');
+});
