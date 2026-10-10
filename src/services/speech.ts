@@ -49,7 +49,7 @@ export function listenOnce(handlers: ListenHandlers): () => void {
   rec.interimResults = true;
   rec.maxAlternatives = 1;
 
-  const SILENCE_MS = 2600; // سكوت 2.6 ثانية = الجملة خلصت (صبور مع التلعثم)
+  const SILENCE_MS = 4000; // سكوت 4 ثواني = الجملة خلصت (صبور جداً مع الوقفات)
   const MAX_MS = 30000;
   const startedAt = Date.now();
   let silence: ReturnType<typeof setTimeout> | null = null;
@@ -86,10 +86,17 @@ export function listenOnce(handlers: ListenHandlers): () => void {
       const text = String(res[0]?.transcript ?? '').trim();
       if (!text) continue;
       if (res.isFinal) {
-        // حارس الصدى: نفس المقطة أو مكررة في الآخر — ما نضيفهاش تاني
-        if (text !== lastFinal && !finalText.endsWith(text)) {
-          finalText = `${finalText} ${text}`.trim();
-          lastFinal = text;
+        // حارس الصدى المحكم: أي جزء بيتكرر (نفس المقطة / تكرار في الآخر / بداية متكررة) ينرفض
+        const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+        const head = (s: string, n = 12) => norm(s).slice(0, n);
+        const dup =
+          norm(text) === norm(lastFinal) ||
+          finalText.includes(norm(text)) ||
+          norm(finalText).endsWith(norm(text)) ||
+          (head(text) !== '' && finalText.endsWith(head(text)));
+        if (!dup) {
+          finalText = `${finalText} ${norm(text)}`.trim();
+          lastFinal = norm(text);
         }
       } else {
         interim += ` ${text}`;
