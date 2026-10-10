@@ -134,7 +134,14 @@ export function sanitizeAiCommand(raw: Record<string, unknown>): import('../core
     case 'add_expense': {
       const amount = num('amount');
       if (!amount || amount <= 0) return null;
-      return { type: 'add_expense', amount, name: asStr(raw.name) || 'مصروف' };
+      const target = asStr(raw.target);
+      return {
+        type: 'add_expense',
+        amount,
+        name: asStr(raw.name) || 'مصروف',
+        ...(target ? { target } : {}),
+        waitingPerson: false,
+      };
     }
     case 'add_loan': {
       const amount = num('amount');

@@ -50,7 +50,8 @@ type Props = {
 type Reply = { kind: 'ok' | 'err' | 'info'; text: string; say?: string };
 
 const HELP_TEXT =
-  'حساب: «احسب 10 غرام عيار 21» • «كام غرام بمية ألف»\nتسجيل: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» • «بعت 5 غرام بـ105 الف للجرام واشتريتو بـ500 الف» (بيقولك الربح) • «سجل المشتري ابوجويه 5 غرام بـ105 الف» • «صرفت 50 الف كهرباء» • «سلفة 100 الف لخالد» • «سجل دفعة 50 الف لأحمد»\nأسعار: «الذهب كام؟» • «كام الدولار؟» — وتنقل: «افتح المبيعات»';
+  'حساب: «احسب 10 غرام عيار 21» • «كام غرام بمية ألف»\nتسجيل: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» • «بعت 5 غرام عيار 21 بسعر 105 الف واشتريتو بـ500 الف» (بيقولك الربح) • «سجل المشتري ابوجويه 5 غرام بـ105 الف»
+منصرف: «صرفت 50 الف كهرباء» (عام) — «منصرف خاص على أحمد 50 الف» (يخصم من أحمد) • «سلفة 100 الف لخالد» • «سجل دفعة 50 الف لأحمد»\nأسعار: «الذهب كام؟» • «كام الدولار؟» — وتنقل: «افتح المبيعات»';
 
 /** يلفظ الوزن بشكل مفهوم: «22.6.0» → «22 غرام و 6 حبات» */
 const weightWords = (units: number): string => {
@@ -234,6 +235,10 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
           return { kind: 'ok', text, say: text };
         }
         case 'add_sale': {
+          // ما عنديش سعر البيع؟ ما أضربش بمزاجي — أسأل
+          if (!cmd.price) {
+            return { kind: 'info', text: `سجلت الوزن والعيار ✓ — قول بس: «بسعر ...» ويحسب (مثال: بسعر 105 الف للجرام)` };
+          }
           const grams = unitsToGrams(cmd.units);
           const pr = resolvePrice(cmd, grams);
           const total = Math.round(pr.total);
@@ -261,6 +266,10 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
           return { kind: 'ok', text, say: text };
         }
         case 'add_expense': {
+          // منصرف خاص بدون اسم؟ ما ينفذش — بيسأل ويستنى
+          if (cmd.waitingPerson) {
+            return { kind: 'info', text: 'منصرف خاص على منو؟ قول: «على أحمد» (أو أي اسم) — وأنا مستنيك' };
+          }
           const target = cmd.target || 'عام';
           store.addExpense({
             date: new Date().toISOString(),
@@ -271,7 +280,9 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
             notes: '🎙️ مسجل بالصوت',
           });
           onNavigate('expenses');
-          const text = `سجلت المصروف ✓ ${cmd.name || 'مصروف'} — ${fmtNum(cmd.amount)} جنيه${target !== 'عام' ? ` على حساب ${target}` : ''}`;
+          const text = target === 'عام'
+            ? `سجلت في المنصرف العام ✓ ${cmd.name || 'مصروف'} — ${fmtNum(cmd.amount)} جنيه`
+            : `سجلت منصرف خاص ✓ ${cmd.name || 'مصروف'} — ${fmtNum(cmd.amount)} جنيه على حساب ${target}`;
           return { kind: 'ok', text, say: text };
         }
         case 'add_loan': {

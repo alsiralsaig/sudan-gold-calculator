@@ -182,8 +182,8 @@ test('add_sale: سجل مبيعات بوزن مركب واسم', () => {
 });
 
 test('add_expense: صرفت/مصروف', () => {
-  assert.deepEqual(v('صرفت 50 الف كهرباء'), { type: 'add_expense', amount: 50000, name: 'كهرباء', target: undefined });
-  assert.deepEqual(v('سجل مصروف 20 الف'), { type: 'add_expense', amount: 20000, name: 'مصروف', target: undefined });
+  assert.deepEqual(v('صرفت 50 الف كهرباء'), { type: 'add_expense', amount: 50000, name: 'كهرباء', target: undefined, waitingPerson: false });
+  assert.deepEqual(v('سجل مصروف 20 الف'), { type: 'add_expense', amount: 20000, name: 'مصروف', target: undefined, waitingPerson: false });
   const c = v('دفعيت مليون ونص ايجار الدكان');
   assert.equal(c.type, 'add_expense');
   if (c.type === 'add_expense') {
@@ -328,4 +328,34 @@ test('مصروف على حساب زول: سجل على أحمد في المصا�
   }
   const d = v('صرفت 20 الف شاي');
   if (d.type === 'add_expense') assert.equal(d.target, undefined);
+});
+
+test('منصرف عام vs خاص — والخاص يستنى للاسم', () => {
+  // عام: بيتسجل فوراً
+  const a = v('صرفت 50 الف كهرباء');
+  assert.equal(a.type, 'add_expense');
+  if (a.type === 'add_expense') {
+    assert.equal(a.target, undefined);
+    assert.equal(a.waitingPerson, false);
+  }
+  // خاص على اسم معروف: بينفذ على الحساب
+  const b = v('منصرف خاص على احمد 50 الف');
+  assert.equal(b.type, 'add_expense');
+  if (b.type === 'add_expense') {
+    assert.equal(b.target, 'احمد');
+    assert.equal(b.waitingPerson, false);
+  }
+  // خاص بدون اسم: يستنى المستخدم يقول على منو
+  const c = v('منصرف خاص 50 الف');
+  assert.equal(c.type, 'add_expense');
+  if (c.type === 'add_expense') assert.equal(c.waitingPerson, true);
+});
+
+test('البيع بدون سعر بيع — ما يضربش بمزاجه', () => {
+  const c = v('سجل مبيعات 5 غرام عيار 21');
+  assert.equal(c.type, 'add_sale');
+  if (c.type === 'add_sale') assert.equal(c.price, undefined);
+  // لما السعر ييجي بينفذ عادي
+  const d = v('سجل مبيعات 5 غرام عيار 21 بسعر 105 الف للجرام');
+  if (d.type === 'add_sale') assert.equal(d.price, 105000);
 });

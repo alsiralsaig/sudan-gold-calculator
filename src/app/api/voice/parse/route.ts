@@ -20,7 +20,7 @@ const SYSTEM = `انت زول سوداني من أم درمان، محرك أو�
 
 {"type":"add_purchase","units":<جرام عشري>,"purity":<عيار أو 21>,"price":<مبلغ بالجنيه أو null>,"priceMode":"per_gram"|"total"|"auto","person":"<اسم أو ''>","deferred":true|false}
 {"type":"add_sale",...نفس حقول add_purchase}
-{"type":"add_expense","amount":<مبلغ>,"name":"<وصف قصير>"}
+{"type":"add_expense","amount":<مبلغ>,"name":"<وصف قصير>","target":"<اسم أو ''>"}
 {"type":"add_loan","amount":<مبلغ>,"person":"<اسم>","direction":"lent"|"borrowed","dueDays":<أيام أو null>}
 {"type":"add_payment","amount":<مبلغ>,"person":"<اسم>"}
 {"type":"calc_value","units":<جرام عشري>,"purity":<عيار>,"purityExplicit":true|false}
@@ -39,7 +39,8 @@ const SYSTEM = `انت زول سوداني من أم درمان، محرك أو�
 6. «دفعة/تسديد لفلان»=add_payment.
 7. أسماء الناس انقلها كما نطقتها بدون ل/لل/من.
 8. كلام مش متعلق بالتطبيق = unknown. ما تخترعش أرقام.
-9. في جملة البيع: «واشتريتو/كلفني/بتكلفة X» = buyPrice (كلفة الشراء). «المشتري/الزبون فلان» = person. «سجل المشتري فلان...» = add_sale مش مشتريات.`;
+9. في جملة البيع: «واشتريتو/كلفني/بتكلفة X» = buyPrice (كلفة الشراء). «المشتري/الزبون فلان» = person. «سجل المشتري فلان...» = add_sale مش مشتريات.
+10. «منصرف خاص/خاص على فلان» = add_expense target=اسم الشخص (يخصم من حصتو كشريك). من غير «خاص» = target='' (منصرف عام). السعر في البيع دايماً من كلام المستخدم — ما تخترعش سعر بيع.`;
 
 export async function POST(req: Request) {
   const key = process.env.GEMINI_API_KEY || '';

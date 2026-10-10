@@ -19,7 +19,7 @@ export type VoiceCommand =
   | { type: 'navigate'; tab: string }
   | { type: 'add_purchase'; units: number; purity: number; purityExplicit: boolean; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean }
   | { type: 'add_sale'; units: number; purity: number; purityExplicit: boolean; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean; buyPrice?: number; buyPriceMode: 'per_gram' | 'total' | 'auto' }
-  | { type: 'add_expense'; amount: number; name: string; target?: string }
+  | { type: 'add_expense'; amount: number; name: string; target?: string; waitingPerson: boolean }
   | { type: 'add_loan'; amount: number; person: string; direction: 'lent' | 'borrowed'; dueDays?: number }
   | { type: 'add_payment'; amount: number; person: string }
   | { type: 'help' }
@@ -321,7 +321,7 @@ const SALE_WORDS = ['مبيعات', 'المبيعات', 'بيع', 'البيع', 
 // ملاحظة: «المشتري» = الزبون (بتاع البيع) — ما بتدخلش في كلمات المشتريات أبداً
 const isPurchaseWord = (t: string) => PURCHASE_WORDS.includes(t) || t.includes('مشترو');
 const isSaleWord = (t: string) => SALE_WORDS.includes(t) || t.includes('مبيع') || t.startsWith('بعت');
-const EXPENSE_WORDS = ['مصروف', 'مصاريف', 'المصروفات', 'المصاريف', 'صرفت', 'دفعيت', 'انفقت'];
+const EXPENSE_WORDS = ['مصروف', 'مصاريف', 'المصروفات', 'المصاريف', 'منصرف', 'المنصرفات', 'منصرفات', 'صرفت', 'دفعيت', 'انفقت'];
 const LOAN_WORDS = ['سلفه', 'سلف', 'اسلف', 'سلفيت', 'استلفيت', 'ادين', 'دين'];
 const PAYMENT_WORDS = ['دفعه', 'تسديد', 'سدد', 'سددت', 'اقسط', 'قسط'];
 
@@ -540,7 +540,15 @@ export function parseCommand(raw: string): VoiceCommand {
   const hasExpenseKw = tokens.some((t) => EXPENSE_WORDS.includes(stripWaw(t)));
   if (hasExpenseKw) {
     const amount = captureAmount(tokens);
-    if (amount) return { type: 'add_expense', amount, name: captureExpenseName(tokens) || 'مصروف', target: captureTarget(tokens) || undefined };
+    if (amount) {
+      const target = captureTarget(tokens);
+      // منصرف خاص (على شخص): «منصرف خاص على أحمد 50 الف» — والاسم لازم يكون موجود
+      const special = tokens.some((t) => ['خاص', 'الخاصه', 'خاصه', 'شخصي'].includes(stripWaw(t)));
+      if (special) {
+        return { type: 'add_expense', amount, name: captureExpenseName(tokens) || 'منصرف خاص', target: target || '', waitingPerson: !target };
+      }
+      return { type: 'add_expense', amount, name: captureExpenseName(tokens) || 'مصروف', target: target || undefined, waitingPerson: false };
+    }
   }
 
   // مبيعات أولاً — عشان جمل زي «سجل المشتري فلان...» و«بعت... واشتريتو...» ما تروحش للمشتريات
