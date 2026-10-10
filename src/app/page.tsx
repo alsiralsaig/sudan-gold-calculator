@@ -103,6 +103,29 @@ function MainAppContent() {
     return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
   }, [navigate]);
 
+  // تحديث تلقائي: لو نزل Service Worker جديد (نسخة جديدة) نعيد التحميل مرة واحدة
+  useEffect(() => {
+    let reloaded = sessionStorage.getItem('sw_reloaded') === '1';
+    const onControllerChange = () => {
+      if (reloaded) return;
+      reloaded = true;
+      sessionStorage.setItem('sw_reloaded', '1');
+      window.location.reload();
+    };
+    navigator.serviceWorker?.addEventListener('controllerchange', onControllerChange);
+    navigator.serviceWorker?.getRegistration()?.then((r) => r?.update().catch(() => undefined));
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        navigator.serviceWorker?.getRegistration()?.then((r) => r?.update().catch(() => undefined));
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      navigator.serviceWorker?.removeEventListener('controllerchange', onControllerChange);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
   // زر «الأرشيف» داخل أي شاشة يفتح تبويب قسمه مباشرة
   useEffect(() => {
     const onOpen = () => navigate('archive');
