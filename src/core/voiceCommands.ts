@@ -50,7 +50,19 @@ export function normalizeVoiceText(raw: string): string {
     .trim();
 }
 
-const tokenize = (raw: string): string[] => normalizeVoiceText(raw).toLowerCase().split(' ').filter(Boolean);
+const tokenize = (raw: string): string[] =>
+  normalizeVoiceText(raw)
+    .toLowerCase()
+    .split(' ')
+    .filter(Boolean)
+    .flatMap((t) => {
+      /* «بـتلاتاشر» / «ب15» — الباء الملتصقة بالرقم نفصلها عشان القراءة تشتغل */
+      if (t.length > 1 && t[0] === 'ب') {
+        const rest = t.slice(1);
+        if (/^\d/.test(rest) || readNumber([rest], 0)) return ['ب', rest];
+      }
+      return [t];
+    });
 
 /* ============================ كلمات الأرقام ============================ */
 
@@ -395,7 +407,7 @@ export function capturePrice(tokens: string[]): { price?: number; mode: 'per_gra
 }
 
 /** كلفة الشراء في جملة البيع: «واشتريتو بـ500 الف» / «كلفني 100 الف للجرام» */
-const COST_MARKERS = ['كلفني', 'كلفه', 'كلفتو', 'كلفته', 'اشتريتو', 'شريتو', 'بتكلفه', 'تكلفتو', 'الكلفه', 'بتمنو'];
+const COST_MARKERS = ['كلفني', 'كلفه', 'كلفتو', 'كلفته', 'اشتريتو', 'شريتو', 'بتكلفه', 'تكلفتو', 'الكلفه', 'بتمنو', 'مشتراها', 'مشتريها', 'مشتراه', 'مشتريه', 'اشتريتها', 'شريتها', 'شريناها', 'جبتها', 'جبناها'];
 export function captureCost(tokens: string[]): { price?: number; mode: 'per_gram' | 'total' | 'auto' } {
   for (let i = 0; i < tokens.length; i++) {
     if (!COST_MARKERS.includes(stripWaw(tokens[i]))) continue;

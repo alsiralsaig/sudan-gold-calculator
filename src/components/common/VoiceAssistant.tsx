@@ -13,6 +13,8 @@ import {
   parseCommand,
   stripNamePrefix,
   normalizeVoiceText,
+  capturePrice,
+  readNumber,
   type VoiceCommand,
 } from '../../core/voiceCommands';
 import {
@@ -53,6 +55,17 @@ type Props = {
 
 type Reply = { kind: 'ok' | 'err' | 'info'; text: string; say?: string };
 
+/** بيع ناقص سعر البيع — مستنيين الرد: «بعتها بـ 15 مليون» */
+type PendingSale = {
+  units: number;
+  purity: number;
+  purityExplicit: boolean;
+  buyPrice?: number;
+  buyPriceMode: 'per_gram' | 'total' | 'auto';
+  person?: string;
+  deferred: boolean;
+};
+
 const HELP_TEXT =
   'قول جملتك براحتك — وخلصت؟ قول «تمام» وينفذ فوراً ⚡ (أو دوس المايك تاني)\n' +
   'حساب: «احسب 10 غرام عيار 21» • «كام غرام بمية ألف»\n' +
@@ -84,6 +97,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
   const [showType, setShowType] = useState(false);
   const [typed, setTyped] = useState('');
   const stopListenRef = useRef<(() => void) | null>(null);
+  const pendingSaleRef = useRef<PendingSale | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -257,9 +271,20 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
           return { kind: 'ok', text, say: text };
         }
         case 'add_sale': {
-          // ما عنديش سعر البيع؟ ما أضربش بمزاجي — أسأل
+          // ما عنديش سعر البيع؟ ما أضربش بمزاجي — أحفظ الوزن/العيار/الكلفة وأسأل: بعتها بكم؟
           if (!cmd.price) {
-            return { kind: 'info', text: `سجلت الوزن والعيار ✓ — قول بس: «بسعر ...» ويحسب (مثال: بسعر 105 الف للجرام)` };
+            pendingSaleRef.current = {
+              units: cmd.units,
+              purity: cmd.purity,
+              purityExplicit: cmd.purityExplicit,
+              buyPrice: cmd.buyPrice,
+              buyPriceMode: cmd.buyPriceMode,
+              person: cmd.person,
+              deferred: cmd.deferred,
+            };
+            const costPart = cmd.buyPrice ? ` — كلفة ${fmtNum(cmd.buyPrice)} ج.س حفظتها ✓` : '';
+            const text = `${weightWords(cmd.units)}${karatPart(cmd)}${costPart} — بعتها بكم؟ قول: «بعتها بـ 15 مليون»`;
+            return { kind: 'info', text, say: 'بعتها بكم؟' };
           }
           const grams = unitsToGrams(cmd.units);
           const pr = resolvePrice(cmd, grams);
@@ -370,6 +395,50 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
       const clean = text.trim();
       if (!clean) return;
       stopSpeaking();
+      /* بيع ناقص سعره مستني الرد — «بعتها بـ 15 مليون» / «الغي» / أو أمر جديد */
+      const pending = pendingSaleRef.current;
+      if (pending) {
+        const isCancel = /(الغاء|الغي|الغيها|اتلغى|كنسل|اسقط|اسقطها|سيبها|ما سجلت|رجعت)/.test(clean);
+        const hasOwnSubject = /(جرام|غرام|حب[هة]|مثقال|احسب|كام|سجل|صرفت|سلفت|افتح|سعر)/.test(clean);
+        const tokens = normalizeVoiceText(clean.replace(/ب(\d)/g, 'ب $1')).toLowerCase().split(' ').filter(Boolean);
+        const pr = capturePrice(tokens);
+        let price = pr.price;
+        let mode = pr.mode;
+        if (price === undefined) {
+          const rn = readNumber(tokens, 0);
+          if (rn && rn.next >= tokens.length - 1) { price = rn.value; mode = 'total'; }
+        }
+        if (isCancel) {
+          pendingSaleRef.current = null;
+          const r: Reply = { kind: 'info', text: 'تمام — اتلغى البيع، ما سجلت شي' };
+          setReply(r);
+          flashHide();
+          return;
+        }
+        if (price !== undefined && !hasOwnSubject) {
+          pendingSaleRef.current = null;
+          const deferred = pending.deferred || /(آجل|على الحساب|على الكتاب|بكرة)/.test(clean);
+          const full: VoiceCommand = {
+            type: 'add_sale',
+            units: pending.units,
+            purity: pending.purity,
+            purityExplicit: pending.purityExplicit,
+            price,
+            priceMode: mode,
+            person: pending.person,
+            deferred,
+            buyPrice: pending.buyPrice,
+            buyPriceMode: pending.buyPriceMode,
+          };
+          const r = execCommand(full);
+          setReply(r);
+          flashHide();
+          if (r.say) speak(r.say);
+          return;
+        }
+        /* ما في رقم = كلام تاني — نقفل الاستنى ونكمل كأمر عادي */
+        pendingSaleRef.current = null;
+      }
       let cmd = parseCommand(clean);
       /* المتعلم: جملة اتعلمناها قبل كده من الـAI بتشتغل محلياً بلا نت */
       if (cmd.type === 'unknown') {
@@ -424,7 +493,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
           const text = replies.map((r) => r.text).join(' • ');
           const say = replies.map((r) => r.say || r.text).join('، ');
           const okAll = replies.every((r) => r.kind !== 'err');
-          const hint = ai?.clarify ? ` • ❓ ${ai.clarify}` : '';
+          const hint = ai?.clarify && !text.includes('بكم؟') ? ` • ❓ ${ai.clarify}` : '';
           const r: Reply = { kind: okAll ? 'ok' : 'err', text: text + hint, say };
           setReply(r);
           flashHide();
