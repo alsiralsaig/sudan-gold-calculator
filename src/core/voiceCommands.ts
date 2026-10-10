@@ -19,7 +19,7 @@ export type VoiceCommand =
   | { type: 'navigate'; tab: string }
   | { type: 'add_purchase'; units: number; purity: number; purityExplicit: boolean; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean }
   | { type: 'add_sale'; units: number; purity: number; purityExplicit: boolean; price?: number; priceMode: 'per_gram' | 'total' | 'auto'; person?: string; deferred: boolean; buyPrice?: number; buyPriceMode: 'per_gram' | 'total' | 'auto' }
-  | { type: 'add_expense'; amount: number; name: string }
+  | { type: 'add_expense'; amount: number; name: string; target?: string }
   | { type: 'add_loan'; amount: number; person: string; direction: 'lent' | 'borrowed'; dueDays?: number }
   | { type: 'add_payment'; amount: number; person: string }
   | { type: 'help' }
@@ -467,6 +467,16 @@ export function captureAmount(tokens: string[]): number | null {
   return null;
 }
 
+/** «سجل على أحمد...» = مصروف على حساب أحمد */
+function captureTarget(tokens: string[]): string {
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (tokens[i] !== 'علي' && tokens[i] !== 'عالحساب' && tokens[i] !== 'لحساب') continue;
+    const nxt = tokens[i + 1];
+    if (isNameLike(nxt)) return stripNamePrefix(nxt);
+  }
+  return '';
+}
+
 /** وصف المصروف: كلمات بعد المبلغ مش أرقام ولا كلمات مفتاحية */
 function captureExpenseName(tokens: string[]): string {
   const words: string[] = [];
@@ -530,7 +540,7 @@ export function parseCommand(raw: string): VoiceCommand {
   const hasExpenseKw = tokens.some((t) => EXPENSE_WORDS.includes(stripWaw(t)));
   if (hasExpenseKw) {
     const amount = captureAmount(tokens);
-    if (amount) return { type: 'add_expense', amount, name: captureExpenseName(tokens) || 'مصروف' };
+    if (amount) return { type: 'add_expense', amount, name: captureExpenseName(tokens) || 'مصروف', target: captureTarget(tokens) || undefined };
   }
 
   // مبيعات أولاً — عشان جمل زي «سجل المشتري فلان...» و«بعت... واشتريتو...» ما تروحش للمشتريات

@@ -182,8 +182,8 @@ test('add_sale: سجل مبيعات بوزن مركب واسم', () => {
 });
 
 test('add_expense: صرفت/مصروف', () => {
-  assert.deepEqual(v('صرفت 50 الف كهرباء'), { type: 'add_expense', amount: 50000, name: 'كهرباء' });
-  assert.deepEqual(v('سجل مصروف 20 الف'), { type: 'add_expense', amount: 20000, name: 'مصروف' });
+  assert.deepEqual(v('صرفت 50 الف كهرباء'), { type: 'add_expense', amount: 50000, name: 'كهرباء', target: undefined });
+  assert.deepEqual(v('سجل مصروف 20 الف'), { type: 'add_expense', amount: 20000, name: 'مصروف', target: undefined });
   const c = v('دفعيت مليون ونص ايجار الدكان');
   assert.equal(c.type, 'add_expense');
   if (c.type === 'add_expense') {
@@ -317,4 +317,15 @@ test('الاسم في أول الجملة: ابوجيقه سجل في المبي
   assert.equal(v('احسب 10 غرام عيار 21')!.type, 'calc_value');
   const e = v('سجل في المبيعات 5 غرام عيار 21 لابوجيقه');
   if (e.type === 'add_sale') assert.equal(e.person, 'ابوجيقه');
+});
+
+test('مصروف على حساب زول: سجل على أحمد في المصاريف الخاصه 50 الف', () => {
+  const c = v('سجل على احمد في المصاريف الخاصه 50 الف');
+  assert.equal(c.type, 'add_expense');
+  if (c.type === 'add_expense') {
+    assert.equal(c.amount, 50000);
+    assert.equal(c.target, 'احمد');
+  }
+  const d = v('صرفت 20 الف شاي');
+  if (d.type === 'add_expense') assert.equal(d.target, undefined);
 });

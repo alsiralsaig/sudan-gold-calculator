@@ -261,16 +261,17 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
           return { kind: 'ok', text, say: text };
         }
         case 'add_expense': {
+          const target = cmd.target || 'عام';
           store.addExpense({
             date: new Date().toISOString(),
             amount: cmd.amount,
-            category: 'منصرفات عامة',
-            target: 'عام',
+            category: target === 'عام' ? 'منصرفات عامة' : 'مسحوبات شريك',
+            target,
             name: cmd.name || 'مصروف',
             notes: '🎙️ مسجل بالصوت',
           });
           onNavigate('expenses');
-          const text = `سجلت المصروف ✓ ${cmd.name || 'مصروف'} — ${fmtNum(cmd.amount)} جنيه`;
+          const text = `سجلت المصروف ✓ ${cmd.name || 'مصروف'} — ${fmtNum(cmd.amount)} جنيه${target !== 'عام' ? ` على حساب ${target}` : ''}`;
           return { kind: 'ok', text, say: text };
         }
         case 'add_loan': {
@@ -454,7 +455,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
             onClick={() => { setReply(null); setHeard(''); }}
           >
             {listening ? (
-              <span>{heard || 'بسمعك... اتكلم'}</span>
+              <span>{heard ? (heard.length > 70 ? `…${heard.slice(-70)}` : heard) : 'بسمعك... اتكلم'}</span>
             ) : reply ? (
               <>
                 {heard && <span className="block text-slate-500 text-[11px] leading-snug">{heard}</span>}

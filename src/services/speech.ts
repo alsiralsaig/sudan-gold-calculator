@@ -42,6 +42,7 @@ export function listenOnce(handlers: ListenHandlers): () => void {
   }
   let finished = false;
   let finalText = '';
+  let lastFinal = '';
   const rec = new Ctor();
   rec.lang = 'ar-SA';
   rec.continuous = true; // بيسمع على طول — ما بيقاطعش بعد أول كلمتين
@@ -84,10 +85,19 @@ export function listenOnce(handlers: ListenHandlers): () => void {
       const res = event.results[i];
       const text = String(res[0]?.transcript ?? '').trim();
       if (!text) continue;
-      if (res.isFinal) finalText = `${finalText} ${text}`.trim();
-      else interim += ` ${text}`;
+      if (res.isFinal) {
+        // حارس الصدى: نفس المقطة أو مكررة في الآخر — ما نضيفهاش تاني
+        if (text !== lastFinal && !finalText.endsWith(text)) {
+          finalText = `${finalText} ${text}`.trim();
+          lastFinal = text;
+        }
+      } else {
+        interim += ` ${text}`;
+      }
     }
-    const shown = `${finalText} ${interim}`.trim();
+    // حارس الضوضاء: الكلام اتكتر عن اللزوم — نفذ اللي عندنا وخلاص
+    if (finalText.length > 220) { finish(); return; }
+    const shown = interim.trim() || finalText;
     if (shown) handlers.onInterim?.(shown);
     // لسه بيتكلم؟ نأجل الحكم — لين يسكت
     if (!finished) armSilence();
