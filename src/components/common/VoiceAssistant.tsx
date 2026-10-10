@@ -35,6 +35,12 @@ import {
   stopSpeaking,
   isSpeechRecognitionSupported,
 } from '../../services/speech';
+import {
+  aiParseCommand,
+  sanitizeAiCommand,
+  teachPhrase,
+  lookupLearned,
+} from '../../services/voiceAi';
 
 type Props = {
   onNavigate: (tab: string) => void;
@@ -323,11 +329,46 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
       const clean = text.trim();
       if (!clean) return;
       stopSpeaking();
-      const cmd = parseCommand(clean);
-      const r = execCommand(cmd);
-      setReply(r);
+      let cmd = parseCommand(clean);
+      /* المتعلم: جملة اتعلمناها قبل كده من الـAI بتشتغل محلياً بلا نت */
+      if (cmd.type === 'unknown') {
+        const learned = lookupLearned(clean);
+        if (learned) {
+          const safe = sanitizeAiCommand(learned);
+          if (safe) cmd = safe;
+        }
+      }
+      if (cmd.type !== 'unknown') {
+        const r = execCommand(cmd);
+        setReply(r);
+        flashHide();
+        if (r.say) speak(r.say);
+        return;
+      }
+      /* المحلي ما فهمش — ندور على الـAI (والفقاعة تبقى «بفكر...») */
+      setReply({ kind: 'info', text: 'بفكر... ثواني 🤔' });
       flashHide();
-      if (r.say) speak(r.say);
+      (async () => {
+        try {
+          const ai = await aiParseCommand(normalizeVoiceText(clean));
+          const safe = ai ? sanitizeAiCommand(ai) : null;
+          if (safe) {
+            teachPhrase(clean, ai as Record<string, unknown>);
+            const r = execCommand(safe);
+            setReply(r);
+            flashHide();
+            if (r.say) speak(r.say);
+          } else {
+            const r: Reply = { kind: 'err', text: 'ما فهمت — دوس ⌨ واكتبها أو قولها بطريقة تانية' };
+            setReply(r);
+            flashHide();
+          }
+        } catch {
+          const r: Reply = { kind: 'err', text: 'الذكاء الاصطناعي مش متاح دلوقتي — جرّب تاني' };
+          setReply(r);
+          flashHide();
+        }
+      })();
     },
     [execCommand, flashHide]
   );
