@@ -651,7 +651,7 @@ export function parseCommand(raw: string): VoiceCommand {
   /* اسم في البداية + وزن + سعر → عملية بيع/شراء على شخص (حتى من غير فعل):
      «ابوجيقه 15 غرام عيار 21 بسعر 105 الف وكلفني 100 الف» */
   if (weight && !isHowMuch) {
-    const personLed = (() => {
+    const personLed = ((): VoiceCommand | null => {
       const first = stripWaw(tokens[0]);
       if (!isNameLike(first)) return null;
       const priceRec = capturePrice(tokens);
@@ -659,9 +659,10 @@ export function parseCommand(raw: string): VoiceCommand {
       if ((priceRec.price || costRec.price) && priceRec.price !== costRec.price) {
         const ps = readPurityState(tokens);
         const isBuy = tokens.some((t) => ['شريت', 'اشتريت'].includes(stripWaw(t)));
-        return isBuy
-          ? { type: 'add_purchase', units: weight.units, purity: ps.purity, purityExplicit: ps.explicit, price: priceRec.price, priceMode: priceRec.mode, person: stripNamePrefix(first), deferred: captureDeferred(tokens) }
-          : { type: 'add_sale', units: weight.units, purity: ps.purity, purityExplicit: ps.explicit, price: priceRec.price, priceMode: priceRec.mode, person: stripNamePrefix(first), deferred: captureDeferred(tokens), buyPrice: costRec.price, buyPriceMode: costRec.mode };
+        if (isBuy) {
+          return { type: 'add_purchase', units: weight.units, purity: ps.purity, purityExplicit: ps.explicit, price: priceRec.price, priceMode: priceRec.mode, person: stripNamePrefix(first), deferred: captureDeferred(tokens) };
+        }
+        return { type: 'add_sale', units: weight.units, purity: ps.purity, purityExplicit: ps.explicit, price: priceRec.price, priceMode: priceRec.mode, person: stripNamePrefix(first), deferred: captureDeferred(tokens), buyPrice: costRec.price, buyPriceMode: costRec.mode };
       }
       return null;
     })();
