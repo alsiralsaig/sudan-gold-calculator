@@ -220,7 +220,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
           store.addPurchase({
             date: new Date().toISOString(),
             units: cmd.units,
-            purity: cmd.purity,
+            purity: cmd.purityExplicit ? cmd.purity : 0,
             amount: total,
             pendingAmount: cmd.deferred ? total : 0,
             seller: cmd.person || 'بائع عام',
@@ -240,7 +240,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc }) => {
           store.addSale({
             date: new Date().toISOString(),
             units: cmd.units,
-            purity: cmd.purity,
+            purity: cmd.purityExplicit ? cmd.purity : 0,
             sellAmount: total,
             buyAmount: 0,
             buyer: cmd.person || 'زبون عام',
