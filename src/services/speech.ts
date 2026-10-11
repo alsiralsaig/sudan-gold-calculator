@@ -264,3 +264,27 @@ export function speak(text: string, opts?: { rate?: number }): void {
     }
   }, 60);
 }
+
+/**
+ * يستنى القراءة (TTS) تخلص تماماً — عشان الاستماع المتواصل:
+ * المايك ما يفتح تاني إلا بعد ما التطبيق يسكت، فما يسمعش صوتو نفسو.
+ */
+export function waitForSpeechEnd(timeoutMs = 15000): Promise<void> {
+  return new Promise((resolve) => {
+    if (!isSpeechSynthesisSupported()) return resolve();
+    const started = Date.now();
+    let idleHits = 0;
+    const poll = () => {
+      let busy = false;
+      try { busy = window.speechSynthesis.speaking || window.speechSynthesis.pending; } catch { /* تجاهل */ }
+      idleHits = busy ? 0 : idleHits + 1;
+      if (idleHits >= 2) return resolve();
+      if (Date.now() - started > timeoutMs) {
+        try { window.speechSynthesis.cancel(); } catch { /* تجاهل */ }
+        return resolve();
+      }
+      setTimeout(poll, 250);
+    };
+    setTimeout(poll, 250);
+  });
+}

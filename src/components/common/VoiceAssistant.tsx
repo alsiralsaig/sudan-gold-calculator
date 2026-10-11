@@ -36,6 +36,7 @@ import {
   listenOnce,
   speak,
   stopSpeaking,
+  waitForSpeechEnd,
   isSpeechRecognitionSupported,
 } from '../../services/speech';
 import {
@@ -73,7 +74,8 @@ type PendingSale = {
 };
 
 const HELP_TEXT =
-  'قول جملتك براحتك — وخلصت؟ قول «تمام» وينفذ فوراً ⚡ (أو دوس المايك تاني)\n' +
+  '🎙️ دوس المايك مرة وحدة وبيقى سايح معاك: بيسمع أمرك، ينفذو، ويرجع يسمع — لحد ما تدوسو تاني ⏹\n' +
+  'قول «تمام» في آخر الجملة = تنفيذ فوري • وسط الضوضاء بيقفل لوحده ويرجع بضغطة\n' +
   'حساب: «احسب 10 غرام عيار 21» • «كام غرام بمية ألف»\n' +
   'تسجيل: «سجل مشتريات 2 غرام عيار 21 بسعر 104 الف» • «بعت 5 غرام عيار 21 بسعر 105 الف واشتريتو بـ500 الف» • «سجل المشتري ابوجويه 5 غرام بـ105 الف»\n' +
   'منصرف: «صرفت 50 الف كهرباء» (عام) — «منصرف خاص على أحمد 50 الف» (من حصة أحمد) • «سلفة 100 الف لخالد» • «سجل دفعة 50 الف لأحمد»\n' +
@@ -104,7 +106,16 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
   const [typed, setTyped] = useState('');
   const stopListenRef = useRef<(() => void) | null>(null);
   const pendingSaleRef = useRef<PendingSale | null>(null);
-  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /* ── الاستماع المتواصل: المايك مفتوح لحد ما تدوسو تاني ── */
+  const sessionRef = useRef(false); // الجلسة شغالة؟
+  const cycleHandledRef = useRef(false); // الدورة دي ولّى أمرها (onFinal/onError خلّص)
+  const lastSpeechAtRef = useRef(0); // آخر كلام مسموع — عشان السكوت الطويل
+  const silentCyclesRef = useRef(0); // دورات سكوت متتالية (حارس طائر)
+  const unknownStreakRef = useRef(0); // ردود فشل متتالية (حارس ضوضاء المحل)
+  const resumeLockRef = useRef(false); // ما نفتح مايكين ورا بعض
+  const runTextRef = useRef<(t: string) => void>(() => undefined);
+  const deliverRef = useRef<(r: Reply) => void>(() => undefined);
+  const resumeRef = useRef<() => void>(() => undefined);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const supported = isSpeechRecognitionSupported();
@@ -129,15 +140,9 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
     return Array.from(names).slice(0, 60);
   }, [store.partners, store.sales, store.purchases, store.loans, store.expenses]);
 
-  const stopListening = useCallback(() => {
-    stopListenRef.current?.();
-    stopListenRef.current = null;
-    setListening(false);
-  }, []);
-
   useEffect(() => () => {
+    sessionRef.current = false;
     stopListenRef.current?.();
-    if (watchdogRef.current) clearTimeout(watchdogRef.current);
     if (hideTimer.current) clearTimeout(hideTimer.current);
     stopSpeaking();
   }, []);
@@ -478,25 +483,20 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
             buyPriceMode: pending.buyPriceMode,
           };
           const r = execCommand(full);
-          setReply(r);
-          flashHide();
-          if (r.say) speak(r.say);
+          deliverRef.current(r);
         };
         const askNext = () => {
           const s = nextStep();
           if (!s) { finishPending(); return; }
           pending.step = s;
           const r: Reply = { kind: 'info', text: `${ackText()} — ${askText(s)}`, say: askSay(s) };
-          setReply(r);
-          flashHide();
-          speak(askSay(s));
+          deliverRef.current(r);
         };
 
         if (isCancel) {
           pendingSaleRef.current = null;
           const r: Reply = { kind: 'info', text: 'تمام — اتلغى البيع، ما سجلت شي' };
-          setReply(r);
-          flashHide();
+          deliverRef.current(r);
           return;
         }
         if (isSkip) {
@@ -540,9 +540,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
         /* ما فهمت من الرد — أعيد السؤال */
         if (!hasOwnSubject) {
           const r: Reply = { kind: 'info', text: `ما فهمت — ${askText(pending.step)}`, say: askSay(pending.step) };
-          setReply(r);
-          flashHide();
-          speak(askSay(pending.step));
+          deliverRef.current(r);
           return;
         }
         /* كلام تاني ليه موضوعو — نقفل الاستنى ونكمل كأمر عادي */
@@ -561,9 +559,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
       const distrust = shouldDistrustLocal(clean, cmd);
       if (cmd.type !== 'unknown' && !distrust) {
         const r = execCommand(cmd);
-        setReply(r);
-        flashHide();
-        if (r.say) speak(r.say);
+        deliverRef.current(r);
         return;
       }
       /* المحلي ما فهمش (ولا ما بنثق فيه) — ندور على الـAI (والفقاعة تبقى «بفكر...») */
@@ -585,14 +581,11 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
             /* الـAI سأل سؤال توضيح؟ اعرضو — أحسن من تنفيذ بالغلط */
             if (ai?.clarify) {
               const r: Reply = { kind: 'info', text: `❓ ${ai.clarify}`, say: ai.clarify };
-              setReply(r);
-              flashHide();
-              if (r.say) speak(r.say);
+              deliverRef.current(r);
               return;
             }
             const r: Reply = { kind: 'err', text: 'ما فهمت — دوس ⌨ واكتبها أو قولها بطريقة تانية' };
-            setReply(r);
-            flashHide();
+            deliverRef.current(r);
             return;
           }
           /* جملة واحدة نظيفة → علّمها للمحلي (يشغلها بلا نت المرة الجاية) */
@@ -604,65 +597,142 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
           const okAll = replies.every((r) => r.kind !== 'err');
           const hint = ai?.clarify && !text.includes('بكم؟') ? ` • ❓ ${ai.clarify}` : '';
           const r: Reply = { kind: okAll ? 'ok' : 'err', text: text + hint, say };
-          setReply(r);
-          flashHide();
-          if (r.say) speak(r.say);
+          deliverRef.current(r);
         } catch {
           const r: Reply = { kind: 'err', text: 'الذكاء الاصطناعي مش متاح دلوقتي — جرّب تاني' };
-          setReply(r);
-          flashHide();
+          deliverRef.current(r);
         }
       })();
     },
     [execCommand, flashHide, tab, peopleCtx, rates.karat21]
   );
 
-  const startListening = useCallback(() => {
-    stopSpeaking();
-    setHeard('');
-    setReply(null);
-    setShowType(false);
-    setListening(true);
-    if (watchdogRef.current) clearTimeout(watchdogRef.current);
-    watchdogRef.current = setTimeout(() => {
-      stopListenRef.current?.();
-      stopListenRef.current = null;
-      setListening(false);
-    }, 32000);
+  /* ═══════════ الاستماع المتواصل: المايك مفتوح لحد ما تدوسو تاني ═══════════ */
+
+  /** يفتح المايك لدورة واحدة (جملة) — والجلسة كلها بتترجّع تلقائياً بعد كل رد */
+  const openMic = useCallback(() => {
+    cycleHandledRef.current = false;
+    lastSpeechAtRef.current = Date.now();
+    resumeLockRef.current = false;
     stopListenRef.current = listenOnce({
-      onInterim: (t) => setHeard(t),
-      onFinal: (t) => {
-        if (watchdogRef.current) clearTimeout(watchdogRef.current);
+      onInterim: (t) => {
+        lastSpeechAtRef.current = Date.now();
+        silentCyclesRef.current = 0;
         setHeard(t);
-        setListening(false);
+      },
+      onFinal: (t) => {
+        cycleHandledRef.current = true;
+        lastSpeechAtRef.current = Date.now();
+        silentCyclesRef.current = 0;
+        setHeard(t);
         stopListenRef.current = null;
-        runText(t);
+        runTextRef.current(t); /* الرد + رجّعة الاستماع بيحصلوا في deliverReply */
       },
       onError: (msg) => {
-        if (watchdogRef.current) clearTimeout(watchdogRef.current);
-        setListening(false);
+        cycleHandledRef.current = true;
         stopListenRef.current = null;
+        /* سكوت عادي والجلسة حية؟ كمّل استماع من غير إزعاج */
+        if (sessionRef.current && (!msg || msg.includes('ما سمعت صوت') || msg.includes('ما فهمت الكلام'))) {
+          silentCyclesRef.current += 1;
+          resumeRef.current();
+          return;
+        }
+        /* غلطة حقيقية — اقفل الجلسة وورّي الرسالة */
+        sessionRef.current = false;
+        setListening(false);
         if (msg) {
           setReply({ kind: 'err', text: msg });
           flashHide();
         }
       },
       onEnd: () => {
-        if (watchdogRef.current) clearTimeout(watchdogRef.current);
         stopListenRef.current = null;
-        setListening(false);
+        /* onFinal/onError ما جاتش؟ (المتصفح قفل السمع لوحدو) — الجلسة حية؟ كمّل */
+        if (!cycleHandledRef.current && sessionRef.current) {
+          silentCyclesRef.current += 1;
+          resumeRef.current();
+        }
       },
     });
-  }, [runText, flashHide]);
+  }, [flashHide]);
+
+  /** رجّعة الاستماع — بس بعد ما التطبيق يخلص كلامو (عشان ما يسمعش صوتو) */
+  const resumeSession = useCallback(() => {
+    if (!sessionRef.current || resumeLockRef.current) return;
+    resumeLockRef.current = true;
+    void (async () => {
+      await waitForSpeechEnd();
+      if (!sessionRef.current) { resumeLockRef.current = false; return; }
+      /* سكوت دقيقتين أو دورات صماء كتيرة — سكّر تلقائياً (بطارية ونت) */
+      if (Date.now() - lastSpeechAtRef.current > 120000 || silentCyclesRef.current >= 20) {
+        sessionRef.current = false;
+        setListening(false);
+        setReply({ kind: 'info', text: 'سكّرت الاستماع تلقائياً بعد سكوت — دوس المايك لما تحتاجني 🎙️' });
+        flashHide();
+        speak('قفلت الاستماع');
+        return;
+      }
+      setTimeout(() => {
+        if (sessionRef.current) openMic();
+        else resumeLockRef.current = false;
+      }, 300);
+    })();
+  }, [openMic, flashHide]);
+
+  /** الرد الموحد: يعرض + ينطق + يرجّع الاستماع لو الجلسة حية */
+  const deliverReply = useCallback(
+    (r: Reply) => {
+      setReply(r);
+      flashHide();
+      /* حارس ضوضاء المحل: فشل متتالي كتير = المايك بيلتقط كلام الناس — سكّر براحتنا */
+      if (r.kind === 'err') unknownStreakRef.current += 1;
+      else if (r.kind === 'ok') unknownStreakRef.current = 0;
+      if (r.kind === 'err' && unknownStreakRef.current >= 5 && sessionRef.current) {
+        sessionRef.current = false;
+        setListening(false);
+        setReply({ kind: 'info', text: 'قفلت الاستماع مؤقتاً — الدنيا صاخبة 😅 دوس المايك لما تكون جاهز 🎙️', say: 'قفلت الاستماع' });
+        flashHide();
+        speak('قفلت الاستماع');
+        return;
+      }
+      if (r.say) speak(r.say);
+      resumeRef.current();
+    },
+    [flashHide]
+  );
+
+  const startSession = useCallback(() => {
+    stopSpeaking();
+    setHeard('');
+    setReply(null);
+    setShowType(false);
+    sessionRef.current = true;
+    silentCyclesRef.current = 0;
+    unknownStreakRef.current = 0;
+    setListening(true);
+    openMic();
+  }, [openMic]);
+
+  /** ضغطة على المايك والجلسة شغالة = «خلاص وقّف» — الكلام الناقص بينفذ قبل القفل */
+  const stopSession = useCallback(() => {
+    sessionRef.current = false;
+    setListening(false);
+    stopListenRef.current?.();
+    stopListenRef.current = null;
+  }, []);
+
+  runTextRef.current = runText;
+  resumeRef.current = resumeSession;
+  deliverRef.current = deliverReply;
 
   const tapMic = useCallback(() => {
     if (listening) {
-      stopListening();
+      stopSession();
       return;
     }
-    if (supported) startListening();
+    if (supported) startSession();
     else setShowType(true);
-  }, [listening, supported, startListening, stopListening]);
+  }, [listening, supported, startSession, stopSession]);
 
   const submitTyped = () => {
     const t = typed.trim();
@@ -690,13 +760,16 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
             }`}
             onClick={() => { setReply(null); setHeard(''); }}
           >
-            {listening ? (
-              <span>{heard ? (heard.length > 70 ? `…${heard.slice(-70)}` : heard) : 'بسمعك... اتكلم براحتك — خلاص لما تسكت'}</span>
-            ) : reply ? (
+            {reply ? (
               <>
                 {heard && <span className="block text-slate-500 text-[11px] leading-snug">{heard}</span>}
                 <span>{reply.text}</span>
+                {listening && (
+                  <span className="block text-white/70 text-[10px] leading-snug mt-0.5">🎙️ لسه معاكم — قول أمرك الجاي، ودوس ⏹ للإيقاف</span>
+                )}
               </>
+            ) : listening ? (
+              <span>{heard ? (heard.length > 70 ? `…${heard.slice(-70)}` : heard) : 'بسمعك... قول أمرك وخلص بـ«تمام»'}</span>
             ) : (
               <span>{heard}</span>
             )}
