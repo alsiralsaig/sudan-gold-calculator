@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 
 import {
   articleTime,
-  classifyPls48,
   parseAlmashhadArticle,
   parseAluomArticle,
   parseArabicDate,
@@ -12,7 +11,6 @@ import {
   parseCoinbaseJson,
   parseGoldApiJson,
   parseNbsOfficial,
-  parsePls48Article,
   parseRssItems,
   parseSudafaxArticle,
   parseSudafaxFeedItem,
@@ -79,14 +77,6 @@ test('المشهد السوداني: يستخرج سعر صرف الدولار �
 
 test('المشهد السوداني: بلا سعر → null', () => {
   assert.equal(parseAlmashhadArticle('نشرة اقتصادية بلا أرقام عملات').price, null);
-});
-
-/* ---------------------------- فلسطينيو48 ---------------------------- */
-
-test('فلسطينيو48: زوج الأرقام → شراء أصغر وبيع أكبر', () => {
-  const r = parsePls48Article('وسجل الدولار الأمريكي في السوق الموازي 7,455 جنيهًا للشراء مقابل 7,565 جنيهًا للبيع.');
-  assert.equal(r.buy, 7455);
-  assert.equal(r.sell, 7565);
 });
 
 /* ------------------------ بنك السودان المركزي ------------------------ */
@@ -167,27 +157,6 @@ test('اليوم نيوز: «متوسط سعر بيع تراوح بين 8400 و8
 test('اليوم نيوز: سعر بيع مفرد', () => {
   const r = parseAluomArticle('سجل سعر بيع الدولار الأمريكي 8,550 جنيهاً في السوق الموازي.');
   assert.equal(r.sell, 8550);
-});
-
-/* ------------------------ فلسطينيو48 ------------------------ */
-
-test('فلسطينيو48: تصنيف العنوان — بنوك أم موازي', () => {
-  assert.equal(classifyPls48('سعر الدولار أمام الجنيه في بنك السودان المركزي'), 'bank');
-  assert.equal(classifyPls48('أسعار الدولار والعملات في البنوك السودانية اليوم بالتفصيل'), 'bank');
-  assert.equal(classifyPls48('الجنيه السوداني يواجه موجة تراجع جديدة أمام الدولار والدرهم والريال'), 'parallel');
-});
-
-test('فلسطينيو48: يقرأ «سعر الشراء: X. سعر البيع: Y» كما هي (بلا تصحيح صامت)', () => {
-  const t = 'سعر الجنيه السوداني مقابل الدولار في بنك السودان المركزي سعر الشراء: 4200 جنيه سوداني. سعر البيع: 3700 جنيه سوداني.';
-  const r = parsePls48Article(t);
-  assert.equal(r.buy, 4200);
-  assert.equal(r.sell, 3700, 'قيم المصدر تُنقل كما هي — والتحقق هو من يستبعد المعكوس');
-});
-
-test('فلسطينيو48: جدول بزوج أرقام → الأصغر شراء والأكبر بيع', () => {
-  const r = parsePls48Article('الدولار الأمريكي 7,455 جنيه للشراء مقابل 7,565 جنيه للبيع في السوق الموازي.');
-  assert.equal(r.buy, 7455);
-  assert.equal(r.sell, 7565);
 });
 
 /* --------------------- التواريخ العربية --------------------- */

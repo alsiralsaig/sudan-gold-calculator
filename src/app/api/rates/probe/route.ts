@@ -17,7 +17,6 @@ const CANDIDATES: { name: string; url: string; expect?: string }[] = [
   { name: 'اخبار السودان (بلا www)', url: 'https://sudanakhbar.com/latestnews/dollar-prices', expect: 'دولار' },
   { name: 'المشهد (feed)', url: 'https://almashhadalsudani.com/economic-news/currency-prices-sudan/feed/', expect: 'item' },
   { name: 'المشهد (قسم)', url: 'https://almashhadalsudani.com/economic-news/currency-prices-sudan/', expect: 'دولار' },
-  { name: 'فلسطينيو48', url: 'https://pls48.net/category/economy/', expect: 'دولار' },
   { name: 'سودافاكس (feed)', url: 'https://sudafax.com/feed/', expect: 'item' },
   { name: 'بنك السودان', url: 'https://nbs.sd/currency-rate/?lang=en', expect: 'Dollar' },
   { name: 'الووم', url: 'https://aluom.net/', expect: 'دولار' },
@@ -67,7 +66,7 @@ function linksWith(html: string, needle: string, base: string, limit = 12): { hr
 }
 
 const ALLOWED_HOSTS = [
-  'pls48.net', 'aluom.net', 'alrakoba.net', 'sudafax.com', 'nbs.sd',
+  'aluom.net', 'alrakoba.net', 'sudafax.com', 'nbs.sd',
   'dabangasudan.org', 'sudanile.com', 'alnilin.com', 'suna-sd.net',
   'kushnews.net', 'almandara.net', 'bajnews.com', 'smc.sd', 'alsudani.news',
   'almashhadalsudani.com', 'sudanakhbar.com', 't.me', 'web.archive.org',
@@ -89,8 +88,6 @@ export async function GET(request: Request) {
 
   if (mode === 'links') {
     const targets = [
-      { name: 'pls48 (اقتصاد)', url: 'https://pls48.net/category/economy/', base: 'https://pls48.net', needle: 'دولار' },
-      { name: 'pls48 (بحث)', url: 'https://pls48.net/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1+%D8%A7%D9%84%D8%B3%D9%88%D8%AF%D8%A7%D9%86', base: 'https://pls48.net', needle: 'دولار' },
       { name: 'اليوم نيوز (بحث)', url: 'https://aluom.net/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1', base: 'https://aluom.net', needle: 'دولار' },
       { name: 'الراكوبة (رئيسية)', url: 'https://alrakoba.net/', base: 'https://alrakoba.net', needle: 'دولار' },
       { name: 'الراكوبة (اقتصاد)', url: 'https://alrakoba.net/category/economy/', base: 'https://alrakoba.net', needle: 'دولار' },
@@ -174,8 +171,6 @@ export async function GET(request: Request) {
   const inspect = mode === 'inspect';
   if (inspect) {
     const targets = [
-      { name: 'فلسطينيو48 (اقتصاد)', url: 'https://pls48.net/category/economy/' },
-      { name: 'فلسطينيو48 (بحث السودان)', url: 'https://pls48.net/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1+%D8%A7%D9%84%D8%B3%D9%88%D8%AF%D8%A7%D9%86' },
       { name: 'الراكوبة', url: 'https://alrakoba.net/' },
       { name: 'الراكوبة (بحث دولار)', url: 'https://alrakoba.net/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1' },
       { name: 'الووم', url: 'https://aluom.net/' },

@@ -553,89 +553,6 @@ async function fetchAlrakobaReading(): Promise<{
 }
 
 /* ------------------------------------------------------------------ */
-/*        فلسطينيو48 — يخدم المستويين: المركزي (رسمي) والموازي        */
-/* ------------------------------------------------------------------ */
-
-export interface Pls48Result {
-  /** رسمي (بنك السودان) أم موازي */
-  kind: 'bank' | 'parallel';
-  buy: number | null;
-  sell: number | null;
-  title: string;
-  at: string;
-  url: string;
-}
-
-export function parsePls48Article(text: string): { buy: number | null; sell: number | null } {
-  const t = normalizeDigits(text);
-  // «سعر الشراء: 4200 جنيه سوداني. سعر البيع: 3700 جنيه»
-  const sellM = t.match(/سعر\s*البيع[^0-9]{0,20}([\d][\d.,]{2,12})/);
-  const buyM = t.match(/سعر\s*الشراء[^0-9]{0,20}([\d][\d.,]{2,12})/);
-  if (sellM || buyM) {
-    return { buy: toNum(buyM?.[1]), sell: toNum(sellM?.[1]) };
-  }
-
-  // جدول: «الدولار الأمريكي ... X ... Y»
-  const idx = t.search(/الدولار\s*(الأمريكي)?/);
-  if (idx < 0) return { buy: null, sell: null };
-  const seg = t.slice(idx, idx + 300);
-  const pair = seg.match(/([\d][\d.,]{3,12})[^\d]{1,80}?([\d][\d.,]{3,12})/);
-  if (!pair) return { buy: null, sell: null };
-  const a = toNum(pair[1]);
-  const b = toNum(pair[2]);
-  if (!a || !b) return { buy: null, sell: null };
-  return { buy: Math.min(a, b), sell: Math.max(a, b) };
-}
-
-/** يقرر المستوى من عنوان المقال */
-export function classifyPls48(title: string): 'bank' | 'parallel' {
-  if (/البنوك|المركزي|بنك السودان/.test(title)) return 'bank';
-  return 'parallel';
-}
-
-async function fetchPls48Reading(): Promise<{ bank: Pls48Result | null; parallel: Pls48Result | null; error: string | null }> {
-  const search = await fetchTextRetry(
-    'https://pls48.net/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1+%D8%A7%D9%84%D8%B3%D9%88%D8%AF%D8%A7%D9%86',
-    12000
-  );
-  if (!search) return { bank: null, parallel: null, error: 'فلسطينيو48: تعذّر الوصول' };
-
-  const links: { url: string; title: string }[] = [];
-  const re = /<a[^>]+href="(https:\/\/pls48\.net\/[^"#]+)"[^>]*>([\s\S]{0,160}?)<\/a>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(search)) && links.length < 10) {
-    const title = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    if (!title || !/دولار|جنيه/.test(title)) continue;
-    if (!links.some((l) => l.url === m![1])) links.push({ url: m[1], title });
-  }
-
-  let bank: Pls48Result | null = null;
-  let parallel: Pls48Result | null = null;
-
-  for (const link of links.slice(0, 4)) {
-    const html = await fetchTextRetry(link.url, 12000, 1);
-    if (!html) continue;
-    const pageText = htmlToText(html);
-    const parsed = parsePls48Article(pageText);
-    if (!parsed.buy && !parsed.sell) continue;
-    const kind = classifyPls48(link.title);
-    const result: Pls48Result = {
-      kind,
-      buy: parsed.buy,
-      sell: parsed.sell,
-      title: link.title.slice(0, 90),
-      at: articleTime(pageText.slice(0, 2500)),
-      url: link.url,
-    };
-    if (kind === 'bank' && !bank) bank = result;
-    if (kind === 'parallel' && !parallel) parallel = result;
-    if (bank && parallel) break;
-  }
-
-  return { bank, parallel, error: bank || parallel ? null : 'فلسطينيو48: لا سعر في المقالات الحديثة' };
-}
-
-/* ------------------------------------------------------------------ */
 /*                    بنك السودان المركزي — السعر الرسمي              */
 /* ------------------------------------------------------------------ */
 
@@ -730,13 +647,12 @@ export interface PricingSnapshot {
 /** جلب كل المصادر بالتوازي — فشل مصدر لا يوقف البقية أبداً */
 export async function fetchPricingSources(): Promise<PricingSnapshot> {
   const now = new Date();
-  const [sudafax, sudanakhbar, almashhad, aluom, alrakoba, pls48, official, spot] = await Promise.allSettled([
+  const [sudafax, sudanakhbar, almashhad, aluom, alrakoba, official, spot] = await Promise.allSettled([
     fetchSudafaxReading(),
     fetchSudanakhbarReading(),
     fetchAlmashhadReading(),
     fetchAluomReading(),
     fetchAlrakobaReading(),
-    fetchPls48Reading(),
     fetchOfficialUsdReading(),
     fetchSpotReadings(),
   ]);
@@ -763,38 +679,6 @@ export async function fetchPricingSources(): Promise<PricingSnapshot> {
   collectParallel(almashhad);
   collectParallel(aluom as PromiseSettledResult<{ reading: SourceReading | null; error: string | null }>);
   collectParallel(alrakoba as PromiseSettledResult<{ reading: SourceReading | null; error: string | null }>);
-
-  // فلسطينيو48 يخدم المستويين
-  if (pls48.status === 'fulfilled') {
-    const value = pls48.value;
-    if (value.bank && (value.bank.buy || value.bank.sell)) {
-      officialBundle.readings.push({
-        source: 'فلسطينيو48',
-        kind: 'bank',
-        buy: value.bank.buy,
-        sell: value.bank.sell,
-        at: value.bank.at,
-        url: value.bank.url,
-        label: value.bank.title,
-      });
-    }
-    if (value.parallel && (value.parallel.buy || value.parallel.sell)) {
-      parallel.readings.push({
-        source: 'فلسطينيو48',
-        kind: 'parallel',
-        buy: value.parallel.buy,
-        sell: value.parallel.sell,
-        at: value.parallel.at,
-        url: value.parallel.url,
-        label: value.parallel.title,
-      });
-    }
-    if (value.error) {
-      parallel.errors.push(value.error);
-    }
-  } else {
-    parallel.errors.push('فلسطينيو48: فشل غير متوقع');
-  }
 
   if (official.status === 'fulfilled') {
     if (official.value.reading) officialBundle.readings.push(official.value.reading);
