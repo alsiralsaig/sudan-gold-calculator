@@ -103,7 +103,7 @@ function inRange(value: number | null, min: number, max: number): value is numbe
 }
 
 /** مواقع بتحجب سيرفرات Vercel (Cloudflare) — لو الجلب المباشر فشل بنجرّب عبر قارئ وسيط */
-const PROXY_HOSTS = /(^|\.)(sudanakhbar\.com|almashhadalsudani\.com)$/i;
+const PROXY_HOSTS = /(^|\.)(sudanakhbar\.com|almashhadalsudani\.com|alrakoba\.net)$/i;
 
 async function fetchDirect(url: string, timeoutMs: number): Promise<string | null> {
   try {

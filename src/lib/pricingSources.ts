@@ -529,6 +529,10 @@ async function fetchAlrakobaReading(): Promise<{
   if (!feed) return { reading: null, error: 'الراكوبة: تعذّر الوصول' };
 
   const items = parseRssItems(feed);
+  /* الصفحة جات HTML مش RSS — يعني حماية Cloudflare (أو أي حاجب) بترفض السيرفرات */
+  if (!items.length && !/<\?xml|<rss|<channel/i.test(feed.slice(0, 2000))) {
+    return { reading: null, error: 'الراكوبة: الموقع محجوب بحماية Cloudflare — بنرجع ليه لما يفتح' };
+  }
   const priced = items.find((it) => /أسعار|سعر/.test(it.title) && /العملات|الدولار/.test(it.title));
   if (!priced) return { reading: null, error: 'الراكوبة: لا خبر أسعار حديث في الـ feed' };
 
