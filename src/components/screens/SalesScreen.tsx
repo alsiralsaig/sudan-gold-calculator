@@ -62,6 +62,10 @@ export const SalesScreen: React.FC = () => {
   const [filterPeriod, setFilterPeriod] = useState<'all' | 'today' | '7days' | 'month'>('all');
 
   const [showAddModal, setShowAddModal] = useState(false);
+  /** تعديل جماعي بمودال بدل prompt */
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [bulkBuyer, setBulkBuyer] = useState('');
+  const [bulkNotes, setBulkNotes] = useState('');
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [printInvoice, setPrintInvoice] = useState<PrintableInvoice | null>(null);
@@ -95,6 +99,7 @@ export const SalesScreen: React.FC = () => {
   useBackClose(showAddModal, () => { setShowAddModal(false); setEditingSale(null); });
   useBackClose(selectedSale, () => setSelectedSale(null));
   useBackClose(payModal, () => setPayModal(null));
+  useBackClose(showBulkEdit, () => setShowBulkEdit(false));
 
   // Auto-calculate Total Sell & Buy Amounts when Weight or Price changes
   const handleWeightOrPriceChange = (
@@ -327,7 +332,7 @@ export const SalesScreen: React.FC = () => {
         <div className="text-[11px] text-slate-400">إجراءات الصفحة على السجلات الظاهرة فقط</div>
         <div className="grid grid-cols-3 gap-2">
           <button onClick={() => { if (confirm('أرشفة كل السجلات الظاهرة؟')) filteredSales.forEach(x => archiveSale(x.id)); }} className="py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-black">أرشفة الكل</button>
-          <button onClick={() => { const value = prompt('الملاحظات الجديدة'); if (value !== null) filteredSales.forEach(x => updateSale({ ...x, notes: value })); }} className="py-2 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[11px] font-black">تعديل الكل</button>
+          <button onClick={() => { setBulkBuyer(''); setBulkNotes(''); setShowBulkEdit(true); }} className="py-2 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[11px] font-black">تعديل الكل</button>
           <button onClick={() => { if (confirm('حذف نهائي لكل السجلات الظاهرة؟')) filteredSales.forEach(x => deleteSale(x.id)); }} className="py-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-black">حذف الكل</button>
         </div>
       </div>}
@@ -1003,6 +1008,23 @@ export const SalesScreen: React.FC = () => {
         </div>
       )}
 
+      {/* تعديل جماعي للفواتير الظاهرة */}
+      {showBulkEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" dir="rtl">
+          <form onSubmit={(e) => { e.preventDefault(); filteredSales.forEach(x => updateSale({ ...x, buyer: bulkBuyer.trim() || x.buyer, notes: bulkNotes.trim() || x.notes, updatedAt: new Date().toISOString() })); setShowBulkEdit(false); }} className="bg-slate-900 border-2 border-blue-500/50 rounded-3xl p-5 max-w-sm w-full space-y-4">
+            <div className="flex justify-between items-center"><h3 className="font-black text-blue-300">تعديل الفواتير الظاهرة ({filteredSales.length})</h3><button type="button" onClick={() => setShowBulkEdit(false)} className="text-slate-400 text-xl">✕</button></div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">اسم الزبون الجديد (اختياري)</label>
+              <input value={bulkBuyer} onChange={(e) => setBulkBuyer(e.target.value)} placeholder="اتركه فاضي = ما يتغيرش" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">الملاحظات الجديدة (اختياري)</label>
+              <input value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} placeholder="اتركها فاضية = ما تتغيرش" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-blue-500" />
+            </div>
+            <button className="w-full py-3 rounded-xl bg-blue-500 text-slate-950 font-black">حفظ التعديل الجماعي</button>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

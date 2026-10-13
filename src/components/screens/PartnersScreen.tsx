@@ -41,6 +41,9 @@ export const PartnersScreen: React.FC = () => {
     );
 
   const [showAddModal, setShowAddModal] = useState(false);
+  /** تعديل جماعي لنسبة الربح — مودال بدل prompt */
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [bulkPercent, setBulkPercent] = useState('');
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
 
   const [name, setName] = useState('');
@@ -51,6 +54,7 @@ export const PartnersScreen: React.FC = () => {
 
   // زر الرجوع في التلفون يقفل النوافذ بدل الخروج من التطبيق
   useBackClose(showAddModal, () => setShowAddModal(false));
+  useBackClose(showBulkEdit, () => setShowBulkEdit(false));
 
   const handleOpenAdd = () => {
     setName('');
@@ -97,10 +101,7 @@ export const PartnersScreen: React.FC = () => {
     setShowAddModal(false);
   };
 
-  const handleBulkPartnerEdit = () => {
-    const value = prompt('نسبة الربح الجديدة للشركاء الظاهرين');
-    if (value !== null) visiblePartners.forEach(p => updatePartner({ ...p, profitPercent: parseFloat(value) || p.profitPercent }));
-  };
+  const handleBulkPartnerEdit = () => { setBulkPercent(''); setShowBulkEdit(true); };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -407,6 +408,19 @@ export const PartnersScreen: React.FC = () => {
         }
         actions={[{ label: 'إضافة شريك', onClick: handleOpenAdd, icon: Plus, tone: 'amber' }]}
       />
+      {/* تعديل جماعي لنسبة ربح الشركاء الظاهرين */}
+      {showBulkEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" dir="rtl">
+          <form onSubmit={(e) => { e.preventDefault(); const v = parseFloat(bulkPercent); if (!isNaN(v)) visiblePartners.forEach(p2 => updatePartner({ ...p2, profitPercent: v, updatedAt: new Date().toISOString() })); setShowBulkEdit(false); }} className="bg-slate-900 border-2 border-blue-500/50 rounded-3xl p-5 max-w-sm w-full space-y-4">
+            <div className="flex justify-between items-center"><h3 className="font-black text-blue-300">نسبة ربح الشركاء الظاهرين ({visiblePartners.length})</h3><button type="button" onClick={() => setShowBulkEdit(false)} className="text-slate-400 text-xl">✕</button></div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">النسبة الجديدة لكل الشركاء (%)</label>
+              <input type="number" inputMode="decimal" value={bulkPercent} onChange={(e) => setBulkPercent(e.target.value)} placeholder="مثال: 50" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-blue-500" />
+            </div>
+            <button className="w-full py-3 rounded-xl bg-blue-500 text-slate-950 font-black">حفظ النسبة للكل</button>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

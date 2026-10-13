@@ -51,6 +51,12 @@ export const ExpensesScreen: React.FC = () => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  /** وضع التعديل: معرف المنصرف اللي بنعدلو — الفورم نفسو بيتستعمل للإضافة والتعديل */
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  /** تعديل جماعي بمودال بدل prompt */
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [bulkName, setBulkName] = useState('');
+  const [bulkNotes, setBulkNotes] = useState('');
 
   // Form State
   const [name, setName] = useState('');
@@ -68,6 +74,7 @@ export const ExpensesScreen: React.FC = () => {
   // زر الرجوع في التلفون يقفل النوافذ بدل الخروج من التطبيق
   useBackClose(showAddModal, () => setShowAddModal(false));
   useBackClose(selectedExpense, () => setSelectedExpense(null));
+  useBackClose(showBulkEdit, () => setShowBulkEdit(false));
 
   const handleOpenAdd = () => {
     setName('');
@@ -79,6 +86,19 @@ export const ExpensesScreen: React.FC = () => {
     setLoanDirection('lent');
     setLoanPhone('');
     setLoanDueDate('');
+    setShowAddModal(true);
+  };
+
+  const handleOpenEdit = (exp: Expense) => {
+    setSelectedExpense(null);
+    setEditingExpenseId(exp.id);
+    setName(exp.name);
+    setAmount(String(exp.amount));
+    const isPublic = !exp.target || exp.target === 'عام';
+    setTargetType(isPublic ? 'عام' : 'خاص');
+    setSelectedPartner(!isPublic ? exp.target : (partners[0]?.name || ''));
+    setNotes(exp.notes || '');
+    setIsLoanMode(false);
     setShowAddModal(true);
   };
 
@@ -102,6 +122,24 @@ export const ExpensesScreen: React.FC = () => {
     }
 
     const actualTarget = targetType === 'عام' ? 'عام' : (selectedPartner || 'شريك');
+
+    if (editingExpenseId) {
+      const existing = expenses.find((x) => x.id === editingExpenseId);
+      if (existing) {
+        updateExpense({
+          ...existing,
+          name: name.trim() || existing.name,
+          amount: parseFloat(amount) || existing.amount,
+          category: targetType === 'عام' ? 'منصرفات عامة' : 'مسحوبات شريك',
+          target: actualTarget,
+          notes: notes.trim(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      setEditingExpenseId(null);
+      setShowAddModal(false);
+      return;
+    }
 
     addExpense({
       date: new Date().toISOString(),
@@ -398,7 +436,7 @@ export const ExpensesScreen: React.FC = () => {
         <div className="text-[11px] text-slate-400">إجراءات الصفحة على السجلات الظاهرة فقط</div>
         <div className="grid grid-cols-3 gap-2">
           <button onClick={() => { if (confirm('أرشفة كل السجلات الظاهرة؟')) filteredExpenses.forEach(x => archiveExpense(x.id)); }} className="py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-black">أرشفة الكل</button>
-          <button onClick={() => { const value = prompt('الملاحظات الجديدة'); if (value !== null) filteredExpenses.forEach(x => updateExpense({ ...x, notes: value })); }} className="py-2 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[11px] font-black">تعديل الكل</button>
+          <button onClick={() => { setBulkName(''); setBulkNotes(''); setShowBulkEdit(true); }} className="py-2 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[11px] font-black">تعديل الكل</button>
           <button onClick={() => { if (confirm('حذف نهائي لكل السجلات الظاهرة؟')) filteredExpenses.forEach(x => deleteExpense(x.id)); }} className="py-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-black">حذف الكل</button>
         </div>
       </div>}
@@ -504,7 +542,7 @@ export const ExpensesScreen: React.FC = () => {
                 }`}
               >
                 {isLoanMode ? <HandCoins className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                <span>{isLoanMode ? 'تسجيل سلفة جديدة' : 'تسجيل مصروف جديد'}</span>
+                <span>{editingExpenseId ? 'تعديل المنصرف' : isLoanMode ? 'تسجيل سلفة جديدة' : 'تسجيل مصروف جديد'}</span>
               </h3>
               <button
                 type="button"
@@ -698,7 +736,7 @@ export const ExpensesScreen: React.FC = () => {
                 type="submit"
                 className="flex-1 py-3 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 text-white font-black rounded-xl text-xs shadow-md"
               >
-                حفظ المصروف
+                {editingExpenseId ? 'حفظ التعديلات' : 'حفظ المصروف'}
               </button>
             </div>
           </form>
@@ -771,11 +809,29 @@ export const ExpensesScreen: React.FC = () => {
             </button>
 
             <div className="grid grid-cols-3 gap-2 pt-1">
-              <button onClick={() => { const name = prompt('البيان الجديد', selectedExpense.name); const amount = prompt('المبلغ الجديد', String(selectedExpense.amount)); if (name !== null && amount !== null) { updateExpense({ ...selectedExpense, name: name.trim() || selectedExpense.name, amount: parseFloat(amount) || selectedExpense.amount }); setSelectedExpense(null); } }} className="py-2.5 bg-amber-500/20 text-amber-300 font-bold rounded-xl text-xs border border-amber-500/40">تعديل</button>
+              <button onClick={() => handleOpenEdit(selectedExpense)} className="py-2.5 bg-amber-500/20 text-amber-300 font-bold rounded-xl text-xs border border-amber-500/40">تعديل</button>
               <button onClick={() => { if (confirm('أرشفة هذا المصروف؟')) { archiveExpense(selectedExpense.id); setSelectedExpense(null); } }} className="py-2.5 bg-rose-600/20 text-rose-400 font-bold rounded-xl text-xs border border-rose-600/40">أرشفة</button>
               <button onClick={() => { if (confirm('حذف نهائي؟ لا يمكن الاستعادة.')) { deleteExpense(selectedExpense.id); setSelectedExpense(null); } }} className="py-2.5 bg-slate-800 text-slate-300 font-bold rounded-xl text-xs border border-slate-700">حذف</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* تعديل جماعي للسجلات الظاهرة — فورم كامل بدل السؤال المفرد */}
+      {showBulkEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" dir="rtl">
+          <form onSubmit={(e) => { e.preventDefault(); filteredExpenses.forEach(x => updateExpense({ ...x, name: bulkName.trim() || x.name, notes: bulkNotes.trim() || x.notes, updatedAt: new Date().toISOString() })); setShowBulkEdit(false); }} className="bg-slate-900 border-2 border-blue-500/50 rounded-3xl p-5 max-w-sm w-full space-y-4">
+            <div className="flex justify-between items-center"><h3 className="font-black text-blue-300">تعديل المنصرفات الظاهرة ({filteredExpenses.length})</h3><button type="button" onClick={() => setShowBulkEdit(false)} className="text-slate-400 text-xl">✕</button></div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">البيان الجديد (اختياري)</label>
+              <input value={bulkName} onChange={(e) => setBulkName(e.target.value)} placeholder="اتركه فاضي = ما يتغيرش" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">الملاحظات الجديدة (اختياري)</label>
+              <input value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} placeholder="اتركها فاضية = ما تتغيرش" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-blue-500" />
+            </div>
+            <button className="w-full py-3 rounded-xl bg-blue-500 text-slate-950 font-black">حفظ التعديل الجماعي</button>
+          </form>
         </div>
       )}
 
