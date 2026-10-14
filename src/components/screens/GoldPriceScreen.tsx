@@ -76,9 +76,12 @@ export const GoldPriceScreen: React.FC = () => {
     approvalNeedsConfirmation,
     localAdjustPercent,
     setLocalAdjust,
+    aedManual,
+    setAedManual,
   } = useGoldStore();
 
   const [status, setStatus] = useState('');
+  const [aedInput, setAedInput] = useState('');
   const [showOverrides, setShowOverrides] = useState(false);
   const [usdBuyInput, setUsdBuyInput] = useState('');
   const [usdSellInput, setUsdSellInput] = useState('');
@@ -122,6 +125,22 @@ export const GoldPriceScreen: React.FC = () => {
     }
     setLocalAdjust(value);
     refreshEngine().then((ok) => flash(ok ? `تم تطبيق تعديل السوق: ${value > 0 ? '+' : ''}${value}%` : 'تم الحفظ — تعذر الجلب الآن'));
+  };
+
+  const applyAed = () => {
+    const value = parseFloat(aedInput);
+    if (isNaN(value) || value < 100 || value > 20000) {
+      flash('سعر الدرهم يجب أن يكون بين 100 و 20,000 جنيه');
+      return;
+    }
+    setAedManual(value);
+    refreshEngine().then((ok) => flash(ok ? `تم تطبيق سعر الدرهم: ${value} ✅` : 'تم الحفظ — تعذر الجلب الآن'));
+  };
+
+  const clearAed = () => {
+    setAedManual(null);
+    setAedInput('');
+    refreshEngine().then((ok) => flash(ok ? 'رجعنا سعر الدرهم من المصادر' : 'تم الحفظ — تعذر الجلب الآن'));
   };
 
   const computation = engine?.computation || null;
@@ -511,6 +530,46 @@ export const GoldPriceScreen: React.FC = () => {
           يغطي فرق العرض والطلب والمصنعية المحلية وسعر التاجر (خام/مشغول). يتراوح منطقيًا بين -20% و +50%.
         </p>
 
+        {/* 💠 التسعير بالدرهم — سوق الذهب السوداني بيتعامل بالدرهم الإماراتي */}
+        <div className="border-t border-slate-800 pt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-white flex items-center gap-2">
+              🇦🇪 التسعير بالدرهم
+            </span>
+            {engine?.aedBasis && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                engine.aedBasis === 'manual' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                : engine.aedBasis === 'market' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                : 'bg-slate-700/40 text-slate-400 border-slate-600'}`}>
+                {engine.aedBasis === 'manual' ? `من عندي: ${Math.round(engine.aedSdg || 0)}`
+                 : engine.aedBasis === 'market' ? `من السوق: ${Math.round(engine.aedSdg || 0)}`
+                 : `محسوب من الدولار: ${Math.round(engine.aedSdg || 0)}`}
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            دهب السودان بيتباع للإمارات بالدرهم — التسعير هنا بيمشي بسعر الدرهم الموازي، فبيريحك من فرق الدولار.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              inputMode="decimal"
+              value={aedInput}
+              onChange={(e) => setAedInput(e.target.value)}
+              className="flex-1 bg-slate-950 border border-slate-700 focus:border-cyan-400 rounded-xl p-3 text-white font-mono text-sm focus:outline-none"
+              placeholder={engine?.aedSdg ? `سعر الدرهم (الحالي: ${Math.round(engine.aedSdg)})` : 'سعر الدرهم بالجنيه (مثال: 2375)'}
+            />
+            <button onClick={applyAed} className="px-4 py-3 bg-cyan-500 hover:bg-cyan-600 text-white font-black text-xs rounded-xl transition-colors">
+              تطبيق
+            </button>
+            {aedManual && (
+              <button onClick={clearAed} className="px-3 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors" title="رجوع للمصادر">
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
         {engine?.publishedLocalGold ? (
           <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3 flex items-start gap-2">
             <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
@@ -568,6 +627,7 @@ export const GoldPriceScreen: React.FC = () => {
           { label: 'شراء 21', value: effective ? fmtNum(effective.buy) : '—', tone: 'rose' },
           { label: 'بيع 21', value: effective ? fmtNum(effective.sell) : '—', tone: 'emerald' },
           { label: 'دولار موازي', value: parallel?.sell ? fmtNum(parallel.sell) : '—', tone: 'amber' },
+      { label: 'درهم', value: engine?.aedSdg ? fmtNum(Math.round(engine.aedSdg)) : '—', tone: 'cyan' },
           { label: 'الأونصة', value: spot?.sell ? Number(spot.sell).toFixed(0) : '—', tone: 'cyan' },
         ]}
         columns={4}

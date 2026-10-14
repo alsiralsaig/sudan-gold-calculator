@@ -18,7 +18,7 @@ export const TRADE_KARAT = 21;
 /*                            قراءات المصادر                          */
 /* ------------------------------------------------------------------ */
 
-export type ReadingKind = 'parallel' | 'bank' | 'spot';
+export type ReadingKind = 'parallel' | 'bank' | 'spot' | 'parallel-aed';
 
 export interface SourceReading {
   /** اسم المصدر المعروض للمستخدم */
@@ -84,7 +84,9 @@ function ageMinutesOf(at: string, now: number): number {
 }
 
 function limitOf(kind: ReadingKind) {
-  return kind === 'spot' ? PLAUSIBLE.ounce : PLAUSIBLE.usd;
+  if (kind === 'spot') return PLAUSIBLE.ounce;
+  if (kind === 'parallel-aed') return { min: 100, max: 20_000 }; // الدرهم بالجنيه (~2000-2800 حالياً)
+  return PLAUSIBLE.usd;
 }
 
 function isValidValue(kind: ReadingKind, value: number): boolean {
@@ -271,7 +273,12 @@ export interface GoldComputationInput {
   localAdjustPercent?: number;
   /** نسبة التعديل لعيار 21 */
   karat?: number;
+  /** سعر الدرهم الإماراتي بالجنيه (السوق الموازي) — سوق الذهب السوداني بيتسعّر بالدرهم */
+  aedSdg?: number | null;
 }
+
+/** الدرهم مربوط بالدولار: 3.6725 درهم/دولار */
+export const AED_PER_USD = 3.6725;
 
 export interface GoldComputation {
   /** سعر الجرام لذهب خالص (24) بالجنيه */
@@ -288,6 +295,10 @@ export interface GoldComputation {
   baseBeforeAdjust: { buy: number; sell: number };
   localAdjustPercent: number;
   karat: number;
+  /** أساس التسعير: 'dirham' = سلسلة الدرهم (سوق الذهب الفعلي) أو 'dollar' = الدولار مباشرة */
+  basis: 'dirham' | 'dollar';
+  /** سعر الدرهم المستخدم في التسعير بالجنيه (0 لو التسعير بالدولار) */
+  aedSdg: number;
   /** هل الأدخال صالح */
   ok: boolean;
   warnings: string[];
@@ -322,8 +333,22 @@ export function computeGoldPrice(input: GoldComputationInput): GoldComputation {
 
   if (!ok) warnings.push('مدخلات غير صالحة لحساب السعر (أونصة/دولار) — تحقق من الأسعار');
 
-  const gram24AtBuyRate = (ounce / GRAMS_PER_OUNCE) * usdBuy;
-  const gram24AtSellRate = (ounce / GRAMS_PER_OUNCE) * usdSell;
+  // سوق الذهب السوداني يتعامل بالدرهم الإماراتي: جرام 24 بالدرهم (من السعر العالمي × 3.6725)
+  // ثم بالجنيه بسعر الدرهم الموازي. فارق الشراء/البيع بنفس نسبة زوج الدولار.
+  const aed = Number(input.aedSdg) || 0;
+  const useDirham = aed > 50;
+  const gram24Usd = ounce / GRAMS_PER_OUNCE;
+  let gram24AtBuyRate: number;
+  let gram24AtSellRate: number;
+  if (useDirham) {
+    const gram24Aed = gram24Usd * AED_PER_USD; // درهم لكل جرام 24
+    gram24AtSellRate = gram24Aed * aed;
+    gram24AtBuyRate = gram24AtSellRate * (usdBuy > 0 ? usdBuy / usdSell : 1);
+  } else {
+    gram24AtBuyRate = gram24Usd * usdBuy;
+    gram24AtSellRate = gram24Usd * usdSell;
+  }
+  const basis: 'dirham' | 'dollar' = useDirham ? 'dirham' : 'dollar';
   const factor = karat / 24;
   const adjustFactor = 1 + adjust / 100;
 
@@ -343,6 +368,8 @@ export function computeGoldPrice(input: GoldComputationInput): GoldComputation {
     baseBeforeAdjust: { buy: round0(baseBuy), sell: round0(baseSell) },
     localAdjustPercent: adjust,
     karat,
+    basis,
+    aedSdg: useDirham ? aed : 0,
     ok,
     warnings,
   };

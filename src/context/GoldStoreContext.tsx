@@ -89,7 +89,9 @@ export interface CloudInspection {
 export interface EngineSnapshot {
   ok: boolean;
   fetchedAt: string;
-  inputs: { ounceUsd: number | null; usdBuy: number | null; usdSell: number | null; adjust: number; karat: number };
+  inputs: { ounceUsd: number | null; usdBuy: number | null; usdSell: number | null; adjust: number; karat: number; aedSdg?: number | null };
+  aedSdg?: number | null;
+  aedBasis?: 'manual' | 'market' | 'computed' | null;
   overridesUsed: { usdBuy: boolean; usdSell: boolean; ounce: boolean };
   parallel: { readings: SourceReading[]; errors: string[] };
   official: { readings: SourceReading[]; errors: string[] };
@@ -287,6 +289,9 @@ interface GoldStoreContextType {
   /** تعديل السوق المحلي % (موجب/سالب) */
   localAdjustPercent: number;
   setLocalAdjust: (percent: number) => void;
+  /** سعر الدرهم «من عندي» (null = يعتمد المصادر/المحسوب) */
+  aedManual: number | null;
+  setAedManual: (value: number | null) => void;
   /** هل السعر المقترح يحتاج تأكيداً بسبب تغيّر كبير */
   approvalNeedsConfirmation: boolean;
 
@@ -338,6 +343,7 @@ const NOTIFICATION_PREFS_KEY = 'gold_notification_prefs_v1';
 const PENDING_SYNC_KEY = 'gold_pending_sync';
 const APPROVED_PRICE_KEY = 'gold_approved_price_v1';
 const LOCAL_ADJUST_KEY = 'gold_local_adjust_v1';
+const AED_MANUAL_KEY = 'gold_aed_manual_v1';
 
 const GRAMS_PER_OUNCE = 31.1034768;
 const DEFAULT_OUNCE_USD = 4150;
@@ -440,6 +446,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [approvedPrice, setApprovedPrice] = useState<ApprovedPrice | null>(null);
   const approvedRef = useRef<ApprovedPrice | null>(null);
   const [localAdjustPercent, setLocalAdjustState] = useState<number>(0);
+  const [aedManual, setAedManualState] = useState<number | null>(null);
   const [pendingSync, setPendingSync] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [allLoans, setAllLoans] = useState<Loan[]>([]);
@@ -739,6 +746,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       const adj = Number(localStorage.getItem(LOCAL_ADJUST_KEY));
       if (Number.isFinite(adj) && adj !== 0) setLocalAdjustState(adj);
+      const aedM = Number(localStorage.getItem(AED_MANUAL_KEY));
+      if (Number.isFinite(aedM) && aedM > 0) setAedManualState(aedM);
     } catch (_) {}
   }, []);
 
@@ -1141,6 +1150,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         usdSell: inputs.usdSell,
         localAdjustPercent: percent,
         karat: TRADE_KARAT,
+        aedSdg: inputs.aedSdg,
       });
       if (recomputed.ok) {
         approvePrice(
@@ -1151,6 +1161,17 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     }
     setRates((prev) => ({ ...prev, localPremiumPercent: percent }));
+    refreshEngine();
+  };
+
+  /** سعر الدرهم «من عندي» — يتجاوز المصادر (سوق الذهب بيتسعّر بالدرهم) */
+  const setAedManual = (value: number | null) => {
+    const clamped = value && Number.isFinite(value) ? Math.min(50_000, Math.max(50, Math.round(value))) : null;
+    setAedManualState(clamped);
+    try {
+      if (clamped) localStorage.setItem(AED_MANUAL_KEY, String(clamped));
+      else localStorage.removeItem(AED_MANUAL_KEY);
+    } catch { /* خصوصية */ }
     refreshEngine();
   };
 
@@ -1210,6 +1231,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (overrides?.usdBuy) params.set('usdBuy', String(overrides.usdBuy));
         if (overrides?.usdSell) params.set('usdSell', String(overrides.usdSell));
         if (overrides?.ounce) params.set('ounce', String(overrides.ounce));
+        if (aedManual && aedManual > 0) params.set('aed', String(aedManual));
         const res = await fetch(`/api/rates/engine?${params.toString()}`, { cache: 'no-store' });
         if (!res.ok) {
           setEngineError('تعذر تشغيل محرك الأسعار الآن');
@@ -1255,7 +1277,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setEngineBusy(false);
       }
     },
-    [localAdjustPercent, applyApproved]
+    [localAdjustPercent, applyApproved, aedManual]
   );
 
   /* ------------ الجلب التلقائي للمحرك (دوري + عند العودة للتطبيق) ------------ */
@@ -2617,6 +2639,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     approvePrice,
     clearApprovedPrice,
     localAdjustPercent,
+    aedManual,
+    setAedManual,
     setLocalAdjust,
     approvalNeedsConfirmation,
     purchases,

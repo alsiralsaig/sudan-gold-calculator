@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { aggregateReadings, computeGoldPrice, compareWithPublished, TRADE_KARAT } from '../../../../core/pricing';
+import { aggregateReadings, computeGoldPrice, compareWithPublished, TRADE_KARAT, AED_PER_USD } from '../../../../core/pricing';
 import { fetchPricingSources } from '../../../../lib/pricingSources';
 
 export const dynamic = 'force-dynamic';
@@ -30,16 +30,24 @@ export async function GET(request: NextRequest) {
     const parallel = aggregateReadings(snapshot.parallel.readings, 'parallel', new Date(), { minSources: 2 });
     const official = aggregateReadings(snapshot.official.readings, 'bank', new Date(), { minSources: 1 });
     const spot = aggregateReadings(snapshot.spot.readings, 'spot', new Date(), { minSources: 1 });
+    const aedAgg = aggregateReadings(snapshot.parallelAed?.readings ?? [], 'parallel-aed', new Date(), { minSources: 1 });
 
     const overrideUsdBuy = numParam('usdBuy');
     const overrideUsdSell = numParam('usdSell');
     const overrideOunce = numParam('ounce');
+    const overrideAed = numParam('aed');
     const adjust = numParam('adjust') ?? 0;
     const karat = numParam('karat') ?? TRADE_KARAT;
 
     const usdBuy = overrideUsdBuy ?? parallel.buy ?? parallel.sell;
     const usdSell = overrideUsdSell ?? parallel.sell ?? parallel.buy;
     const ounceUsd = overrideOunce ?? spot.sell ?? spot.buy;
+
+    // سعر الدرهم: «من عندي» ثم القراءة المنشورة ثم المحسوب من الدولار (3.6725)
+    const aedComputed = usdSell ? usdSell / AED_PER_USD : null;
+    const aedSdg = overrideAed ?? aedAgg.sell ?? aedAgg.buy ?? aedComputed;
+    const aedBasis: 'manual' | 'market' | 'computed' | null =
+      overrideAed ? 'manual' : aedAgg.sell || aedAgg.buy ? 'market' : aedComputed ? 'computed' : null;
 
     const warnings = [
       ...parallel.warnings,
@@ -57,6 +65,7 @@ export async function GET(request: NextRequest) {
         usdSell,
         localAdjustPercent: adjust,
         karat,
+        aedSdg,
       });
       warnings.push(...computation.warnings);
 
@@ -78,7 +87,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: Boolean(computation?.ok && parallel.used.length > 0),
       fetchedAt: snapshot.fetchedAt,
-      inputs: { ounceUsd, usdBuy, usdSell, adjust, karat },
+      aedSdg: aedSdg ?? null,
+      aedBasis,
+      aedAggregates: { used: aedAgg.used, warnings: aedAgg.warnings },
+      inputs: { ounceUsd, usdBuy, usdSell, adjust, karat, aedSdg },
       overridesUsed: {
         usdBuy: overrideUsdBuy !== null,
         usdSell: overrideUsdSell !== null,

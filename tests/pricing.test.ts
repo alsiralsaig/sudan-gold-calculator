@@ -229,3 +229,41 @@ test('aggregateReadings: القراءة المفردة تدخل في حساب ا
   assert.ok(Math.abs((agg.buy || 0) - 8392.5) < 1, `الشراء ${agg.buy}`);
   assert.ok(agg.buy && agg.sell && agg.buy < agg.sell);
 });
+
+/* -------------------- التسعير بالدرهم الإماراتي -------------------- */
+
+test('التسعير بالدرهم: جرام 21 بسعر درهم 2375 يطابق سوق الخرطوم', () => {
+  // أونصة 4152.5 → جرام24 = 133.51$ → بالدرهم ×3.6725 = 490.3 درهم → ×2375 = 1,164,463
+  const c = computeGoldPrice({ ounceUsd: 4152.5, usdBuy: 8800, usdSell: 9000, localAdjustPercent: 0, karat: 21, aedSdg: 2375 });
+  assert.equal(c.basis, 'dirham');
+  assert.equal(c.aedSdg, 2375);
+  const expectedGram24 = (4152.5 / 31.1034768) * 3.6725 * 2375;
+  const expectedSell21 = expectedGram24 * (21 / 24);
+  assert.ok(Math.abs(c.sell - expectedSell21) < 2, `sell=${c.sell} expected≈${expectedSell21}`);
+  // فارق الشراء/البيع بنفس نسبة زوج الدولار (8800/9000)
+  assert.ok(Math.abs(c.buy / c.sell - 8800 / 9000) < 0.0001);
+  // ~1,019,000 لسعر البيع 21 — رقم السوق الفعلي
+  assert.ok(c.sell > 1_015_000 && c.sell < 1_023_000, `sell=${c.sell}`);
+});
+
+test('بلا درهم → السلسلة القديمة بالدولار (توافق خلفي)', () => {
+  const c = computeGoldPrice({ ounceUsd: 4152.5, usdBuy: 8800, usdSell: 9000, localAdjustPercent: 0, karat: 21 });
+  assert.equal(c.basis, 'dollar');
+  assert.equal(c.aedSdg, 0);
+  const expected = (4152.5 / 31.1034768) * (21 / 24) * 9000;
+  assert.ok(Math.abs(c.sell - expected) < 1);
+});
+
+test('الدرهم المحسوب من الدولار يعطي نفس نتيجة الدولار تماماً', () => {
+  const viaUsd = computeGoldPrice({ ounceUsd: 4000, usdBuy: 8800, usdSell: 9000, karat: 21 });
+  const viaAedComputed = computeGoldPrice({ ounceUsd: 4000, usdBuy: 8800, usdSell: 9000, karat: 21, aedSdg: 9000 / 3.6725 });
+  assert.equal(viaUsd.sell, viaAedComputed.sell);
+  assert.equal(viaUsd.buy, viaAedComputed.buy);
+});
+
+test('تعديل السوق المحلي يعمل فوق سلسلة الدرهم', () => {
+  const base = computeGoldPrice({ ounceUsd: 4152.5, usdBuy: 8800, usdSell: 9000, karat: 21, aedSdg: 2375 });
+  const adj = computeGoldPrice({ ounceUsd: 4152.5, usdBuy: 8800, usdSell: 9000, karat: 21, aedSdg: 2375, localAdjustPercent: -3 });
+  assert.ok(Math.abs(adj.sell - base.sell * 0.97) < 2, `adj=${adj.sell}`);
+  assert.ok(adj.sell > 985_000 && adj.sell < 991_000, `sell بعد -3% = ${adj.sell} (متوقع ≈988,339)`);
+});

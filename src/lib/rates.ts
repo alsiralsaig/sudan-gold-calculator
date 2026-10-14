@@ -26,7 +26,7 @@ export interface RatesResult {
   usd: { sell: number; buy: number | null; source: string; ok: boolean };
   /** بنك الخرطوم (تحويلات): شراء/بيع */
   banks: { sell: number | null; buy: number | null; bank: string; source: string };
-  cross: { sar: number | null; aed: number | null; egp: number | null; source: string };
+  cross: { sar: number | null; aed: number | null; egp: number | null; source: string; aedReal?: boolean };
   karat21: number;
   karat24: number;
   karat22: number;
@@ -513,7 +513,10 @@ export async function getRates(): Promise<RatesResult> {
   }
 
   const gram24 = ounceUsd / GRAMS_PER_OUNCE;
-  const karat21Raw = gram24 * (21 / 24) * usdSell;
+  // سوق الذهب السوداني بيتسعّر بالدرهم: جرام بالدرهم (×3.6725) ثم بالجنيه بسعر الدرهم.
+  // لو الدرهم غير منشور نستخدم المحسوب من الدولار (نفس النتيجة القديمة تماماً).
+  const aedEffective = aed ?? usdSell / 3.6725;
+  const karat21Raw = gram24 * (21 / 24) * 3.6725 * aedEffective;
   const karat21 = Math.round(karat21Raw);
   const karat24 = Math.round(karat21Raw * (24 / 21));
   const karat22 = Math.round(karat21Raw * (22 / 21));
@@ -545,7 +548,7 @@ export async function getRates(): Promise<RatesResult> {
       ok: usdOk,
     },
     banks: { sell: bankSell, buy: bankBuy, bank: 'بنك الخرطوم', source: bankSell ? 'اخبار السودان (البنوك)' : '' },
-    cross: { sar, aed, egp, source: crossSource },
+    cross: { sar, aed, egp, source: crossSource, aedReal: aed !== null },
     karat21,
     karat24,
     karat22,

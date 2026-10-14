@@ -645,13 +645,36 @@ export interface PricingSnapshot {
   parallel: SourceBundle;
   official: SourceBundle;
   spot: SourceBundle;
+  /** قراءات سعر الدرهم الإماراتي بالجنيه (سوق الذهب بيتسعّر بالدرهم) */
+  parallelAed: SourceBundle;
   fetchedAt: string;
+}
+
+/**
+ * قارئ الدرهم: مصدر أداء سعر الدرهم الموازي بالجنيه السوداني.
+ * يعتمد على جالب اخبار السودان (يستخرج الدرهم من جدول العملات إن نُشر) — مُخزّن 5 دقائق.
+ * إن لم يُنشر اليوم يعود فارغاً والمحرك يستخدم المحسوب من الدولار.
+ */
+async function fetchAedReading(): Promise<{ readings: SourceReading[]; errors: string[] }> {
+  const readings: SourceReading[] = [];
+  const errors: string[] = [];
+  try {
+    const snap = await fetchSudanRates();
+    if (snap?.aed && snap.aed > 500 && snap.aed < 20_000) {
+      readings.push({ source: 'اخبار السودان (الدرهم)', kind: 'parallel-aed', price: snap.aed, at: nowIso(), label: 'سعر الدرهم الإماراتي (موازي)' });
+    } else {
+      errors.push('الدرهم: غير منشور في جدول اليوم');
+    }
+  } catch {
+    errors.push('الدرهم: تعذّر الوصول للمصدر');
+  }
+  return { readings, errors };
 }
 
 /** جلب كل المصادر بالتوازي — فشل مصدر لا يوقف البقية أبداً */
 export async function fetchPricingSources(): Promise<PricingSnapshot> {
   const now = new Date();
-  const [sudafax, sudanakhbar, almashhad, aluom, alrakoba, official, spot] = await Promise.allSettled([
+  const [sudafax, sudanakhbar, almashhad, aluom, alrakoba, official, spot, aedBundle] = await Promise.allSettled([
     fetchSudafaxReading(),
     fetchSudanakhbarReading(),
     fetchAlmashhadReading(),
@@ -659,6 +682,7 @@ export async function fetchPricingSources(): Promise<PricingSnapshot> {
     fetchAlrakobaReading(),
     fetchOfficialUsdReading(),
     fetchSpotReadings(),
+    fetchAedReading(),
   ]);
 
   const parallel: SourceBundle = { readings: [], errors: [] };
@@ -694,10 +718,17 @@ export async function fetchPricingSources(): Promise<PricingSnapshot> {
     spotBundle.errors = spot.value.errors;
   }
 
+  const aedB: SourceBundle = { readings: [], errors: [] };
+  if (aedBundle.status === 'fulfilled') {
+    aedB.readings = aedBundle.value.readings;
+    aedB.errors = aedBundle.value.errors;
+  }
+
   return {
     parallel: { ...parallel, publishedLocalGold },
     official: officialBundle,
     spot: spotBundle,
+    parallelAed: aedB,
     fetchedAt: now.toISOString(),
   };
 }
