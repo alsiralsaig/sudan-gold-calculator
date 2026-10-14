@@ -747,7 +747,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
     <>
       {/* الفقاعة الصغيرة — الرد/الحالة */}
       {(listening || heard || reply) && !showType && (
-        <div className="fixed bottom-[246px] left-2 z-50 max-w-[270px]" dir="rtl">
+        <div className="fixed bottom-[160px] left-2 z-50 max-w-[270px]" dir="rtl">
           <div
             className={`rounded-2xl px-3 py-2 text-[12px] font-bold leading-snug shadow-lg shadow-black/50 border ${
               listening
@@ -779,7 +779,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
 
       {/* سطر الكتابة الرفيع */}
       {showType && (
-        <div className="fixed bottom-[198px] left-2 right-16 z-50" dir="rtl">
+        <div className="fixed bottom-[112px] left-2 right-16 z-50" dir="rtl">
           <div className="flex items-center gap-1.5 bg-slate-900/95 backdrop-blur border border-amber-500/40 rounded-full pl-2 pr-3 py-1.5 shadow-lg shadow-black/50">
             <input
               ref={inputRef}
@@ -811,7 +811,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
         type="button"
         onClick={tapMic}
         aria-label="الأوامر الصوتية"
-        className={`fixed bottom-[150px] left-2 z-50 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-95 ${
+        className={`fixed bottom-[64px] left-2 z-50 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-95 ${
           listening
             ? 'bg-rose-500 text-white shadow-rose-900/50 animate-pulse'
             : 'bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 shadow-amber-900/40'
@@ -826,7 +826,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
           type="button"
           onClick={() => { setShowType(true); setTimeout(() => inputRef.current?.focus(), 100); }}
           aria-label="كتابة أمر"
-          className="fixed bottom-[198px] left-2 z-50 w-10 h-10 rounded-full bg-slate-900/90 border border-slate-700 text-slate-300 shadow-lg flex items-center justify-center"
+          className="fixed bottom-[112px] left-2 z-50 w-10 h-10 rounded-full bg-slate-900/90 border border-slate-700 text-slate-300 shadow-lg flex items-center justify-center"
         >
           <Keyboard className="w-5 h-5" />
         </button>
