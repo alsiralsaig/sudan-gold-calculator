@@ -201,8 +201,9 @@ export const GoldPriceScreen: React.FC = () => {
               <div className="flex justify-between">
                 <span className="text-slate-400">أساس الحساب</span>
                 <span className="text-slate-200 font-mono">
-                  أونصة ${engine?.inputs?.ounceUsd ? Number(engine.inputs.ounceUsd).toFixed(0) : '—'} × دولار موازي{' '}
-                  {engine?.inputs ? `${fmtNum(engine.inputs.usdBuy)}/${fmtNum(engine.inputs.usdSell)}` : '—'} × 21/24
+                  {computation?.basis === 'dirham'
+                    ? `أونصة $${engine?.inputs?.ounceUsd ? Number(engine.inputs.ounceUsd).toFixed(0) : '—'} × 3.6725 درهم × درهم ${fmtNum(Math.round(computation.aedSdg || 0))} × 21/24`
+                    : `أونصة $${engine?.inputs?.ounceUsd ? Number(engine.inputs.ounceUsd).toFixed(0) : '—'} × دولار موازي ${engine?.inputs ? `${fmtNum(engine.inputs.usdBuy)}/${fmtNum(engine.inputs.usdSell)}` : '—'} × 21/24`}
                 </span>
               </div>
               <div className="flex justify-between">
