@@ -44,10 +44,14 @@ export async function GET(request: NextRequest) {
     const ounceUsd = overrideOunce ?? spot.sell ?? spot.buy;
 
     // سعر الدرهم: «من عندي» ثم القراءة المنشورة ثم المحسوب من الدولار (3.6725)
+    // ملاحظة صادقة: بعض المواقع تنشر «الدرهم» مجرد الدولار ÷ 3.6725 — لو القراءة
+    // تطابق الاشتقاق (±0.5%) نعتبرها محسوبة مش سعر سوق حقيقي.
     const aedComputed = usdSell ? usdSell / AED_PER_USD : null;
-    const aedSdg = overrideAed ?? aedAgg.sell ?? aedAgg.buy ?? aedComputed;
+    const aedRaw = overrideAed ?? aedAgg.sell ?? aedAgg.buy ?? aedComputed;
+    const aedSdg = aedRaw;
+    const derivedFromUsd = !!(aedRaw && aedComputed && Math.abs(aedRaw - aedComputed) / aedRaw < 0.005);
     const aedBasis: 'manual' | 'market' | 'computed' | null =
-      overrideAed ? 'manual' : aedAgg.sell || aedAgg.buy ? 'market' : aedComputed ? 'computed' : null;
+      overrideAed ? 'manual' : aedRaw && !derivedFromUsd ? 'market' : aedRaw ? 'computed' : null;
 
     const warnings = [
       ...parallel.warnings,

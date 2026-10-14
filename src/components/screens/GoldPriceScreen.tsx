@@ -81,6 +81,10 @@ export const GoldPriceScreen: React.FC = () => {
   } = useGoldStore();
 
   const [status, setStatus] = useState('');
+  /** الكيبورد العربي بيكتب أرقام ٠١٢ — خانات type=number بترفضها بصمت؛ نوحّدها إنجليزي */
+  const enDigits = (v: string) =>
+    v.replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+     .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06F0));
   const [aedInput, setAedInput] = useState('');
   const [showOverrides, setShowOverrides] = useState(false);
   const [usdBuyInput, setUsdBuyInput] = useState('');
@@ -469,7 +473,7 @@ export const GoldPriceScreen: React.FC = () => {
                 type="number"
                 inputMode="decimal"
                 value={usdBuyInput}
-                onChange={(e) => setUsdBuyInput(e.target.value)}
+                onChange={(e) => setUsdBuyInput(enDigits(e.target.value))}
                 placeholder="شراء الدولار"
                 className="bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl p-2.5 text-white font-mono text-xs focus:outline-none"
               />
@@ -477,7 +481,7 @@ export const GoldPriceScreen: React.FC = () => {
                 type="number"
                 inputMode="decimal"
                 value={usdSellInput}
-                onChange={(e) => setUsdSellInput(e.target.value)}
+                onChange={(e) => setUsdSellInput(enDigits(e.target.value))}
                 placeholder="بيع الدولار"
                 className="bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl p-2.5 text-white font-mono text-xs focus:outline-none"
               />
@@ -485,7 +489,7 @@ export const GoldPriceScreen: React.FC = () => {
                 type="number"
                 inputMode="decimal"
                 value={ounceInput}
-                onChange={(e) => setOunceInput(e.target.value)}
+                onChange={(e) => setOunceInput(enDigits(e.target.value))}
                 placeholder="الأونصة $"
                 className="bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl p-2.5 text-white font-mono text-xs focus:outline-none"
               />
@@ -516,7 +520,7 @@ export const GoldPriceScreen: React.FC = () => {
             type="number"
             inputMode="decimal"
             value={adjustInput}
-            onChange={(e) => setAdjustInput(e.target.value)}
+            onChange={(e) => setAdjustInput(enDigits(e.target.value))}
             className="flex-1 bg-slate-950 border border-slate-700 focus:border-purple-400 rounded-xl p-3 text-white font-mono text-sm focus:outline-none"
             placeholder="تعديل % (مثال: 1.5 أو -1)"
           />
@@ -556,7 +560,7 @@ export const GoldPriceScreen: React.FC = () => {
               type="number"
               inputMode="decimal"
               value={aedInput}
-              onChange={(e) => setAedInput(e.target.value)}
+              onChange={(e) => setAedInput(enDigits(e.target.value))}
               className="flex-1 bg-slate-950 border border-slate-700 focus:border-cyan-400 rounded-xl p-3 text-white font-mono text-sm focus:outline-none"
               placeholder={engine?.aedSdg ? `سعر الدرهم (الحالي: ${Math.round(engine.aedSdg)})` : 'سعر الدرهم بالجنيه (مثال: 2375)'}
             />
