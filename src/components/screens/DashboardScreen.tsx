@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { profitDisplay } from '../../core/accounting';
 import {
   TrendingDown,
   Scale,
@@ -142,6 +143,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
     setTimeout(() => setIsRefreshing(false), 600);
   };
 
+  // الربح ما ينفعش يظهر بالسالب: سالب = «خسارة»، وقبل أول مبيعة = صفر
+  const dashProfit = profitDisplay({
+    netProfit: financials.netProfit,
+    totalSales: financials.totalSales,
+    generalExpenses: financials.generalExpenses,
+  });
+
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
       {/* Hero: المركز المالي */}
@@ -158,13 +166,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
             <p className="text-[11px] text-slate-400 mt-0.5">إجمالي رأس مال الشركاء المودع</p>
           </div>
           <div className="text-left bg-slate-950/80 p-3 rounded-2xl border border-slate-800">
-            <span className="text-[10px] text-slate-400 block font-bold">صافي الأرباح</span>
+            <span className="text-[10px] text-slate-400 block font-bold">{dashProfit.label}</span>
             <span
               className={`text-base sm:text-lg font-black font-mono ${
-                financials.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                dashProfit.kind === 'loss' ? 'text-rose-400' : 'text-emerald-400'
               }`}
             >
-              {fmtMoney(financials.netProfit)}
+              {fmtMoney(dashProfit.amount)}
             </span>
             <span className="block text-[10px] text-slate-500 mt-0.5">
               هامش {financials.profitMarginPercent.toFixed(1)}%

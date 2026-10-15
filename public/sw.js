@@ -7,7 +7,7 @@
  *  - ملفات ثابتة (_next/static، صور): cache-first مع تحديث بالخلفية.
  */
 
-const VERSION = 'sgc-v6.21.0';
+const VERSION = 'sgc-v6.21.1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const API_CACHE = `${VERSION}-api`;

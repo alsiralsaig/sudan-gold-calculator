@@ -11,6 +11,7 @@ import { SmartSearchBar } from '../common/SmartSearchBar';
 import { smartMatch } from '../../core/globalSearch';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { fmtMoney, fmtNum, kCurrency } from '../../core/format';
+import { distributableProfit, profitDisplay } from '../../core/accounting';
 import { Partner } from '../../types';
 import { useBackClose } from '../../lib/backStack';
 
@@ -19,6 +20,7 @@ export const PartnersScreen: React.FC = () => {
     partners,
     totalCapital,
     netProfit,
+    totalSales,
     generalExpenses,
     privateExpenses,
     totalProfitPercent,
@@ -28,6 +30,10 @@ export const PartnersScreen: React.FC = () => {
     deletePartner,
     expenses,
   } = useGoldStore();
+
+  // الربح ما ينفعش يظهر بالسالب: سالب = «خسارة»، وقبل أول مبيعة = صفر مع تنبيه
+  const profitView = profitDisplay({ netProfit, totalSales: totalSales || 0, generalExpenses });
+  const sharesProfit = distributableProfit(netProfit, totalSales || 0);
 
   const [partnerQuery, setPartnerQuery] = useState('');
   const visiblePartners = partners
@@ -137,8 +143,13 @@ export const PartnersScreen: React.FC = () => {
               <div>صافي</div>
               <div>الربح</div>
             </div>
-            <div className={`text-xs sm:text-sm font-black font-mono truncate ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {fmtNum(netProfit)}
+            <div
+              className={`text-xs sm:text-sm font-black font-mono truncate ${
+                profitView.kind === 'loss' ? 'text-rose-400' : 'text-emerald-400'
+              }`}
+              title={profitView.note || (profitView.kind === 'loss' ? 'المنصرفات أكبر من إجمالي الربح' : undefined)}
+            >
+              {profitView.kind === 'loss' ? `خسارة ${fmtNum(profitView.amount)}` : fmtNum(profitView.amount)}
             </div>
           </div>
 
@@ -210,7 +221,7 @@ export const PartnersScreen: React.FC = () => {
         )}
         {visiblePartners.map((p) => {
           // Partner share of profit
-          const profitShare = (netProfit * p.profitPercent) / 100;
+          const profitShare = (sharesProfit * p.profitPercent) / 100;
           // Partner private expenses
           const partnerExpenses = expenses
             .filter((e) => e.target === p.name || e.name === p.name)
@@ -396,15 +407,21 @@ export const PartnersScreen: React.FC = () => {
       <StickyActionBar
         stats={[
           { label: 'رأس المال', value: fmtNum(totalCapital), tone: 'amber' },
-          { label: 'صافي الأرباح', value: fmtNum(netProfit), tone: netProfit >= 0 ? 'emerald' : 'rose' },
+          {
+            label: profitView.kind === 'loss' ? 'صافي الخسارة' : 'صافي الأرباح',
+            value: fmtNum(profitView.amount),
+            tone: profitView.kind === 'loss' ? 'rose' : 'emerald',
+          },
           { label: 'مجموع النسب', value: `${totalProfitPercent}%`, tone: totalProfitPercent === 100 ? 'emerald' : 'amber' },
           { label: 'الشركاء', value: String(visiblePartners.length), tone: 'slate' },
         ]}
         columns={4}
         hint={
-          totalProfitPercent !== 100 && visiblePartners.length > 0
-            ? `تنبيه: مجموع نسب الشركاء ${totalProfitPercent}% وليس 100%`
-            : undefined
+          profitView.note
+            ? profitView.note
+            : totalProfitPercent !== 100 && visiblePartners.length > 0
+              ? `تنبيه: مجموع نسب الشركاء ${totalProfitPercent}% وليس 100%`
+              : undefined
         }
         actions={[{ label: 'إضافة شريك', onClick: handleOpenAdd, icon: Plus, tone: 'amber' }]}
       />
