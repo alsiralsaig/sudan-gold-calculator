@@ -650,10 +650,70 @@ export interface PricingSnapshot {
   fetchedAt: string;
 }
 
+/* ------------------------------------------------------------------ */
+/*            السوق السوداني (alsoug.com/currency) — جدول العملات       */
+/* ------------------------------------------------------------------ */
+
 /**
- * قارئ الدرهم: مصدر أداء سعر الدرهم الموازي بالجنيه السوداني.
- * يعتمد على جالب اخبار السودان (يستخرج الدرهم من جدول العملات إن نُشر) — مُخزّن 5 دقائق.
- * إن لم يُنشر اليوم يعود فارغاً والمحرك يستخدم المحسوب من الدولار.
+ * جدول alsoug: «العملة | بنك الخرطوم | البديل» والبديل هو السوق الموازي:
+ *   الدولار الامريكي 4231.5 8990
+ *   الدرهم الاماراتي 1159.32 2450
+ * نستخرج الرقم الثاني (البديل) لكل عملة ونتحقق أنه داخل نطاق معقول.
+ */
+export function parseAlsougCurrency(text: string): {
+  usdParallel: number | null;
+  aedParallel: number | null;
+  raw: { usdBank: number | null; aedBank: number | null };
+} {
+  // الأرقام جاية في خلايا جدول مفصولة بأسطر ومسافات — نضغطها الأول
+  const t = normalizeDigits(text).replace(/\s+/g, ' ');
+  // الرقم الأول = بنك الخرطوم، الثاني = البديل (الموازي)
+  const row = (name: string): [number | null, number | null] => {
+    const m = t.match(new RegExp(`${name}[^\\d]{0,60}?([\\d][\\d.,]{2,12})\\s+([\\d][\\d.,]{2,12})`));
+    if (!m) return [null, null];
+    return [toNum(m[1]), toNum(m[2])];
+  };
+
+  const [usdBank, usdParallel] = row('الدولار(?:\\s*(?:الامريكي|الأمريكي))?');
+  const [aedBank, aedParallel] = row('الدرهم(?:\\s*(?:الاماراتي|الإماراتي))?');
+
+  const okUsd = usdParallel && usdParallel >= 500 && usdParallel <= 60_000 ? usdParallel : null;
+  const okAed = aedParallel && aedParallel >= 100 && aedParallel <= 20_000 ? aedParallel : null;
+
+  return { usdParallel: okUsd, aedParallel: okAed, raw: { usdBank, aedBank } };
+}
+
+/** قارئ الدرهم (والدولار الموازي) من صفحة العملات في alsoug */
+async function fetchAlsougReading(): Promise<{ readings: SourceReading[]; error: string | null }> {
+  const readings: SourceReading[] = [];
+  try {
+    const html = await fetchTextRetry('https://www.alsoug.com/currency', 12000, 2);
+    if (!html) throw new Error('no html');
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, ' ')
+      .replace(/<[^>]+>/g, ' ');
+    const parsed = parseAlsougCurrency(text);
+    if (parsed.aedParallel) {
+      readings.push({
+        source: 'السوق السوداني (الدرهم)',
+        kind: 'parallel-aed',
+        price: parsed.aedParallel,
+        at: nowIso(),
+        url: 'https://www.alsoug.com/currency',
+        label: 'سعر الدرهم الإماراتي (البديل)',
+      });
+    }
+    if (!readings.length) return { readings, error: 'السوق السوداني: ما لقينا الدرهم في جدول العملات' };
+    return { readings, error: null };
+  } catch {
+    return { readings, error: 'السوق السوداني: تعذّر الوصول لصفحة العملات' };
+  }
+}
+
+/**
+ * قارئ الدرهم: مصادر سعر الدرهم الموازي بالجنيه السوداني.
+ * يعتمد على جالب اخبار السودان (يستخرج الدرهم من جدول العملات إن نُشر) — مُخزّن 5 دقائق،
+ * ومعاه جدول alsoug (عمود «البديل»). إن لم يُنشر اليوم يعود فارغاً والمحرك يستخدم المحسوب من الدولار.
  */
 async function fetchAedReading(): Promise<{ readings: SourceReading[]; errors: string[] }> {
   const readings: SourceReading[] = [];
@@ -668,6 +728,12 @@ async function fetchAedReading(): Promise<{ readings: SourceReading[]; errors: s
   } catch {
     errors.push('الدرهم: تعذّر الوصول للمصدر');
   }
+
+  // مصدر 2: جدول العملات في alsoug — عمود «البديل» هو السوق الموازي
+  const alsoug = await fetchAlsougReading();
+  readings.push(...alsoug.readings);
+  if (alsoug.error) errors.push(alsoug.error);
+
   return { readings, errors };
 }
 

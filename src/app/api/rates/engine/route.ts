@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { aggregateReadings, computeGoldPrice, compareWithPublished, resolveAedSdg, TRADE_KARAT } from '../../../../core/pricing';
+import { aggregateReadings, computeGoldPrice, compareWithPublished, resolveAedSdg, AED_PER_USD, TRADE_KARAT } from '../../../../core/pricing';
 import { fetchPricingSources } from '../../../../lib/pricingSources';
 
 export const dynamic = 'force-dynamic';
@@ -47,12 +47,28 @@ export async function GET(request: NextRequest) {
     // سعر الدرهم: «من عندي» ثم القراءة المنشورة ثم المحسوب من الدولار (3.6725)
     // ملاحظة صادقة: بعض المواقع تنشر «الدرهم» مجرد الدولار ÷ 3.6725 — لو القراءة
     // تطابق الاشتقاق (±0.5%) نعتبرها محسوبة مش سعر سوق حقيقي.
+    // قراءات الدرهم اللي هي مجرد «دولار ÷ 3.6725» ما بتضيفش معلومة فوق الدولار —
+    // فلو معانا قراءة سوق مستقلة نفضّلها ونحيد المشتقة عشان ما تخفّفها بالمتوسط.
+    const aedComputedRef = usdSell ? usdSell / AED_PER_USD : null;
+    const isDerivedFromUsd = (value: number | null | undefined) =>
+      !!value && !!aedComputedRef && Math.abs(value - aedComputedRef) / value < 0.005;
+    // قراءات الدرهم قد تنشر رقماً مفرداً في price بدل buy/sell — نقرأ الثلاثة
+    const aedValueOf = (r: { buy?: number | null; sell?: number | null; price?: number | null }) =>
+      r.sell ?? r.price ?? r.buy ?? null;
+    const aedAll = snapshot.parallelAed?.readings ?? [];
+    const aedIndependent = aedAll.filter((r) => !isDerivedFromUsd(aedValueOf(r)));
+    const aedIndependentAgg = aedIndependent.length
+      ? aggregateReadings(aedIndependent, 'parallel-aed', new Date(), { minSources: 1 })
+      : null;
+    const aedAggUsed =
+      aedIndependentAgg && (aedIndependentAgg.sell ?? aedIndependentAgg.buy) ? aedIndependentAgg : aedAgg;
+
     // قاعدة الاختيار موحّدة ومُختبَرة في core/pricing.ts — الأولوية:
     // يدوي ← معايرة (تمشي مع الدولار) ← قراءة السوق ← المحسوب من الدولار
     const aedResolution = resolveAedSdg({
       overrideAed,
       aedRatio,
-      aedMarket: aedAgg.sell ?? aedAgg.buy,
+      aedMarket: aedAggUsed.sell ?? aedAggUsed.buy,
       usdSell,
     });
     const aedSdg = aedResolution.aedSdg;
