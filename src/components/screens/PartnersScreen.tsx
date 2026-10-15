@@ -271,9 +271,11 @@ export const PartnersScreen: React.FC = () => {
               {/* Financial Breakdown Table for Partner */}
               <div className="grid grid-cols-3 gap-2 bg-slate-950 p-3 rounded-2xl border border-slate-800/80 text-center text-xs">
                 <div>
-                  <span className="text-[10px] text-slate-400 block">نصيب الأرباح</span>
+                  <span className="text-[10px] text-slate-400 block">
+                    {profitShare < 0 ? 'نصيب الخسارة' : 'نصيب الأرباح'}
+                  </span>
                   <span className={`font-mono font-black ${profitShare >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {fmtNum(profitShare)}
+                    {fmtNum(Math.abs(profitShare))}
                   </span>
                 </div>
                 <div>
