@@ -56,6 +56,8 @@ export interface PartnerShare {
   partner: Partner;
   profitShare: number;
   privateExpenses: number;
+  /** نصيب هذا الشريك من المنصرفات العامة (بالتسمية أو بنسبة الربح) */
+  generalExpenses: number;
   netShare: number;
   capitalPercent: number;
   /** عدد عمليات المسحوبات الخاصة لهذا الشريك */
@@ -190,7 +192,12 @@ export function computeFinancials(
     grossProfit,
     generalExpenses,
     privateExpenses,
-    netProfit: grossProfit - generalExpenses,
+    /**
+     * صافي الربح = إجمالي الربح. المنصرفات العامة **ما تُخصم هنا** لأنها
+     * مُوزّعة على الشركاء بالاسم وتُخصم من صافي المستحق لكل شريك — وإلا
+     * اتحسبت مرتين (مرة في الوعاء ومرة على الشريك).
+     */
+    netProfit: grossProfit,
     receivables,
     payables,
     totalCapital: activePartners.reduce((sum, p) => sum + (p.capital || 0), 0),
@@ -207,8 +214,8 @@ export function computeFinancials(
  * تجهيز رقم الربح للعرض — **الربح ما ينفعش يكون بالسالب**.
  *
  * القاعدة: لو النتيجة سالبة فدي «خسارة» — تُعرض موجبة وباللون الأحمر، لأن رقم
- * سالب تحت عنوان «ربح» مستحيل. والخسارة (زي المنصرفات العامة) تتوزّع على
- * الشركاء بنسب الربح، فكل شريك يشوف «نصيب الخسارة» موجباً.
+ * سالب تحت عنوان «ربح» مستحيل. والخسارة تتوزّع على الشركاء بنسب الربح،
+ * فكل شريك يشوف «نصيب الخسارة» موجباً.
  *
  * القيمة الأصلية بإشارتها محفوظة في `signed` للحسابات، و`amount` دايماً ≥ 0 للعرض.
  */
@@ -227,26 +234,72 @@ export interface ProfitDisplay {
 
 const n = (v: number) => Math.round(v).toLocaleString('en');
 
-export function profitDisplay(input: {
-  netProfit: number;
-  generalExpenses: number;
-}): ProfitDisplay {
-  const { netProfit, generalExpenses } = input;
+export function profitDisplay(input: { netProfit: number }): ProfitDisplay {
+  const { netProfit } = input;
 
   if (netProfit < 0) {
-    const grossProfit = netProfit + generalExpenses;
     return {
       amount: Math.abs(netProfit),
       kind: 'loss',
       label: 'صافي الخسارة',
       signed: netProfit,
-      note: `المنصرفات العامة (${n(generalExpenses)}) أكبر من إجمالي الربح (${n(
-        grossProfit
-      )}) — العجز يتوزّع على الشركاء بنسب الربح`,
+      note: `تكلفة المبيعات أكبر من قيمتها — الخسارة (${n(
+        Math.abs(netProfit)
+      )}) تتوزّع على الشركاء بنسب الربح`,
     };
   }
 
   return { amount: netProfit, kind: 'profit', label: 'صافي الربح', signed: netProfit };
+}
+
+/**
+ * توزيع المنصرفات العامة على الشركاء — **نفس نظام المنصرف الخاص** لكن لأكتر من شريك.
+ *
+ * كل منصرف عام يتحدد عليه الشركاء الذين يتحمّلونه (Expense.partnerNames):
+ *  - لو محددين (شريك أو أكتر) → المبلغ يتقسم بينهم بنسب الربح،
+ *    ولو نسبهم صفر يتقسم بينهم بالتساوي.
+ *  - لو ما محددش حد (منصرف قديم) → يتوزّع على كل الشركاء بنسب الربح.
+ *
+ * الناتج: { اسم الشريك → المبلغ الذي يُخصم منه }
+ */
+export function allocateGeneralExpenses(
+  expenses: Expense[],
+  partners: Partner[]
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  const activePartners = active(partners);
+  if (activePartners.length === 0) return out;
+
+  const activeExpenses = active(expenses).filter(
+    (e) => e.target === 'عام' || !e.target
+  );
+
+  for (const e of activeExpenses) {
+    const amount = e.amount || 0;
+    if (amount === 0) continue;
+
+    // الشركاء المحددين على المنصرف — ولو ما فيش، كل الشركاء
+    const picked = (e.partnerNames || [])
+      .map((n) => activePartners.find((p) => p.name === n))
+      .filter((p): p is Partner => Boolean(p));
+    const bearers = picked.length > 0 ? picked : activePartners;
+
+    // الوزن = نسبة الربح، ولو كل النسب صفر → بالتساوي
+    const weights = bearers.map((p) => Math.max(0, p.profitPercent || 0));
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+
+    let assigned = 0;
+    bearers.forEach((p, i) => {
+      const w = totalWeight > 0 ? weights[i] / totalWeight : 1 / bearers.length;
+      // آخر شريك يستلم الباقي عشان الكسور ما تضيعش
+      const share =
+        i === bearers.length - 1 ? amount - assigned : Math.round(amount * w);
+      assigned += share;
+      out[p.name] = (out[p.name] || 0) + share;
+    });
+  }
+
+  return out;
 }
 
 export function partnerShares(
@@ -257,17 +310,20 @@ export function partnerShares(
 ): PartnerShare[] {
   const activePartners = active(partners);
   const activeExpenses = active(expenses);
+  const generalAllocation = allocateGeneralExpenses(expenses, partners);
 
   return activePartners.map((partner) => {
     const profitShare = (netProfit * (partner.profitPercent || 0)) / 100;
     const partnerExpenses = activeExpenses.filter((e) => e.target === partner.name);
     const privExp = partnerExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const genExp = generalAllocation[partner.name] || 0;
     return {
       partner,
       profitShare,
       privateExpenses: privExp,
+      generalExpenses: genExp,
       privateExpensesCount: partnerExpenses.length,
-      netShare: profitShare - privExp,
+      netShare: profitShare - privExp - genExp,
       capitalPercent: totalCapital > 0 ? ((partner.capital || 0) / totalCapital) * 100 : 0,
     };
   });

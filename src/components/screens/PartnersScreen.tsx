@@ -11,7 +11,7 @@ import { SmartSearchBar } from '../common/SmartSearchBar';
 import { smartMatch } from '../../core/globalSearch';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { fmtMoney, fmtNum, kCurrency } from '../../core/format';
-import { profitDisplay } from '../../core/accounting';
+import { allocateGeneralExpenses, profitDisplay } from '../../core/accounting';
 import { Partner } from '../../types';
 import { useBackClose } from '../../lib/backStack';
 
@@ -30,8 +30,13 @@ export const PartnersScreen: React.FC = () => {
     expenses,
   } = useGoldStore();
 
-  // الربح ما ينفعش يظهر بالسالب: السالب = «خسارة» وتظهر موجبة وتتوزّع على الشركاء
-  const profitView = profitDisplay({ netProfit, generalExpenses });
+  // الربح ما ينفعش يظهر بالسالب: السالب = «خسارة» وتظهر موجبة
+  const profitView = profitDisplay({ netProfit });
+  /**
+   * المنصرفات العامة تتوزّع على الشركاء بنفس نظام المنصرف الخاص:
+   * كل منصرف عام يتحدد عليه شريك أو أكتر بالاسم، والمبلغ يُخصم من مستحق كل واحد.
+   */
+  const generalByPartner = allocateGeneralExpenses(expenses, partners);
 
   const [partnerQuery, setPartnerQuery] = useState('');
   const visiblePartners = partners
@@ -204,7 +209,9 @@ export const PartnersScreen: React.FC = () => {
           </div>
           <div>
             <h3 className="font-extrabold text-base text-white">قائمة الشركاء والمستحقات</h3>
-            <p className="text-[11px] text-slate-400">حساب نصيب كل شريك من الأرباح والمنصرفات الخاصة</p>
+            <p className="text-[11px] text-slate-400">
+              حساب نصيب كل شريك من الأرباح، بعد خصم منصرفاته الخاصة ونصيبه من المنصرفات العامة
+            </p>
           </div>
         </div>
 
@@ -220,12 +227,14 @@ export const PartnersScreen: React.FC = () => {
         {visiblePartners.map((p) => {
           // Partner share of profit
           const profitShare = (netProfit * p.profitPercent) / 100;
-          // Partner private expenses
+          // المنصرفات الخاصة (مسحوبات الشريك باسمه)
           const partnerExpenses = expenses
             .filter((e) => e.target === p.name || e.name === p.name)
             .reduce((sum, e) => sum + e.amount, 0);
+          // نصيبه من المنصرفات العامة المحدّد عليها اسمه
+          const partnerGeneral = generalByPartner[p.name] || 0;
           // Net entitlement
-          const netEntitlement = p.capital + profitShare - partnerExpenses;
+          const netEntitlement = p.capital + profitShare - partnerExpenses - partnerGeneral;
 
           return (
             <div
@@ -267,19 +276,28 @@ export const PartnersScreen: React.FC = () => {
               </div>
 
               {/* Financial Breakdown Table for Partner */}
-              <div className="grid grid-cols-3 gap-2 bg-slate-950 p-3 rounded-2xl border border-slate-800/80 text-center text-xs">
+              <div className="grid grid-cols-4 gap-1.5 bg-slate-950 p-3 rounded-2xl border border-slate-800/80 text-center text-xs">
                 <div>
-                  <span className="text-[10px] text-slate-400 block">
+                  <span className="text-[9px] text-slate-400 block leading-tight">
                     {profitShare < 0 ? 'نصيب الخسارة' : 'نصيب الأرباح'}
                   </span>
-                  <span className={`font-mono font-black ${profitShare >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <span className={`font-mono font-black text-[11px] ${profitShare >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {fmtNum(Math.abs(profitShare))}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block">منصرفات خاصة</span>
-                  <span className="font-mono font-black text-rose-400">
+                  <span className="text-[9px] text-cyan-300/80 block leading-tight">منصرفات خاصة</span>
+                  <span className="font-mono font-black text-[11px] text-cyan-400">
                     {fmtNum(partnerExpenses)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-amber-300/80 block leading-tight">منصرفات عامة</span>
+                  <span
+                    className="font-mono font-black text-[11px] text-amber-400"
+                    title={`نصيب ${p.name} من المنصرفات العامة`}
+                  >
+                    {fmtNum(partnerGeneral)}
                   </span>
                 </div>
                 <div>

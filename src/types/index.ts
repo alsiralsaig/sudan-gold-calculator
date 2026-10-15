@@ -112,6 +112,11 @@ export interface Expense {
   amount: number;
   category: string;
   target: string; // 'عام' or partner name
+  /**
+   * الشركاء الذين يتحمّلون هذا المصروف **العام** بالاسم — مثل المنصرف الخاص.
+   * لو فارغ أو غير محدد → يتوزّع على كل الشركاء بنسب الربح.
+   */
+  partnerNames?: string[];
   name: string;
   notes: string;
   /** الفرع الذي صُرف فيه المبلغ */

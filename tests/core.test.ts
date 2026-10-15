@@ -132,7 +132,8 @@ test('computeFinancials: الذمم المدينة والدائنة صحيحة',
   assert.equal(fin.receivables, 1_500_000);
   assert.equal(fin.payables, 2_500_000);
   assert.equal(fin.grossProfit, 2_000_000);
-  assert.equal(fin.netProfit, 1_500_000);
+  // المنصرفات العامة ما تُخصم من الوعاء — مُوزّعة على الشركاء بالاسم (تُخصم من مستحق كل شريك)
+  assert.equal(fin.netProfit, 2_000_000);
   assert.equal(fin.openCreditSales, 1);
 });
 

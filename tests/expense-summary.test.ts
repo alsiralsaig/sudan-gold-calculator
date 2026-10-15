@@ -182,7 +182,9 @@ test('partnerShares: عدد المسحوبات لكل شريك (لجدول ال�
   const ahmed = shares.find((x) => x.partner.name === 'أحمد');
   assert.equal(ahmed?.privateExpenses, 3000);
   assert.equal(ahmed?.privateExpensesCount, 2);
-  assert.equal(ahmed?.netShare, 2000, '5000 نصيب − 3000 مسحوبات');
+  // العامة (9,999 بدون أسماء) تتوزّع 50/50 → 5,000 لأحمد و4,999 لتاج السر
+  assert.equal(ahmed?.generalExpenses, 5000);
+  assert.equal(ahmed?.netShare, -3000, '5000 نصيب − 3000 مسحوبات − 5000 نصيبه من العامة');
   const taj = shares.find((x) => x.partner.name === 'تاج السر');
   assert.equal(taj?.privateExpensesCount, 1);
 });

@@ -144,10 +144,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
   };
 
   // الربح ما ينفعش يظهر بالسالب: السالب = «خسارة» وتظهر موجبة
-  const dashProfit = profitDisplay({
-    netProfit: financials.netProfit,
-    generalExpenses: financials.generalExpenses,
-  });
+  const dashProfit = profitDisplay({ netProfit: financials.netProfit });
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">

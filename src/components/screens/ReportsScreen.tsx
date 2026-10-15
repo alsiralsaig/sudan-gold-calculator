@@ -618,6 +618,7 @@ export const ReportsScreen: React.FC = () => {
                   <th className="text-right py-2 px-3 font-bold">النسبة</th>
                   <th className="text-right py-2 px-3 font-bold">نصيب الربح</th>
                   <th className="text-right py-2 px-3 font-bold">مسحوبات (عدد)</th>
+                  <th className="text-right py-2 px-3 font-bold">منصرفات عامة</th>
                   <th className="text-right py-2 px-3 font-bold">الصافي</th>
                 </tr>
               </thead>
@@ -631,6 +632,9 @@ export const ReportsScreen: React.FC = () => {
                       {fmtNum(p.privateExpenses)}
                       <span className="block text-[10px] text-slate-500">{p.privateExpensesCount} عملية</span>
                     </td>
+                    <td className="py-2 px-3 font-mono text-amber-400">
+                      {fmtNum(p.generalExpenses || 0)}
+                    </td>
                     <td className="py-2 px-3 font-mono text-amber-300 font-bold">{fmtNum(p.netShare)}</td>
                   </tr>
                 ))}
@@ -638,7 +642,7 @@ export const ReportsScreen: React.FC = () => {
             </table>
           </div>
           <p className="text-[10px] text-slate-500">
-            الصافي = نصيب الربح − المسحوبات الخاصة (المصروفات المنسوبة للشريك). للتفصيل الكامل اضغط أيام الفترة في شاشة «سجل المصروفات» ثم اختر الشريك.
+            الصافي = نصيب الربح − المسحوبات الخاصة − نصيب الشريك من المنصرفات العامة (المصروفات المنسوبة للشريك بالاسم أو بنسبة ربحه). للتفصيل الكامل اضغط أيام الفترة في شاشة «سجل المصروفات» ثم اختر الشريك.
           </p>
         </div>
       )}

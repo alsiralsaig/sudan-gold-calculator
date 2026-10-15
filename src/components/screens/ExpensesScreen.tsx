@@ -63,6 +63,8 @@ export const ExpensesScreen: React.FC = () => {
   const [amount, setAmount] = useState('');
   const [targetType, setTargetType] = useState<'عام' | 'خاص'>('عام');
   const [selectedPartner, setSelectedPartner] = useState<string>(partners[0]?.name || 'السر الصائغ');
+  /** الشركاء الذين يتحمّلون المنصرف العام — لو فاضي يتوزّع على الكل بنسب الربح */
+  const [generalPartnerNames, setGeneralPartnerNames] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
 
   // وضع «سلفة» داخل شاشة المنصرفات — السلفة لا تُحسب مصروفاً
@@ -81,6 +83,7 @@ export const ExpensesScreen: React.FC = () => {
     setAmount('');
     setTargetType('عام');
     setSelectedPartner(partners[0]?.name || '');
+    setGeneralPartnerNames([]);
     setNotes('');
     setIsLoanMode(false);
     setLoanDirection('lent');
@@ -97,6 +100,7 @@ export const ExpensesScreen: React.FC = () => {
     const isPublic = !exp.target || exp.target === 'عام';
     setTargetType(isPublic ? 'عام' : 'خاص');
     setSelectedPartner(!isPublic ? exp.target : (partners[0]?.name || ''));
+    setGeneralPartnerNames(isPublic ? (exp.partnerNames || []) : []);
     setNotes(exp.notes || '');
     setIsLoanMode(false);
     setShowAddModal(true);
@@ -122,6 +126,11 @@ export const ExpensesScreen: React.FC = () => {
     }
 
     const actualTarget = targetType === 'عام' ? 'عام' : (selectedPartner || 'شريك');
+    // المنصرف العام: الشركاء المحددين بالاسم — لو ما فيش → يتوزّع على الكل بنسب الربح
+    const generalNames =
+      targetType === 'عام'
+        ? generalPartnerNames.filter((n) => partners.some((p) => !p.archived && p.name === n))
+        : undefined;
 
     if (editingExpenseId) {
       const existing = expenses.find((x) => x.id === editingExpenseId);
@@ -132,6 +141,7 @@ export const ExpensesScreen: React.FC = () => {
           amount: parseFloat(amount) || existing.amount,
           category: targetType === 'عام' ? 'منصرفات عامة' : 'مسحوبات شريك',
           target: actualTarget,
+          partnerNames: generalNames,
           notes: notes.trim(),
           updatedAt: new Date().toISOString(),
         });
@@ -147,6 +157,7 @@ export const ExpensesScreen: React.FC = () => {
       amount: parseFloat(amount) || 0,
       category: targetType === 'عام' ? 'منصرفات عامة' : 'مسحوبات شريك',
       target: actualTarget,
+      partnerNames: generalNames,
       notes: notes.trim(),
     });
 
@@ -690,6 +701,48 @@ export const ExpensesScreen: React.FC = () => {
                   <span>خاص (مسحوبات شريك)</span>
                 </button>
               </div>
+
+              {/* اختيار الشركاء الذين يتحمّلون المنصرف العام */}
+              {targetType === 'عام' && (
+                <div className="animate-in fade-in pt-1 space-y-2">
+                  <label className="block text-xs text-slate-400">
+                    يتحمّله الشركاء: <span className="text-amber-300/90">(ممكن تحدد أكتر من واحد)</span>
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {partners
+                      .filter((p) => !p.archived)
+                      .map((p) => {
+                        const on = generalPartnerNames.includes(p.name);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() =>
+                              setGeneralPartnerNames((prev) =>
+                                prev.includes(p.name)
+                                  ? prev.filter((n) => n !== p.name)
+                                  : [...prev, p.name]
+                              )
+                            }
+                            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
+                              on
+                                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
+                                : 'bg-slate-950 text-slate-300 border-slate-700'
+                            }`}
+                          >
+                            {on ? '✓ ' : ''}
+                            {p.name}
+                          </button>
+                        );
+                      })}
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                    {generalPartnerNames.length > 0
+                      ? `المبلغ يتقسم على: ${generalPartnerNames.join('، ')}`
+                      : 'لو ما حدّدتش حد → يتوزّع على كل الشركاء بنسب الربح'}
+                  </p>
+                </div>
+              )}
 
               {/* Partner Dropdown if Private */}
               {targetType === 'خاص' && (
