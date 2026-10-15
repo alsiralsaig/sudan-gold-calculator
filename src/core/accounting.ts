@@ -204,19 +204,16 @@ export function computeFinancials(
 }
 
 /**
- * الربح القابل للتوزيع على الشركاء.
+ * تجهيز رقم الربح للعرض — **الربح ما ينفعش يكون بالسالب**.
  *
- * القاعدة: **قبل أول مبيعة ما فيش ربح ولا خسارة.** المنصرفات العامة اللي تتسجّل
- * وقت التأسيس (إيجار، تجهيز...) ما تتحسبش خسارة على الشركاء — تُرحَّل وتظهر من
- * أول مبيعة. بعد كدة لو المنصرفات أكبر من إجمالي الربح فدي خسارة حقيقية وتُعرض كخسارة.
+ * القاعدة: لو النتيجة سالبة فدي «خسارة» — تُعرض موجبة وباللون الأحمر، لأن رقم
+ * سالب تحت عنوان «ربح» مستحيل. والخسارة (زي المنصرفات العامة) تتوزّع على
+ * الشركاء بنسب الربح، فكل شريك يشوف «نصيب الخسارة» موجباً.
+ *
+ * القيمة الأصلية بإشارتها محفوظة في `signed` للحسابات، و`amount` دايماً ≥ 0 للعرض.
  */
-export function distributableProfit(netProfit: number, totalSales: number): number {
-  if (!(totalSales > 0) && netProfit < 0) return 0;
-  return netProfit;
-}
-
 export interface ProfitDisplay {
-  /** القيمة المعروضة — موجبة دائماً، والإشارة في kind */
+  /** الرقم كما يُعرض — دايماً موجب أو صفر */
   amount: number;
   /** ربح أم خسارة */
   kind: 'profit' | 'loss';
@@ -224,41 +221,32 @@ export interface ProfitDisplay {
   label: string;
   /** القيمة الموقّعة كما تُستخدم في الحساب */
   signed: number;
-  /** توضيح للمستخدم لما نرحّل المنصرفات (قبل أول مبيعة) */
+  /** توضيح سبب الخسارة */
   note?: string;
 }
 
-/**
- * تجهيز رقم الربح للعرض — **الربح ما ينفعش يكون بالسالب**:
- * لو النتيجة سالبة نسمّيها «خسارة» ونعرضها موجبة، ولو لسه ما فيش مبيعات
- * نعرض صفر مع تنبيه إن المنصرفات مؤجّلة لأول مبيعة.
- */
+const n = (v: number) => Math.round(v).toLocaleString('en');
+
 export function profitDisplay(input: {
   netProfit: number;
-  totalSales: number;
   generalExpenses: number;
 }): ProfitDisplay {
-  const { netProfit, totalSales, generalExpenses } = input;
-  const signed = distributableProfit(netProfit, totalSales);
+  const { netProfit, generalExpenses } = input;
 
-  if (signed < 0) {
-    return { amount: Math.abs(signed), kind: 'loss', label: 'صافي الخسارة', signed };
-  }
-
-  // قبل أول مبيعة: المنصرفات مؤجّلة — نوضّحها للمستخدم بدل رقم سالب
-  if (netProfit < 0 && !(totalSales > 0)) {
+  if (netProfit < 0) {
+    const grossProfit = netProfit + generalExpenses;
     return {
-      amount: 0,
-      kind: 'profit',
-      label: 'صافي الربح',
-      signed,
-      note: `ما فيش مبيعات مسجلة لسه — المنصرفات العامة (${Math.round(
-        generalExpenses
-      ).toLocaleString('en')}) هتتحسب من أول مبيعة`,
+      amount: Math.abs(netProfit),
+      kind: 'loss',
+      label: 'صافي الخسارة',
+      signed: netProfit,
+      note: `المنصرفات العامة (${n(generalExpenses)}) أكبر من إجمالي الربح (${n(
+        grossProfit
+      )}) — العجز يتوزّع على الشركاء بنسب الربح`,
     };
   }
 
-  return { amount: signed, kind: 'profit', label: 'صافي الربح', signed };
+  return { amount: netProfit, kind: 'profit', label: 'صافي الربح', signed: netProfit };
 }
 
 export function partnerShares(

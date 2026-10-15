@@ -1,37 +1,54 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { distributableProfit, profitDisplay } from '../src/core/accounting';
+import { profitDisplay } from '../src/core/accounting';
 
-/** نفس حالة صورتك: تطبيق لسه ما باعش، وعليه 26,000 منصرفات عامة */
-const ZEROED = { netProfit: -26_000, totalSales: 0, generalExpenses: 26_000 };
+/** نفس حالة صورتك: تطبيق مصفر، وعليه 26,000 منصرفات عامة + 58,500 منصرفات خاصة */
+const ZEROED = { netProfit: -26_000, generalExpenses: 26_000 };
 
-test('قبل أول مبيعة: ما فيش خسارة — الصفر مع تنبيه بالمنصرفات المؤجّلة', () => {
+test('المنصرفات العامة تخصم وتظهر كخسارة — مش رقم سالب تحت عنوان «ربح»', () => {
   const d = profitDisplay(ZEROED);
-  assert.equal(d.signed, 0, 'ما يتوزّعش ربح سالب');
-  assert.equal(d.amount, 0);
-  assert.equal(d.kind, 'profit');
-  assert.equal(d.label, 'صافي الربح');
-  assert.ok(d.note?.includes('26,000'), `التنبيه يوضّح المبلغ: ${d.note}`);
-  assert.ok(d.note?.includes('ما فيش مبيعات'), 'يوضّح السبب');
-});
-
-test('distributableProfit: قبل أول مبيعة والربح سالب → صفر', () => {
-  assert.equal(distributableProfit(-26_000, 0), 0);
-  assert.equal(distributableProfit(-26_000, 0), 0);
-});
-
-test('بعد أول مبيعة: الخسارة الحقيقية تتسمّى خسارة وتظهر موجبة', () => {
-  // باعوا بـ 100 ألف، تكلفة 90 ألف، ومنصرفات 26 ألف → خسارة 16 ألف
-  const d = profitDisplay({ netProfit: -16_000, totalSales: 100_000, generalExpenses: 26_000 });
-  assert.equal(d.kind, 'loss', 'دي خسارة حقيقية');
+  assert.equal(d.kind, 'loss');
   assert.equal(d.label, 'صافي الخسارة');
-  assert.equal(d.amount, 16_000, 'تظهر موجبة — الرقم سالب مش منطقي في خانة «ربح»');
-  assert.equal(d.signed, -16_000, 'والحساب الداخلي يفضل بإشارته');
+  assert.equal(d.amount, 26_000, 'موجبة — الرقم السالب ممنوع');
+  assert.equal(d.signed, -26_000, 'والحساب الداخلي يفضل بإشارته');
+});
+
+test('الخسارة تتوزّع على الشركاء بنسب الربح (50% → 13,000 لكل واحد)', () => {
+  const d = profitDisplay(ZEROED);
+  const shareA = (d.signed * 50) / 100;
+  const shareB = (d.signed * 50) / 100;
+  const shareC = (d.signed * 0) / 100;
+  assert.equal(shareA, -13_000);
+  assert.equal(shareB, -13_000);
+  assert.equal(Math.abs(shareC), 0, 'شريك بنسبة 0% ما يتحمّلش خسارة، وما يظهرش -0');
+  // والعرض: موجب وباسم «نصيب الخسارة»
+  assert.equal(Math.abs(shareA), 13_000);
+});
+
+test('صافي المستحق = رأس المال + نصيب الخسارة − المنصرفات الخاصة', () => {
+  const netProfit = -26_000;
+  const ناجو = { capital: 2_020_000, pct: 50, priv: 44_500 };
+  const تاجو = { capital: 9_581_000, pct: 50, priv: 14_000 };
+  const والي = { capital: 2_230_000, pct: 0, priv: 0 };
+
+  const net = (p: { capital: number; pct: number; priv: number }) =>
+    p.capital + (netProfit * p.pct) / 100 - p.priv;
+
+  assert.equal(net(ناجو), 1_962_500, '2,020,000 − 13,000 − 44,500');
+  assert.equal(net(تاجو), 9_554_000, '9,581,000 − 13,000 − 14,000');
+  assert.equal(net(والي), 2_230_000, 'نسبة 0% → ما يتأثرش');
+});
+
+test('التنبيه يوضّح السبب: المنصرفات أكبر من إجمالي الربح', () => {
+  const d = profitDisplay(ZEROED);
+  assert.ok(d.note?.includes('26,000'), `يذكر المنصرفات: ${d.note}`);
+  assert.ok(d.note?.includes('إجمالي الربح'), `يذكر إجمالي الربح: ${d.note}`);
+  assert.ok(d.note?.includes('0'), `إجمالي الربح صفر: ${d.note}`);
 });
 
 test('ربح موجب: التسمية «صافي الربح» والرقم زي ما هو', () => {
-  const d = profitDisplay({ netProfit: 500_000, totalSales: 2_000_000, generalExpenses: 26_000 });
+  const d = profitDisplay({ netProfit: 500_000, generalExpenses: 26_000 });
   assert.equal(d.kind, 'profit');
   assert.equal(d.label, 'صافي الربح');
   assert.equal(d.amount, 500_000);
@@ -40,29 +57,22 @@ test('ربح موجب: التسمية «صافي الربح» والرقم زي 
 });
 
 test('صفر بالظبط = ربح صفر، مش خسارة', () => {
-  const d = profitDisplay({ netProfit: 0, totalSales: 0, generalExpenses: 0 });
+  const d = profitDisplay({ netProfit: 0, generalExpenses: 0 });
   assert.equal(d.kind, 'profit');
   assert.equal(d.amount, 0);
   assert.equal(d.signed, 0);
 });
 
-test('المنصرفات ما تُخفيش خسارة حقيقية بعد بدء البيع', () => {
-  const d = profitDisplay({ netProfit: -5_000, totalSales: 1_000, generalExpenses: 26_000 });
-  assert.equal(d.kind, 'loss', 'بمجرد ما في مبيعات → الخسارة تظهر');
+test('خسارة بعد مبيعات: تظهر موجبة وسببها واضح', () => {
+  // باعوا بـ 100 ألف، تكلفة 90 ألف → إجمالي الربح 10 آلاف، والمنصرفات 26 ألف
+  const d = profitDisplay({ netProfit: -16_000, generalExpenses: 26_000 });
+  assert.equal(d.kind, 'loss');
+  assert.equal(d.amount, 16_000);
+  assert.ok(d.note?.includes('10,000'), `يذكر إن إجمالي الربح 10,000: ${d.note}`);
+});
+
+test('الخسارة ما تتخبّش — لو المنصرفات كبرت عن الربح تظهر', () => {
+  const d = profitDisplay({ netProfit: -5_000, generalExpenses: 26_000 });
+  assert.equal(d.kind, 'loss');
   assert.equal(d.amount, 5_000);
-});
-
-test('توزيع أنصبة الشركاء على -26,000 قبل أول مبيعة → كل واحد صفر', () => {
-  const base = distributableProfit(-26_000, 0);
-  const partnerA = (base * 50) / 100;
-  const partnerB = (base * 50) / 100;
-  const partnerC = (base * 0) / 100;
-  assert.equal(partnerA, 0, 'بدل -13,000 اللي كانت باينة في الصورة');
-  assert.equal(partnerB, 0);
-  assert.equal(partnerC, 0);
-});
-
-test('توزيع أنصبة الشركاء بعد المبيعات → الخسارة تتوزّع', () => {
-  const base = distributableProfit(-16_000, 100_000);
-  assert.equal((base * 50) / 100, -8_000, 'كل شريك يتحمّل نصيبه');
 });

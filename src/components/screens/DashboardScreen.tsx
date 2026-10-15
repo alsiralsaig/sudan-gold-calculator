@@ -143,10 +143,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) 
     setTimeout(() => setIsRefreshing(false), 600);
   };
 
-  // الربح ما ينفعش يظهر بالسالب: سالب = «خسارة»، وقبل أول مبيعة = صفر
+  // الربح ما ينفعش يظهر بالسالب: السالب = «خسارة» وتظهر موجبة
   const dashProfit = profitDisplay({
     netProfit: financials.netProfit,
-    totalSales: financials.totalSales,
     generalExpenses: financials.generalExpenses,
   });
 

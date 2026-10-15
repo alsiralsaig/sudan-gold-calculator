@@ -11,7 +11,7 @@ import { SmartSearchBar } from '../common/SmartSearchBar';
 import { smartMatch } from '../../core/globalSearch';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { fmtMoney, fmtNum, kCurrency } from '../../core/format';
-import { distributableProfit, profitDisplay } from '../../core/accounting';
+import { profitDisplay } from '../../core/accounting';
 import { Partner } from '../../types';
 import { useBackClose } from '../../lib/backStack';
 
@@ -20,7 +20,6 @@ export const PartnersScreen: React.FC = () => {
     partners,
     totalCapital,
     netProfit,
-    totalSales,
     generalExpenses,
     privateExpenses,
     totalProfitPercent,
@@ -31,9 +30,8 @@ export const PartnersScreen: React.FC = () => {
     expenses,
   } = useGoldStore();
 
-  // الربح ما ينفعش يظهر بالسالب: سالب = «خسارة»، وقبل أول مبيعة = صفر مع تنبيه
-  const profitView = profitDisplay({ netProfit, totalSales: totalSales || 0, generalExpenses });
-  const sharesProfit = distributableProfit(netProfit, totalSales || 0);
+  // الربح ما ينفعش يظهر بالسالب: السالب = «خسارة» وتظهر موجبة وتتوزّع على الشركاء
+  const profitView = profitDisplay({ netProfit, generalExpenses });
 
   const [partnerQuery, setPartnerQuery] = useState('');
   const visiblePartners = partners
@@ -147,7 +145,7 @@ export const PartnersScreen: React.FC = () => {
               className={`text-xs sm:text-sm font-black font-mono truncate ${
                 profitView.kind === 'loss' ? 'text-rose-400' : 'text-emerald-400'
               }`}
-              title={profitView.note || (profitView.kind === 'loss' ? 'المنصرفات أكبر من إجمالي الربح' : undefined)}
+              title={profitView.note}
             >
               {profitView.kind === 'loss' ? `خسارة ${fmtNum(profitView.amount)}` : fmtNum(profitView.amount)}
             </div>
@@ -221,7 +219,7 @@ export const PartnersScreen: React.FC = () => {
         )}
         {visiblePartners.map((p) => {
           // Partner share of profit
-          const profitShare = (sharesProfit * p.profitPercent) / 100;
+          const profitShare = (netProfit * p.profitPercent) / 100;
           // Partner private expenses
           const partnerExpenses = expenses
             .filter((e) => e.target === p.name || e.name === p.name)
