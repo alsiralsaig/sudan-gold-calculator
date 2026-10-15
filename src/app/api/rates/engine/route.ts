@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const overrideUsdSell = numParam('usdSell');
     const overrideOunce = numParam('ounce');
     const overrideAed = numParam('aed');
-    const aedRatio = numParam('aedRatio'); // معايرة: نسبة الدرهم الحقيقي للمحسوب من الدولار (0.5-2)
+    const aedRatio = numParam('aedRatio'); // معايرة: نسبة الدرهم الحقيقي للمحسوب من الدولار (المدى في core/pricing)
     const adjust = numParam('adjust') ?? 0;
     const karat = numParam('karat') ?? TRADE_KARAT;
 

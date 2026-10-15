@@ -280,9 +280,17 @@ export interface GoldComputationInput {
 /** الدرهم مربوط بالدولار: 3.6725 درهم/دولار */
 export const AED_PER_USD = 3.6725;
 
-/** حدود قبول نسبة المعايرة (الدرهم الحقيقي ÷ المحسوب من الدولار) */
-export const AED_RATIO_MIN = 0.3;
-export const AED_RATIO_MAX = 3;
+/**
+ * حدود قبول نسبة المعايرة (الدرهم الحقيقي ÷ المحسوب من الدولار).
+ * مفتوح عمداً (من 5% لـ 20 ضعف) لأن الحارس الفعلي هو نطاق الدرهم الناتج أدناه —
+ * فالنسبة الغريبة بس ما تكفيش للرفض، المهم الرقم اللي بيطلع في النهاية.
+ */
+export const AED_RATIO_MIN = 0.05;
+export const AED_RATIO_MAX = 20;
+
+/** نطاق سعر الدرهم المقبول بالجنيه — نفس نطاق قراءات السوق الموازي (limitOf('parallel-aed')) */
+export const AED_SDG_MIN = 100;
+export const AED_SDG_MAX = 20_000;
 
 export type AedBasis = 'manual' | 'anchored' | 'market' | 'computed' | null;
 
@@ -321,8 +329,11 @@ export function resolveAedSdg(input: AedResolutionInput): AedResolution {
   const computed = input.usdSell && input.usdSell > 0 ? input.usdSell / AED_PER_USD : null;
 
   const ratio = Number(input.aedRatio);
-  const ratioValid = Number.isFinite(ratio) && ratio > AED_RATIO_MIN && ratio < AED_RATIO_MAX;
-  const anchored = ratioValid && computed ? ratio * computed : null;
+  const ratioValid = Number.isFinite(ratio) && ratio >= AED_RATIO_MIN && ratio <= AED_RATIO_MAX;
+  // المعايرة مقبولة لو ناتجها درهم معقول — ده اللي يمنع كباية زي 2500 مكان 25000
+  const anchoredValue = ratioValid && computed ? ratio * computed : null;
+  const anchored =
+    anchoredValue !== null && anchoredValue >= AED_SDG_MIN && anchoredValue <= AED_SDG_MAX ? anchoredValue : null;
 
   const override = Number(input.overrideAed);
   const market = Number(input.aedMarket);
@@ -343,9 +354,10 @@ export function resolveAedSdg(input: AedResolutionInput): AedResolution {
  */
 export function aedAnchorRatio(aed: number, usdSell: number): number | null {
   if (!(aed > 0) || !(usdSell > 0)) return null;
+  if (aed < AED_SDG_MIN || aed > AED_SDG_MAX) return null;
   const computed = usdSell / AED_PER_USD;
   const ratio = Math.round((aed / computed) * 10000) / 10000;
-  return ratio > AED_RATIO_MIN && ratio < AED_RATIO_MAX ? ratio : null;
+  return ratio >= AED_RATIO_MIN && ratio <= AED_RATIO_MAX ? ratio : null;
 }
 
 export interface GoldComputation {

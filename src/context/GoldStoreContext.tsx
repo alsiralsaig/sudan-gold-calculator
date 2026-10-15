@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { aedAnchorRatio, checkApproval, computeGoldPrice, TRADE_KARAT } from '../core/pricing';
+import { aedAnchorRatio, checkApproval, computeGoldPrice, AED_RATIO_MAX, AED_RATIO_MIN, TRADE_KARAT } from '../core/pricing';
 import type { Aggregate, ApprovedPrice, GoldComputation, SourceReading } from '../core/pricing';
 import {
   AppTombstones,
@@ -757,7 +757,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const rawA = localStorage.getItem(AED_ANCHOR_KEY);
         if (rawA) {
           const a = JSON.parse(rawA);
-          if (a && Number(a.aed) > 0 && Number(a.usd) > 0 && Number(a.ratio) > 0.3 && Number(a.ratio) < 3) {
+          if (a && Number(a.aed) > 0 && Number(a.usd) > 0 && Number(a.ratio) >= AED_RATIO_MIN && Number(a.ratio) <= AED_RATIO_MAX) {
             setAedAnchorState({ aed: Number(a.aed), usd: Number(a.usd), ratio: Number(a.ratio) });
           }
         }
@@ -1260,7 +1260,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (overrides?.ounce) params.set('ounce', String(overrides.ounce));
         // المعايرة أولاً: الدرهم = النسبة × (الدولار ÷ 3.6725) في كل جلب — يمشي مع السوق لحظياً.
         // القيمة اليدوية تبقى احتياط: تُستخدم فقط لو ما فيش معايرة (مثلاً الدولار مش متاح وقت الإدخال).
-        if (aedAnchor && aedAnchor.ratio > 0.3 && aedAnchor.ratio < 3) params.set('aedRatio', String(aedAnchor.ratio));
+        if (aedAnchor && aedAnchor.ratio >= AED_RATIO_MIN && aedAnchor.ratio <= AED_RATIO_MAX) params.set('aedRatio', String(aedAnchor.ratio));
         else if (aedManual && aedManual > 0) params.set('aed', String(aedManual));
         const res = await fetch(`/api/rates/engine?${params.toString()}`, { cache: 'no-store' });
         if (!res.ok) {
