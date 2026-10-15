@@ -78,6 +78,7 @@ export const GoldPriceScreen: React.FC = () => {
     setLocalAdjust,
     aedManual,
     setAedManual,
+    aedAnchor,
   } = useGoldStore();
 
   const [status, setStatus] = useState('');
@@ -543,17 +544,24 @@ export const GoldPriceScreen: React.FC = () => {
             </span>
             {engine?.aedBasis && (
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                engine.aedBasis === 'manual' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                engine.aedBasis === 'manual' || engine.aedBasis === 'anchored'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
                 : engine.aedBasis === 'market' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                 : 'bg-slate-700/40 text-slate-400 border-slate-600'}`}>
                 {engine.aedBasis === 'manual' ? `من عندي: ${Math.round(engine.aedSdg || 0)}`
                  : engine.aedBasis === 'market' ? `من السوق: ${Math.round(engine.aedSdg || 0)}`
+                 : engine.aedBasis === 'anchored' ? `معايرتك: ${Math.round(engine.aedSdg || 0)} (تمشي مع الدولار)`
                  : `محسوب من الدولار: ${Math.round(engine.aedSdg || 0)}`}
               </span>
             )}
           </div>
           <p className="text-[10px] text-slate-500 leading-relaxed">
             دهب السودان بيتباع للإمارات بالدرهم — التسعير هنا بيمشي بسعر الدرهم الموازي، فبيريحك من فرق الدولار.
+            {aedAnchor ? (
+              <> <span className="text-cyan-300 font-bold">معايرة شغالة: {aedAnchor.aed} مع دولار {aedAnchor.usd.toLocaleString('en')}</span> — أي تحرك في الدولار بيمشي الدرهم بنفس النسبة تلقائياً.</>
+            ) : (
+              <> أدخل الدرهم اللي قاله لك الصراف مرة واحدة — والتطبيق بيمشي بيه مع الدولار تلقائياً بعد كده.</>
+            )}
           </p>
           <div className="flex items-center gap-2">
             <input
@@ -568,7 +576,7 @@ export const GoldPriceScreen: React.FC = () => {
               تطبيق
             </button>
             {aedManual && (
-              <button onClick={clearAed} className="px-3 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors" title="رجوع للمصادر">
+              <button onClick={clearAed} className="px-3 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors" title="مسح المعايرة والرجوع للمصادر">
                 ✕
               </button>
             )}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { aggregateReadings, computeGoldPrice, compareWithPublished, TRADE_KARAT, AED_PER_USD } from '../../../../core/pricing';
+import { aggregateReadings, computeGoldPrice, compareWithPublished, resolveAedSdg, TRADE_KARAT } from '../../../../core/pricing';
 import { fetchPricingSources } from '../../../../lib/pricingSources';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
     const overrideUsdSell = numParam('usdSell');
     const overrideOunce = numParam('ounce');
     const overrideAed = numParam('aed');
+    const aedRatio = numParam('aedRatio'); // معايرة: نسبة الدرهم الحقيقي للمحسوب من الدولار (0.5-2)
     const adjust = numParam('adjust') ?? 0;
     const karat = numParam('karat') ?? TRADE_KARAT;
 
@@ -46,12 +47,16 @@ export async function GET(request: NextRequest) {
     // سعر الدرهم: «من عندي» ثم القراءة المنشورة ثم المحسوب من الدولار (3.6725)
     // ملاحظة صادقة: بعض المواقع تنشر «الدرهم» مجرد الدولار ÷ 3.6725 — لو القراءة
     // تطابق الاشتقاق (±0.5%) نعتبرها محسوبة مش سعر سوق حقيقي.
-    const aedComputed = usdSell ? usdSell / AED_PER_USD : null;
-    const aedRaw = overrideAed ?? aedAgg.sell ?? aedAgg.buy ?? aedComputed;
-    const aedSdg = aedRaw;
-    const derivedFromUsd = !!(aedRaw && aedComputed && Math.abs(aedRaw - aedComputed) / aedRaw < 0.005);
-    const aedBasis: 'manual' | 'market' | 'computed' | null =
-      overrideAed ? 'manual' : aedRaw && !derivedFromUsd ? 'market' : aedRaw ? 'computed' : null;
+    // قاعدة الاختيار موحّدة ومُختبَرة في core/pricing.ts — الأولوية:
+    // يدوي ← معايرة (تمشي مع الدولار) ← قراءة السوق ← المحسوب من الدولار
+    const aedResolution = resolveAedSdg({
+      overrideAed,
+      aedRatio,
+      aedMarket: aedAgg.sell ?? aedAgg.buy,
+      usdSell,
+    });
+    const aedSdg = aedResolution.aedSdg;
+    const aedBasis = aedResolution.basis;
 
     const warnings = [
       ...parallel.warnings,

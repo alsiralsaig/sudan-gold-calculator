@@ -280,6 +280,74 @@ export interface GoldComputationInput {
 /** الدرهم مربوط بالدولار: 3.6725 درهم/دولار */
 export const AED_PER_USD = 3.6725;
 
+/** حدود قبول نسبة المعايرة (الدرهم الحقيقي ÷ المحسوب من الدولار) */
+export const AED_RATIO_MIN = 0.3;
+export const AED_RATIO_MAX = 3;
+
+export type AedBasis = 'manual' | 'anchored' | 'market' | 'computed' | null;
+
+export interface AedResolution {
+  /** سعر الدرهم بالجنيه المعتمد (null = ما فيش أي مصدر) */
+  aedSdg: number | null;
+  /** مصدر الرقم — يظهر للمستخدم عشان يعرف على أي أساس اتسعّر */
+  basis: AedBasis;
+}
+
+export interface AedResolutionInput {
+  /** قيمة ثابتة من المستخدم (?aed=) — لا تمشي مع الدولار */
+  overrideAed?: number | null;
+  /** نسبة المعايرة (?aedRatio=) = الدرهم الحقيقي ÷ المحسوب من الدولار وقت الإدخال */
+  aedRatio?: number | null;
+  /** قراءة منشورة للدرهم من السوق الموازي */
+  aedMarket?: number | null;
+  /** سعر بيع الدولار الفعّال (بعد التجاوزات) */
+  usdSell?: number | null;
+}
+
+/**
+ * اختيار سعر الدرهم — ترتيب الأولوية (v6.20.4):
+ *
+ *   1. manual   — قيمة ثابتة أدخلها المستخدم: تُستخدم كما هي ولا تتأثر بحركة الدولار.
+ *   2. anchored — معايرة المستخدم: الدرهم = النسبة × (الدولار ÷ 3.6725) في كل جلب،
+ *                 فيمشي مع السوق لحظياً بنفس النسبة التي عاير بها مرة واحدة.
+ *   3. market   — قراءة منشورة من السوق الموازي، بشرط ألا تكون مجرد اشتقاق من الدولار
+ *                 (بعض المواقع تنشر «الدرهم» = الدولار ÷ 3.6725، ونكشف ذلك بفرق < 0.5%).
+ *   4. computed — الدولار ÷ 3.6725 كآخر حل.
+ *
+ * ملاحظة: المعايرة تتقدّم على القراءة المنشورة لأنها رقم صراف حقيقي، بس ما تتقدّمش
+ * على التدخل اليدوي الصريح.
+ */
+export function resolveAedSdg(input: AedResolutionInput): AedResolution {
+  const computed = input.usdSell && input.usdSell > 0 ? input.usdSell / AED_PER_USD : null;
+
+  const ratio = Number(input.aedRatio);
+  const ratioValid = Number.isFinite(ratio) && ratio > AED_RATIO_MIN && ratio < AED_RATIO_MAX;
+  const anchored = ratioValid && computed ? ratio * computed : null;
+
+  const override = Number(input.overrideAed);
+  const market = Number(input.aedMarket);
+  const hasOverride = Number.isFinite(override) && override > 0;
+  const hasMarket = Number.isFinite(market) && market > 0;
+  const derivedFromUsd = !!(hasMarket && computed && Math.abs(market - computed) / market < 0.005);
+
+  if (hasOverride) return { aedSdg: override, basis: 'manual' };
+  if (anchored) return { aedSdg: anchored, basis: 'anchored' };
+  if (hasMarket) return { aedSdg: market, basis: derivedFromUsd ? 'computed' : 'market' };
+  if (computed) return { aedSdg: computed, basis: 'computed' };
+  return { aedSdg: null, basis: null };
+}
+
+/**
+ * نسبة المعايرة من رقم صراف حقيقي: الدرهم ÷ (الدولار ÷ 3.6725)، مقرّبة لـ 4 خانات.
+ * ترجع null لو النسبة برّه المدى المعقول — وقتها الأفضل استخدام الرقم كما هو (ثابت).
+ */
+export function aedAnchorRatio(aed: number, usdSell: number): number | null {
+  if (!(aed > 0) || !(usdSell > 0)) return null;
+  const computed = usdSell / AED_PER_USD;
+  const ratio = Math.round((aed / computed) * 10000) / 10000;
+  return ratio > AED_RATIO_MIN && ratio < AED_RATIO_MAX ? ratio : null;
+}
+
 export interface GoldComputation {
   /** سعر الجرام لذهب خالص (24) بالجنيه */
   gram24: number;

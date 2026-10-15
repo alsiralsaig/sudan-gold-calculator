@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { checkApproval, computeGoldPrice, TRADE_KARAT } from '../core/pricing';
+import { aedAnchorRatio, checkApproval, computeGoldPrice, TRADE_KARAT } from '../core/pricing';
 import type { Aggregate, ApprovedPrice, GoldComputation, SourceReading } from '../core/pricing';
 import {
   AppTombstones,
@@ -91,7 +91,7 @@ export interface EngineSnapshot {
   fetchedAt: string;
   inputs: { ounceUsd: number | null; usdBuy: number | null; usdSell: number | null; adjust: number; karat: number; aedSdg?: number | null };
   aedSdg?: number | null;
-  aedBasis?: 'manual' | 'market' | 'computed' | null;
+  aedBasis?: 'manual' | 'anchored' | 'market' | 'computed' | null;
   overridesUsed: { usdBuy: boolean; usdSell: boolean; ounce: boolean };
   parallel: { readings: SourceReading[]; errors: string[] };
   official: { readings: SourceReading[]; errors: string[] };
@@ -292,6 +292,8 @@ interface GoldStoreContextType {
   /** سعر الدرهم «من عندي» (null = يعتمد المصادر/المحسوب) */
   aedManual: number | null;
   setAedManual: (value: number | null) => void;
+  /** معايرة الدرهم — يمشي مع الدولار بنفس النسبة */
+  aedAnchor: { aed: number; usd: number; ratio: number } | null;
   /** هل السعر المقترح يحتاج تأكيداً بسبب تغيّر كبير */
   approvalNeedsConfirmation: boolean;
 
@@ -344,6 +346,7 @@ const PENDING_SYNC_KEY = 'gold_pending_sync';
 const APPROVED_PRICE_KEY = 'gold_approved_price_v1';
 const LOCAL_ADJUST_KEY = 'gold_local_adjust_v1';
 const AED_MANUAL_KEY = 'gold_aed_manual_v1';
+const AED_ANCHOR_KEY = 'gold_aed_anchor_v1';
 
 const GRAMS_PER_OUNCE = 31.1034768;
 const DEFAULT_OUNCE_USD = 4150;
@@ -447,6 +450,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const approvedRef = useRef<ApprovedPrice | null>(null);
   const [localAdjustPercent, setLocalAdjustState] = useState<number>(0);
   const [aedManual, setAedManualState] = useState<number | null>(null);
+  /** معايرة الدرهم: {درهم, دولار وقتها, نسبة} — الدرهم يمشي مع الدولار بنفس النسبة تلقائياً */
+  const [aedAnchor, setAedAnchorState] = useState<{ aed: number; usd: number; ratio: number } | null>(null);
   const [pendingSync, setPendingSync] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [allLoans, setAllLoans] = useState<Loan[]>([]);
@@ -748,6 +753,15 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (Number.isFinite(adj) && adj !== 0) setLocalAdjustState(adj);
       const aedM = Number(localStorage.getItem(AED_MANUAL_KEY));
       if (Number.isFinite(aedM) && aedM > 0) setAedManualState(aedM);
+      try {
+        const rawA = localStorage.getItem(AED_ANCHOR_KEY);
+        if (rawA) {
+          const a = JSON.parse(rawA);
+          if (a && Number(a.aed) > 0 && Number(a.usd) > 0 && Number(a.ratio) > 0.3 && Number(a.ratio) < 3) {
+            setAedAnchorState({ aed: Number(a.aed), usd: Number(a.usd), ratio: Number(a.ratio) });
+          }
+        }
+      } catch { /* تالف */ }
     } catch (_) {}
   }, []);
 
@@ -1172,6 +1186,19 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (clamped) localStorage.setItem(AED_MANUAL_KEY, String(clamped));
       else localStorage.removeItem(AED_MANUAL_KEY);
     } catch { /* خصوصية */ }
+    // معايرة: نسبة الدرهم الحقيقي للمحسوب من الدولار — عشان يمشي مع السوق تلقائياً بعدها
+    const usdNow = engineSnapshot?.inputs?.usdSell || null;
+    const ratio = clamped && usdNow ? aedAnchorRatio(clamped, usdNow) : null;
+    if (clamped && usdNow && ratio) {
+      const anchor = { aed: clamped, usd: usdNow, ratio };
+      setAedAnchorState(anchor);
+      try { localStorage.setItem(AED_ANCHOR_KEY, JSON.stringify(anchor)); } catch { /* خصوصية */ }
+    } else {
+      // بدون دولار متاح ما نقدرش نحسب نسبة صحيحة — نمسح القديمة عشان ما تكسحش
+      // القيمة اليدوية الجديدة بنسبة قديمة، والرجوع للمصادر يمسحها برضه.
+      setAedAnchorState(null);
+      try { localStorage.removeItem(AED_ANCHOR_KEY); } catch { /* خصوصية */ }
+    }
     refreshEngine();
   };
 
@@ -1231,7 +1258,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (overrides?.usdBuy) params.set('usdBuy', String(overrides.usdBuy));
         if (overrides?.usdSell) params.set('usdSell', String(overrides.usdSell));
         if (overrides?.ounce) params.set('ounce', String(overrides.ounce));
-        if (aedManual && aedManual > 0) params.set('aed', String(aedManual));
+        // المعايرة أولاً: الدرهم = النسبة × (الدولار ÷ 3.6725) في كل جلب — يمشي مع السوق لحظياً.
+        // القيمة اليدوية تبقى احتياط: تُستخدم فقط لو ما فيش معايرة (مثلاً الدولار مش متاح وقت الإدخال).
+        if (aedAnchor && aedAnchor.ratio > 0.3 && aedAnchor.ratio < 3) params.set('aedRatio', String(aedAnchor.ratio));
+        else if (aedManual && aedManual > 0) params.set('aed', String(aedManual));
         const res = await fetch(`/api/rates/engine?${params.toString()}`, { cache: 'no-store' });
         if (!res.ok) {
           setEngineError('تعذر تشغيل محرك الأسعار الآن');
@@ -1277,7 +1307,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setEngineBusy(false);
       }
     },
-    [localAdjustPercent, applyApproved, aedManual]
+    [localAdjustPercent, applyApproved, aedManual, aedAnchor]
   );
 
   /* ------------ الجلب التلقائي للمحرك (دوري + عند العودة للتطبيق) ------------ */
@@ -2641,6 +2671,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     localAdjustPercent,
     aedManual,
     setAedManual,
+    aedAnchor,
     setLocalAdjust,
     approvalNeedsConfirmation,
     purchases,
