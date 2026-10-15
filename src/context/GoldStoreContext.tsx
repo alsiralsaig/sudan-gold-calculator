@@ -452,6 +452,16 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [aedManual, setAedManualState] = useState<number | null>(null);
   /** معايرة الدرهم: {درهم, دولار وقتها, نسبة} — الدرهم يمشي مع الدولار بنفس النسبة تلقائياً */
   const [aedAnchor, setAedAnchorState] = useState<{ aed: number; usd: number; ratio: number } | null>(null);
+
+  /**
+   * مراجع لحظية لنفس القيم الثلاث (التعديل المحلي + الدرهم + المعايرة).
+   * السبب: setState ما ينفّذش في نفس اللحظة، وsetAedManual/setLocalPremium بينادوا
+   * refreshEngine() مباشرة بعدها — فأول جلب كان يتبعت بالقيم القديمة
+   * (من غير الدرهم ولا المعايرة خالص). المراجع تتحدّث فوراً.
+   */
+  const localAdjustRef = useRef<number>(0);
+  const aedManualRef = useRef<number | null>(null);
+  const aedAnchorRef = useRef<{ aed: number; usd: number; ratio: number } | null>(null);
   const [pendingSync, setPendingSync] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [allLoans, setAllLoans] = useState<Loan[]>([]);
@@ -750,15 +760,23 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
       }
       const adj = Number(localStorage.getItem(LOCAL_ADJUST_KEY));
-      if (Number.isFinite(adj) && adj !== 0) setLocalAdjustState(adj);
+      if (Number.isFinite(adj) && adj !== 0) {
+        setLocalAdjustState(adj);
+        localAdjustRef.current = adj;
+      }
       const aedM = Number(localStorage.getItem(AED_MANUAL_KEY));
-      if (Number.isFinite(aedM) && aedM > 0) setAedManualState(aedM);
+      if (Number.isFinite(aedM) && aedM > 0) {
+        setAedManualState(aedM);
+        aedManualRef.current = aedM;
+      }
       try {
         const rawA = localStorage.getItem(AED_ANCHOR_KEY);
         if (rawA) {
           const a = JSON.parse(rawA);
           if (a && Number(a.aed) > 0 && Number(a.usd) > 0 && Number(a.ratio) >= AED_RATIO_MIN && Number(a.ratio) <= AED_RATIO_MAX) {
-            setAedAnchorState({ aed: Number(a.aed), usd: Number(a.usd), ratio: Number(a.ratio) });
+            const loaded = { aed: Number(a.aed), usd: Number(a.usd), ratio: Number(a.ratio) };
+            setAedAnchorState(loaded);
+            aedAnchorRef.current = loaded;
           }
         }
       } catch { /* تالف */ }
@@ -1182,6 +1200,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setAedManual = (value: number | null) => {
     const clamped = value && Number.isFinite(value) ? Math.min(50_000, Math.max(50, Math.round(value))) : null;
     setAedManualState(clamped);
+    aedManualRef.current = clamped;
     try {
       if (clamped) localStorage.setItem(AED_MANUAL_KEY, String(clamped));
       else localStorage.removeItem(AED_MANUAL_KEY);
@@ -1192,11 +1211,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (clamped && usdNow && ratio) {
       const anchor = { aed: clamped, usd: usdNow, ratio };
       setAedAnchorState(anchor);
+      aedAnchorRef.current = anchor;
       try { localStorage.setItem(AED_ANCHOR_KEY, JSON.stringify(anchor)); } catch { /* خصوصية */ }
     } else {
       // بدون دولار متاح ما نقدرش نحسب نسبة صحيحة — نمسح القديمة عشان ما تكسحش
       // القيمة اليدوية الجديدة بنسبة قديمة، والرجوع للمصادر يمسحها برضه.
       setAedAnchorState(null);
+      aedAnchorRef.current = null;
       try { localStorage.removeItem(AED_ANCHOR_KEY); } catch { /* خصوصية */ }
     }
     refreshEngine();
@@ -1243,6 +1264,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setLocalAdjust = useCallback((percent: number) => {
     const clamped = Math.max(-20, Math.min(50, Number(percent) || 0));
     setLocalAdjustState(clamped);
+    localAdjustRef.current = clamped;
     try {
       localStorage.setItem(LOCAL_ADJUST_KEY, String(clamped));
     } catch (_) {}
@@ -1254,14 +1276,15 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setEngineError('');
       try {
         const params = new URLSearchParams();
-        params.set('adjust', String(localAdjustPercent || 0));
+        params.set('adjust', String(localAdjustRef.current || 0));
         if (overrides?.usdBuy) params.set('usdBuy', String(overrides.usdBuy));
         if (overrides?.usdSell) params.set('usdSell', String(overrides.usdSell));
         if (overrides?.ounce) params.set('ounce', String(overrides.ounce));
         // المعايرة أولاً: الدرهم = النسبة × (الدولار ÷ 3.6725) في كل جلب — يمشي مع السوق لحظياً.
         // القيمة اليدوية تبقى احتياط: تُستخدم فقط لو ما فيش معايرة (مثلاً الدولار مش متاح وقت الإدخال).
-        if (aedAnchor && aedAnchor.ratio >= AED_RATIO_MIN && aedAnchor.ratio <= AED_RATIO_MAX) params.set('aedRatio', String(aedAnchor.ratio));
-        else if (aedManual && aedManual > 0) params.set('aed', String(aedManual));
+        const anchorNow = aedAnchorRef.current;
+        if (anchorNow && anchorNow.ratio >= AED_RATIO_MIN && anchorNow.ratio <= AED_RATIO_MAX) params.set('aedRatio', String(anchorNow.ratio));
+        else if (aedManualRef.current && aedManualRef.current > 0) params.set('aed', String(aedManualRef.current));
         const res = await fetch(`/api/rates/engine?${params.toString()}`, { cache: 'no-store' });
         if (!res.ok) {
           setEngineError('تعذر تشغيل محرك الأسعار الآن');
@@ -1314,12 +1337,20 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const lastEngineFetchRef = useRef<number>(0);
 
+  // الأفّكت التالي مسجّل مرة واحدة بـ [] عشان ما يعيدش ضبط المؤقتات،
+  // فكان بيمسك أول نسخة من refreshEngine — وفيها المعايرة لسه null —
+  // وكل جلب دوري/عند الرجوع كان يكسح المعايرة بصمت. المرجع يحل المشكلة.
+  const refreshEngineRef = useRef(refreshEngine);
+  useEffect(() => {
+    refreshEngineRef.current = refreshEngine;
+  }, [refreshEngine]);
+
   useEffect(() => {
     const runIfDue = (minGapMs: number) => {
       if (Date.now() - lastEngineFetchRef.current < minGapMs) return;
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       lastEngineFetchRef.current = Date.now();
-      refreshEngine();
+      refreshEngineRef.current();
     };
 
     // أول جلب بعد فتح التطبيق بقليل (لا يعطّل الإقلاع)
