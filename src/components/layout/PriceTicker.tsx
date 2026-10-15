@@ -11,6 +11,8 @@ interface TickerData {
   gram24Usd: number | null;
   gram21Usd: number | null;
   parallel: { buy: number | null; sell: number; source: string; ageMinutes: number | null } | null;
+  /** الدرهم الموازي (شراء/بيع) — سوق الذهب السوداني بيتسعّر بالدرهم */
+  aed: { buy: number | null; sell: number; basis: 'manual' | 'market' | 'computed' | null } | null;
   bank: { name: string; buy: number | null; sell: number } | null;
   gram21Parallel: number | null;
   gram24Parallel: number | null;
@@ -24,23 +26,40 @@ const rate = (v: number | null | undefined) =>
 
 /**
  * شريط أسعار متحرك (زي شريط الأخبار): الجرام بالموازي أولاً (الأهم)، ثم الأونصة والجرام بالدولار،
- * الدولار في السوق الموازي، وبنك الخرطوم. بيتوقف لما تلمسه عشان تقرأ.
+ * الدولار في السوق الموازي، **الدرهم الموازي** (أصل تسعير الذهب)، وبنك الخرطوم.
+ * بيتوقف لما تلمسه عشان تقرأ.
+ *
+ * aedSdg = سعر الدرهم من المحرك (بمعايرة المستخدم إن وُجدت) — يتبعت للـ API عشان
+ * الشريط يطلع نفس رقم المحرك بالظبط بدل ما يخالفه.
  */
-export function PriceTicker({ rates }: { rates: GoldRates }) {
+export function PriceTicker({
+  rates,
+  aedSdg,
+  aedBasis,
+}: {
+  rates: GoldRates;
+  aedSdg?: number | null;
+  aedBasis?: 'manual' | 'anchored' | 'market' | 'computed' | null;
+}) {
   const [d, setD] = useState<TickerData | null>(null);
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    const load = () =>
-      fetch('/api/rates/ticker', { cache: 'no-store' })
+    const load = () => {
+      const params = new URLSearchParams();
+      if (aedSdg && aedSdg > 0) params.set('aed', String(Math.round(aedSdg)));
+      if (aedBasis) params.set('aedBasis', aedBasis);
+      const q = params.toString() ? `?${params.toString()}` : '';
+      return fetch(`/api/rates/ticker${q}`, { cache: 'no-store' })
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => { if (alive && j) setD(j); })
         .catch(() => {});
+    };
     load();
     const t = setInterval(load, 5 * 60_000);
     return () => { alive = false; clearInterval(t); };
-  }, []);
+  }, [aedSdg, aedBasis]);
 
   // قبل ما توصل البيانات: نعرض من أسعار التطبيق
   const ounce = d?.ounceUsd ?? rates.globalOunceUsd;
@@ -51,6 +70,11 @@ export function PriceTicker({ rates }: { rates: GoldRates }) {
   const g21Par = d?.gram21Parallel ?? (g21 && parSell ? g21 * parSell : null);
   const g24Par = d?.gram24Parallel ?? (g24 && parSell ? g24 * parSell : null);
   const stale = d ? !d.ok || (d.parallel?.ageMinutes ?? 0) > 12 * 60 : rates.isStale;
+  // الدرهم: من الـ API (بمعايرة المستخدم)، وإلا نشتقّه من الدولار محلياً
+  const aedSell = d?.aed?.sell ?? (parSell ? parSell / 3.6725 : null);
+  const aedBuy = d?.aed?.buy ?? (aedSell && parBuy && parSell ? aedSell * (parBuy / parSell) : null);
+  // الأساس المعروض: من الـ API (اللي يستلمه من المحرك)، وإلا نشتقّه محلياً
+  const aedBasisShown = d?.aed?.basis ?? aedBasis ?? (aedSell ? 'computed' : null);
 
   const Sep = () => <span className="text-amber-500/50 px-3">◆</span>;
   const items = (
@@ -89,6 +113,29 @@ export function PriceTicker({ rates }: { rates: GoldRates }) {
         <span className="text-slate-500">•</span>
         <span className="text-slate-400">بيع</span>
         <span className="text-white font-bold">{rate(parSell)}</span>
+      </span>
+      <Sep />
+      <span className="inline-flex items-center gap-1.5">
+        <span className="text-cyan-300 font-bold">🇦🇪 الدرهم الموازي:</span>
+        <span className="text-slate-400">شراء</span>
+        <span className="text-white font-bold">{rate(aedBuy)}</span>
+        <span className="text-slate-500">•</span>
+        <span className="text-slate-400">بيع</span>
+        <span className="text-white font-bold">{rate(aedSell)}</span>
+        {aedBasisShown && (
+          <span className={`text-[9px] px-1 rounded ${
+            aedBasisShown === 'manual' || aedBasisShown === 'anchored'
+              ? 'bg-cyan-500/20 text-cyan-300'
+              : aedBasisShown === 'market'
+                ? 'bg-emerald-500/20 text-emerald-300'
+                : 'bg-slate-700/50 text-slate-400'}`}>
+            {aedBasisShown === 'manual' || aedBasisShown === 'anchored'
+              ? 'معايرتك'
+              : aedBasisShown === 'market'
+                ? 'سوق'
+                : 'محسوب'}
+          </span>
+        )}
       </span>
       <Sep />
       <span className="inline-flex items-center gap-1.5">

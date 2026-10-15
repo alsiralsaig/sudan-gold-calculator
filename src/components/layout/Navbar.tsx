@@ -65,6 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     storeName,
     unassignedOperations,
     unreadNotifications,
+    engine,
   } = useGoldStore();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -388,7 +389,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* شريط الأسعار المتحرك — صف كامل تحت الأزرار */}
-        <PriceTicker rates={rates} />
+        <PriceTicker rates={rates} aedSdg={engine?.aedSdg ?? null} aedBasis={engine?.aedBasis ?? null} />
 
         {/* شريط حالة الشبكة والمزامنة */}
         {(!isOnline || pendingSync) && (

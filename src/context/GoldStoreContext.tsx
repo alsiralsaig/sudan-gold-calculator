@@ -100,6 +100,8 @@ export interface EngineSnapshot {
   inputs: { ounceUsd: number | null; usdBuy: number | null; usdSell: number | null; adjust: number; karat: number; aedSdg?: number | null };
   aedSdg?: number | null;
   aedBasis?: 'manual' | 'anchored' | 'market' | 'computed' | null;
+  /** قراءات الدرهم الخام + المستخدمة بعد التحقق (لعرض المصادر في الشاشة) */
+  aedAggregates?: { used: SourceReading[]; warnings: string[]; readings?: SourceReading[] };
   overridesUsed: { usdBuy: boolean; usdSell: boolean; ounce: boolean };
   parallel: { readings: SourceReading[]; errors: string[] };
   official: { readings: SourceReading[]; errors: string[] };

@@ -15,6 +15,7 @@ import {RefreshCw,
   Info,
   BadgeCheck,
   Crosshair,
+  Coins,
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum, kCurrency } from '../../core/format';
@@ -179,6 +180,15 @@ export const GoldPriceScreen: React.FC = () => {
       official: k === 21,
     }));
   }, [effective?.buy, effective?.sell]);
+
+  // شراء الدرهم = بيعه × نفس نسبة شراء/بيع الدولار (زي computeGoldPrice)
+  const aedBuySdg = useMemo(() => {
+    const sell = engine?.aedSdg;
+    const usdSell = engine?.inputs?.usdSell;
+    const usdBuy = engine?.inputs?.usdBuy;
+    if (!sell || !usdSell || !usdBuy) return null;
+    return Math.round(sell * (usdBuy / usdSell));
+  }, [engine?.aedSdg, engine?.inputs?.usdSell, engine?.inputs?.usdBuy]);
 
   const warnings = engine?.warnings || [];
   const criticalWarnings = warnings.filter((w) => w.includes('⚠️'));
@@ -517,6 +527,64 @@ export const GoldPriceScreen: React.FC = () => {
               احسب بهذه القيم
             </button>
           </div>
+        )}
+      </div>
+
+      {/* 🇦🇪 الدرهم الموازي — أصل تسعير الذهب في السوق السوداني */}
+      <div className="bg-slate-900 border-2 border-cyan-500/40 rounded-3xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-black text-white flex items-center gap-2">
+            <Coins className="w-4 h-4 text-cyan-400" /> 🇦🇪 الدرهم الموازي (يقود تسعير الذهب)
+          </span>
+          {engine?.aedBasis && (
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${
+                engine.aedBasis === 'manual' || engine.aedBasis === 'anchored'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                  : engine.aedBasis === 'market'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-slate-700/40 text-slate-400 border-slate-600'
+              }`}
+            >
+              {engine.aedBasis === 'manual'
+                ? 'من عندي'
+                : engine.aedBasis === 'anchored'
+                  ? 'معايرتك'
+                  : engine.aedBasis === 'market'
+                    ? 'من السوق'
+                    : 'محسوب من الدولار'}
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-slate-950 rounded-2xl p-3.5 border border-cyan-500/30">
+            <span className="text-[11px] text-cyan-300 font-bold block mb-1">شراء الدرهم</span>
+            <div className="text-lg font-black font-mono text-cyan-300">
+              {aedBuySdg ? fmtNum(aedBuySdg) : '—'}
+            </div>
+            <span className="text-[10px] text-slate-500">{kCurrency}</span>
+          </div>
+          <div className="bg-slate-950 rounded-2xl p-3.5 border border-cyan-500/30">
+            <span className="text-[11px] text-cyan-300 font-bold block mb-1">بيع الدرهم</span>
+            <div className="text-lg font-black font-mono text-cyan-300">
+              {engine?.aedSdg ? fmtNum(Math.round(engine.aedSdg)) : '—'}
+            </div>
+            <span className="text-[10px] text-slate-500">{kCurrency}</span>
+          </div>
+        </div>
+
+        <p className="text-[10px] text-slate-500 leading-relaxed">
+          الجرام يتسعّر من الأونصة بالدرهم: <span className="font-mono text-slate-300">أونصة ÷ 31.1035 × 3.6725 × سعر الدرهم</span>
+          {' '}— فالدرهم هو اللي يقود تسعير الذهب، والدولار يتبعه.
+        </p>
+
+        <SourceList
+          readings={engine?.aedAggregates?.readings || []}
+          renderValue={(r) => (r.price ? fmtNum(r.price) : r.sell ? fmtNum(r.sell) : '—')}
+        />
+        {!engine?.aedAggregates?.readings?.length && (
+          <p className="text-[10px] text-slate-500">ما فيش قراءة درهم منشورة من المصادر الحين — بيستخدم المحسوب من الدولار.</p>
         )}
       </div>
 

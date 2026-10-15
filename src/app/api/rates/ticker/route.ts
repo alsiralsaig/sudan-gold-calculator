@@ -1,12 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getRates } from '../../../../lib/rates';
 import { fetchPricingSources } from '../../../../lib/pricingSources';
-import { aggregateReadings } from '../../../../core/pricing';
+import { aggregateReadings, AED_PER_USD } from '../../../../core/pricing';
 
 export const dynamic = 'force-dynamic';
 
 const GRAMS_PER_OUNCE = 31.1034768;
-let memo: { at: number; body: any } | null = null;
+let memo: { at: number; body: any; key: string } | null = null;
+
+type AedBasisLabel = 'manual' | 'anchored' | 'market' | 'computed' | null;
 
 const n = (v: unknown): number | null => {
   const x = Number(v);
@@ -15,12 +17,24 @@ const n = (v: unknown): number | null => {
 
 /**
  * GET /api/rates/ticker — بيانات الشريط المتحرك:
- * الأونصة والجرام بالدولار، الدولار في السوق الموازي (شراء/بيع)، بنك الخرطوم (شراء/بيع)،
- * وسعر الجرام بالجنيه حسب السوق الموازي.
- * بيجمع مصدرين: اخبار السودان (الأحدث) + محرك المصادر المتعددة (احتياطي) — الأحدث بيكسب.
+ * الأونصة والجرام بالدولار، الدولار في السوق الموازي (شراء/بيع)، الدرهم الموازي (شراء/بيع)،
+ * بنك الخرطوم (شراء/بيع)، وسعر الجرام بالجنيه.
+ *
+ * ⚠️ سعر الجرام يتحسب **بسلسلة الدرهم** (زي محرك الأسعار بالظبط):
+ *   جرام 24 = (الأونصة ÷ 31.1034768) × 3.6725 × سعر الدرهم
+ * مش بالدولار مباشرة — عشان الشريط ما يخالفش المحرك في نفس الشاشة.
+ *
+ * ?aed= سعر درهم من العميل (بمعايرته المحفوظة) — يُقدَّم على قراءات السوق.
  */
-export async function GET() {
-  if (memo && Date.now() - memo.at < 5 * 60_000) {
+export async function GET(request: NextRequest) {
+  const aedParam = n(request.nextUrl.searchParams.get('aed'));
+  const rawBasis = request.nextUrl.searchParams.get('aedBasis');
+  const aedBasisParam =
+    rawBasis === 'manual' || rawBasis === 'anchored' || rawBasis === 'market' || rawBasis === 'computed'
+      ? rawBasis
+      : null;
+  const memoKey = `${aedParam ?? 'none'}:${aedBasisParam ?? 'none'}`;
+  if (memo && memo.key === memoKey && Date.now() - memo.at < 5 * 60_000) {
     return NextResponse.json(memo.body, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } });
   }
   const [r, snap] = await Promise.all([
@@ -62,6 +76,38 @@ export async function GET() {
 
   const gram24Usd = ounceUsd ? ounceUsd / GRAMS_PER_OUNCE : null;
   const gram21Usd = gram24Usd ? gram24Usd * (21 / 24) : null;
+
+  /* ---------- الدرهم الموازي: نفس أولوية المحرك (معايرة/سوق/محسوب) ---------- */
+  const aedAll = snap?.parallelAed?.readings ?? [];
+  const aedAgg = snap ? aggregateReadings(aedAll, 'parallel-aed', now, { minSources: 1 }) : null;
+  const aedMarket = n(aedAgg?.sell) ?? n(aedAgg?.buy);
+  // قراءة تساوي «دولار ÷ 3.6725» ما بتضيفش معلومة — نحيّدها لو معانا قراءة سوق
+  const aedComputedRef = n(parallel?.sell) ? parallel!.sell / AED_PER_USD : null;
+  const aedIndependent = aedAll.filter((r) => {
+    const v = r.sell ?? r.price ?? r.buy ?? null;
+    return !(v && aedComputedRef && Math.abs(v - aedComputedRef) / v < 0.005);
+  });
+  const aedIndepAgg = aedIndependent.length ? aggregateReadings(aedIndependent, 'parallel-aed', now, { minSources: 1 }) : null;
+  const aedMarketReal = n(aedIndepAgg?.sell) ?? n(aedIndepAgg?.buy) ?? aedMarket;
+
+  const aedSell = aedParam ?? aedMarketReal ?? aedComputedRef;
+  // فارق الشراء/البيع بنفس نسبة زوج الدولار (زي computeGoldPrice)
+  const aedBuy = aedSell && parallel?.buy && parallel?.sell ? aedSell * (parallel.buy / parallel.sell) : null;
+  // أساس الرقم: من العميل (معايرته/السوق حسب ما حسم المحرك)، وإلا نحسمه هنا
+  const aedBasis: AedBasisLabel = aedParam
+    ? aedBasisParam ?? 'manual'
+    : aedMarketReal
+      ? 'market'
+      : aedSell
+        ? 'computed'
+        : null;
+  const aed = aedSell
+    ? { buy: aedBuy ? Math.round(aedBuy) : null, sell: Math.round(aedSell), basis: aedBasis as AedBasisLabel }
+    : null;
+
+  /* ---------- سعر الجرام: سلسلة الدرهم (الأصل) وسلسلة الدولار (احتياطي) ---------- */
+  const gram24Aed = ounceUsd ? (ounceUsd / GRAMS_PER_OUNCE) * AED_PER_USD : null;
+  const useDirhamChain = Boolean(gram24Aed && aedSell);
   const body = {
     ok: Boolean(ounceUsd && parallel),
     fetchedAt: now.toISOString(),
@@ -70,11 +116,20 @@ export async function GET() {
     gram21Usd: gram21Usd ? Math.round(gram21Usd * 100) / 100 : null,
     parallel,
     bank,
-    // الأهم: سعر الجرام بالجنيه = جرام الذهب العالمي بالدولار × سعر بيع الدولار الموازي
-    gram21Parallel: gram21Usd && parallel ? Math.round(gram21Usd * parallel.sell) : null,
-    gram24Parallel: gram24Usd && parallel ? Math.round(gram24Usd * parallel.sell) : null,
+    // الأهم: سعر الجرام بالجنيه — سلسلة الدرهم: (أونصة ÷ 31.1035) × 3.6725 × سعر الدرهم
+    gram21Parallel: useDirhamChain
+      ? Math.round(((gram24Aed! * aedSell!) * (21 / 24)))
+      : gram21Usd && parallel
+        ? Math.round(gram21Usd * parallel.sell)
+        : null,
+    gram24Parallel: useDirhamChain
+      ? Math.round(gram24Aed! * aedSell!)
+      : gram24Usd && parallel
+        ? Math.round(gram24Usd * parallel.sell)
+        : null,
+    aed,
     gram21Bank: gram21Usd && bank ? Math.round(gram21Usd * bank.sell) : null,
   };
-  if (body.ok) memo = { at: Date.now(), body };
+  if (body.ok) memo = { at: Date.now(), body, key: memoKey };
   return NextResponse.json(body, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } });
 }

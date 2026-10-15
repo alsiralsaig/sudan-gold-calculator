@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
       fetchedAt: snapshot.fetchedAt,
       aedSdg: aedSdg ?? null,
       aedBasis,
-      aedAggregates: { used: aedAgg.used, warnings: aedAgg.warnings },
+      aedAggregates: { used: aedAggUsed.used, warnings: aedAggUsed.warnings, readings: aedAll },
       inputs: { ounceUsd, usdBuy, usdSell, adjust, karat, aedSdg },
       overridesUsed: {
         usdBuy: overrideUsdBuy !== null,
