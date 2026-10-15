@@ -348,6 +348,37 @@ export function resolveAedSdg(input: AedResolutionInput): AedResolution {
   return { aedSdg: null, basis: null };
 }
 
+/** معايرة محفوظة: الرقم + متى عُملت + السعر اللي اشتُقّت منه (إن وُجد) */
+export interface AedAnchor {
+  /** الدرهم المعتمد وقت المعايرة */
+  aed: number;
+  /** سعر بيع الدولار وقتها */
+  usd: number;
+  /** النسبة = الدرهم ÷ (الدولار ÷ 3.6725) */
+  ratio: number;
+  /** ISO — متى تمّت المعايرة */
+  at?: string;
+  /** سعر جرام 21 اللي استُنتجت منه المعايرة (معايرة بسعر السوق) */
+  gramPrice?: number;
+}
+
+/** بعد كام ساعة نعتبر المعايرة قديمة ونذكّر المستخدم يحدّثها بسعر اليوم */
+export const CALIBRATION_STALE_HOURS = 12;
+
+/** عمر المعايرة بالساعات (null لو ما فيش تاريخ) */
+export function anchorAgeHours(anchor: AedAnchor | null, now: Date = new Date()): number | null {
+  if (!anchor?.at) return null;
+  const t = new Date(anchor.at).getTime();
+  if (!Number.isFinite(t)) return null;
+  return (now.getTime() - t) / 3_600_000;
+}
+
+/** هل المعايرة اتقادمت وتحتاج تحديث؟ (ما فيش معايرة أصلاً = مش قديمة، ما فيش تنبيه) */
+export function isCalibrationStale(anchor: AedAnchor | null, now: Date = new Date()): boolean {
+  const age = anchorAgeHours(anchor, now);
+  return age !== null && age > CALIBRATION_STALE_HOURS;
+}
+
 /**
  * نسبة المعايرة من رقم صراف حقيقي: الدرهم ÷ (الدولار ÷ 3.6725)، مقرّبة لـ 4 خانات.
  * ترجع null لو النسبة برّه المدى المعقول — وقتها الأفضل استخدام الرقم كما هو (ثابت).

@@ -20,6 +20,7 @@ import {RefreshCw,
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum, kCurrency } from '../../core/format';
 import { priceForKarat } from '../../core/purity';
+import { anchorAgeHours, CALIBRATION_STALE_HOURS, isCalibrationStale } from '../../core/pricing';
 import { StickyActionBar } from '../layout/StickyActionBar';
 
 const ageLabel = (minutes: number | null | undefined): string => {
@@ -180,6 +181,23 @@ export const GoldPriceScreen: React.FC = () => {
       official: k === 21,
     }));
   }, [effective?.buy, effective?.sell]);
+
+  // حالة المعايرة: عمرها + هل اتقادمت وتحتاج تحديث بسعر اليوم
+  const calAgeHours = anchorAgeHours(aedAnchor);
+  const calStale = isCalibrationStale(aedAnchor);
+  const calAgeLabel =
+    calAgeHours === null
+      ? null
+      : calAgeHours < 1
+        ? 'من أقل من ساعة'
+        : calAgeHours < 24
+          ? `من ${Math.round(calAgeHours)} ساعة`
+          : `من ${Math.round(calAgeHours / 24)} يوم`;
+  // كم تحرّك السعر من وقت المعايرة (بسبب الدولار — طبيعي ومش عيب)
+  const calDriftPercent =
+    aedAnchor?.gramPrice && computation?.sell
+      ? Math.round(((computation.sell - aedAnchor.gramPrice) / aedAnchor.gramPrice) * 10000) / 100
+      : null;
 
   // شراء الدرهم = بيعه × نفس نسبة شراء/بيع الدولار (زي computeGoldPrice)
   const aedBuySdg = useMemo(() => {
@@ -579,6 +597,16 @@ export const GoldPriceScreen: React.FC = () => {
           {' '}— فالدرهم هو اللي يقود تسعير الذهب، والدولار يتبعه.
         </p>
 
+        {aedAnchor && (
+          <p className={`text-[10px] leading-relaxed ${calStale ? 'text-rose-300 font-bold' : 'text-cyan-300'}`}>
+            {calStale ? '⚠️ ' : '📌 '}
+            معايرتك: درهم {aedAnchor.aed.toLocaleString('en')}
+            {aedAnchor.gramPrice ? ` من سعر ${aedAnchor.gramPrice.toLocaleString('en')}` : ''}
+            {calAgeLabel ? ` — ${calAgeLabel}` : ''}
+            {calStale ? ' — حدّثها بسعر اليوم' : ''}
+          </p>
+        )}
+
         <SourceList
           readings={engine?.aedAggregates?.readings || []}
           renderValue={(r) => (r.price ? fmtNum(r.price) : r.sell ? fmtNum(r.sell) : '—')}
@@ -617,6 +645,45 @@ export const GoldPriceScreen: React.FC = () => {
             معايرة
           </button>
         </div>
+        {aedAnchor ? (
+          <div className={`rounded-2xl p-3 space-y-1 border ${
+            calStale ? 'bg-rose-500/10 border-rose-500/40' : 'bg-emerald-500/10 border-emerald-500/40'
+          }`}>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className={`text-[11px] font-black ${calStale ? 'text-rose-300' : 'text-emerald-300'}`}>
+                {calStale ? '⚠️ معايرتك قديمة — حدّثها بسعر اليوم' : '✅ المعايرة شغالة'}
+              </span>
+              {calAgeLabel && (
+                <span className="text-[10px] text-slate-400">
+                  {calAgeLabel}
+                  {aedAnchor.at ? ` (${new Date(aedAnchor.at).toLocaleDateString('ar')})` : ''}
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-300 leading-relaxed">
+              عايرت بسعر <span className="font-mono font-bold">{aedAnchor.gramPrice ? aedAnchor.gramPrice.toLocaleString('en') : '—'}</span>
+              {' '}→ درهم سوق الذهب <span className="font-mono font-bold">{aedAnchor.aed.toLocaleString('en')}</span>
+              {' '}مع دولار <span className="font-mono">{aedAnchor.usd.toLocaleString('en')}</span>
+              {calDriftPercent !== null ? (
+                <>
+                  {' '}— السعر تحرّك <span className={`font-mono font-bold ${calDriftPercent >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                    {calDriftPercent > 0 ? '+' : ''}{calDriftPercent}%
+                  </span> مع الدولار من وقتها
+                </>
+              ) : null}
+            </p>
+            {calStale && (
+              <p className="text-[10px] text-rose-200/90 leading-relaxed">
+                سوق الذهب بيتحرك كل يوم — اكتب سعر اليوم في الخانة فوق واضغط معايرة عشان النسبة تتجدّد.
+                {' '}المعايرة بعد <span className="font-mono">{CALIBRATION_STALE_HOURS}</span> ساعة تعتبر قديمة.
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            ما فيش معايرة محفوظة — السعر الحين من الدولار والقراءات المنشورة، وغالباً أعلى من سوق الذهب الفعلي.
+          </p>
+        )}
         {status ? <p className="text-[10px] text-amber-300 font-bold">{status}</p> : null}
       </div>
 

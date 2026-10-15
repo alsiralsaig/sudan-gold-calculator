@@ -10,7 +10,7 @@ import {
   AED_RATIO_MIN,
   TRADE_KARAT,
 } from '../core/pricing';
-import type { Aggregate, ApprovedPrice, GoldComputation, SourceReading } from '../core/pricing';
+import type { AedAnchor, Aggregate, ApprovedPrice, GoldComputation, SourceReading } from '../core/pricing';
 import {
   AppTombstones,
   Branch,
@@ -302,8 +302,8 @@ interface GoldStoreContextType {
   /** سعر الدرهم «من عندي» (null = يعتمد المصادر/المحسوب) */
   aedManual: number | null;
   setAedManual: (value: number | null) => void;
-  /** معايرة الدرهم — يمشي مع الدولار بنفس النسبة */
-  aedAnchor: { aed: number; usd: number; ratio: number } | null;
+  /** معايرة الدرهم — يمشي مع الدولار بنفس النسبة (مع تاريخها وسعر الجرام اللي اشتُقّت منه) */
+  aedAnchor: AedAnchor | null;
   /**
    * معايرة بسعر السوق: المستخدم يدخل سعر جرام 21 الحقيقي مرة،
    * ونستنتج منه درهم سوق الذهب الفعلي (مش 3.6725 النظري) ونثبّته معايرة تمشي مع الدولار.
@@ -466,7 +466,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [localAdjustPercent, setLocalAdjustState] = useState<number>(0);
   const [aedManual, setAedManualState] = useState<number | null>(null);
   /** معايرة الدرهم: {درهم, دولار وقتها, نسبة} — الدرهم يمشي مع الدولار بنفس النسبة تلقائياً */
-  const [aedAnchor, setAedAnchorState] = useState<{ aed: number; usd: number; ratio: number } | null>(null);
+  const [aedAnchor, setAedAnchorState] = useState<AedAnchor | null>(null);
 
   /**
    * مراجع لحظية لنفس القيم الثلاث (التعديل المحلي + الدرهم + المعايرة).
@@ -476,7 +476,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
    */
   const localAdjustRef = useRef<number>(0);
   const aedManualRef = useRef<number | null>(null);
-  const aedAnchorRef = useRef<{ aed: number; usd: number; ratio: number } | null>(null);
+  const aedAnchorRef = useRef<AedAnchor | null>(null);
   const [pendingSync, setPendingSync] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [allLoans, setAllLoans] = useState<Loan[]>([]);
@@ -789,7 +789,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (rawA) {
           const a = JSON.parse(rawA);
           if (a && Number(a.aed) > 0 && Number(a.usd) > 0 && Number(a.ratio) >= AED_RATIO_MIN && Number(a.ratio) <= AED_RATIO_MAX) {
-            const loaded = { aed: Number(a.aed), usd: Number(a.usd), ratio: Number(a.ratio) };
+            const loaded: AedAnchor = {
+              aed: Number(a.aed),
+              usd: Number(a.usd),
+              ratio: Number(a.ratio),
+              ...(typeof a.at === 'string' ? { at: a.at } : {}),
+              ...(Number(a.gramPrice) > 0 ? { gramPrice: Number(a.gramPrice) } : {}),
+            };
             setAedAnchorState(loaded);
             aedAnchorRef.current = loaded;
           }
@@ -1212,7 +1218,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   /** سعر الدرهم «من عندي» — يتجاوز المصادر (سوق الذهب بيتسعّر بالدرهم) */
-  const setAedManual = (value: number | null) => {
+  const setAedManual = (value: number | null, meta?: { gramPrice?: number }) => {
     const clamped = value && Number.isFinite(value) ? Math.min(50_000, Math.max(50, Math.round(value))) : null;
     setAedManualState(clamped);
     aedManualRef.current = clamped;
@@ -1224,7 +1230,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const usdNow = engineSnapshot?.inputs?.usdSell || null;
     const ratio = clamped && usdNow ? aedAnchorRatio(clamped, usdNow) : null;
     if (clamped && usdNow && ratio) {
-      const anchor = { aed: clamped, usd: usdNow, ratio };
+      const anchor: AedAnchor = {
+        aed: clamped,
+        usd: usdNow,
+        ratio,
+        at: new Date().toISOString(),
+        ...(meta?.gramPrice ? { gramPrice: meta.gramPrice } : {}),
+      };
       setAedAnchorState(anchor);
       aedAnchorRef.current = anchor;
       try { localStorage.setItem(AED_ANCHOR_KEY, JSON.stringify(anchor)); } catch { /* خصوصية */ }
@@ -1258,7 +1270,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return { ok: false, message: 'الرقم بعيد عن حسبة المحرك بأكثر من 50% — تأكد من الأصفار' };
     }
     if (cal.mode === 'dirham' && cal.aedSdg) {
-      setAedManual(cal.aedSdg);
+      setAedManual(cal.aedSdg, { gramPrice: Math.round(targetSell) });
       return {
         ok: true,
         aedSdg: cal.aedSdg,
