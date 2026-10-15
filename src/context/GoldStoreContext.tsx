@@ -1,7 +1,15 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { aedAnchorRatio, checkApproval, computeGoldPrice, AED_RATIO_MAX, AED_RATIO_MIN, TRADE_KARAT } from '../core/pricing';
+import {
+  aedAnchorRatio,
+  calibrateToMarketPrice,
+  checkApproval,
+  computeGoldPrice,
+  AED_RATIO_MAX,
+  AED_RATIO_MIN,
+  TRADE_KARAT,
+} from '../core/pricing';
 import type { Aggregate, ApprovedPrice, GoldComputation, SourceReading } from '../core/pricing';
 import {
   AppTombstones,
@@ -294,6 +302,11 @@ interface GoldStoreContextType {
   setAedManual: (value: number | null) => void;
   /** معايرة الدرهم — يمشي مع الدولار بنفس النسبة */
   aedAnchor: { aed: number; usd: number; ratio: number } | null;
+  /**
+   * معايرة بسعر السوق: المستخدم يدخل سعر جرام 21 الحقيقي مرة،
+   * ونستنتج منه درهم سوق الذهب الفعلي (مش 3.6725 النظري) ونثبّته معايرة تمشي مع الدولار.
+   */
+  calibratePriceToMarket: (targetSell: number) => { ok: boolean; message: string; aedSdg?: number; adjustPercent?: number; gapPercent?: number };
   /** هل السعر المقترح يحتاج تأكيداً بسبب تغيّر كبير */
   approvalNeedsConfirmation: boolean;
 
@@ -1221,6 +1234,44 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       try { localStorage.removeItem(AED_ANCHOR_KEY); } catch { /* خصوصية */ }
     }
     refreshEngine();
+  };
+
+  /**
+   * معايرة بسعر السوق — «الدرهم النظري 3.6725 مش هو درهم سوق الذهب».
+   * المستخدم يعرف سعر الجرام، واحنا نستنتج الدرهم الفعلي ونثبّته معايرة.
+   */
+  const calibratePriceToMarket = (targetSell: number) => {
+    const comp = engineSnapshot?.computation;
+    const inputs = engineSnapshot?.inputs;
+    if (!comp?.ok || !inputs) {
+      return { ok: false, message: 'ما فيش سعر من المحرك الحين — حدّث المصادر الأول' };
+    }
+    const cal = calibrateToMarketPrice({
+      currentSell: comp.sell,
+      targetSell,
+      aedSdg: inputs.aedSdg ?? null,
+      localAdjustPercent: localAdjustRef.current,
+    });
+    if (!cal) {
+      return { ok: false, message: 'الرقم بعيد عن حسبة المحرك بأكثر من 50% — تأكد من الأصفار' };
+    }
+    if (cal.mode === 'dirham' && cal.aedSdg) {
+      setAedManual(cal.aedSdg);
+      return {
+        ok: true,
+        aedSdg: cal.aedSdg,
+        gapPercent: cal.gapPercent,
+        message: `اتعلمنا درهم سوق الذهب ${cal.aedSdg} (${cal.gapPercent > 0 ? '+' : ''}${cal.gapPercent}% عن النظري) — وبيمشي مع الدولار تلقائياً`,
+      };
+    }
+    const percent = cal.adjustPercent ?? 0;
+    setLocalPremium(percent);
+    return {
+      ok: true,
+      adjustPercent: percent,
+      gapPercent: cal.gapPercent,
+      message: `ما فيش درهم متاح — ضبطنا تعديل السوق المحلي على ${percent}%`,
+    };
   };
 
   const setManualRateOverride = (enabled: boolean) => {
@@ -2703,6 +2754,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     aedManual,
     setAedManual,
     aedAnchor,
+    calibratePriceToMarket,
     setLocalAdjust,
     approvalNeedsConfirmation,
     purchases,

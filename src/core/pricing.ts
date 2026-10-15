@@ -360,6 +360,70 @@ export function aedAnchorRatio(aed: number, usdSell: number): number | null {
   return ratio >= AED_RATIO_MIN && ratio <= AED_RATIO_MAX ? ratio : null;
 }
 
+/* ------------------------------------------------------------------ */
+/*              معايرة السوق: من سعر الجرام → الدرهم الفعلي             */
+/* ------------------------------------------------------------------ */
+
+export interface MarketCalibrationInput {
+  /** سعر بيع الجرام (العيار المطلوب) اللي طلّعه المحرك الحين */
+  currentSell: number;
+  /** سعر السوق الحقيقي اللي قاله المستخدم لنفس العيار */
+  targetSell: number;
+  /** الدرهم المستخدم في الحسبة الحالية (null/0 = التسعير ماشي بالدولار) */
+  aedSdg?: number | null;
+  /** تعديل السوق المحلي الحالي % — يُبنى عليه في وضع الدولار */
+  localAdjustPercent?: number;
+}
+
+export interface MarketCalibration {
+  /** 'dirham' = استنتجنا درهم سوق الذهب (الوضع الطبيعي) | 'adjust' = ما فيش درهم، استنتجنا نسبة التعديل */
+  mode: 'dirham' | 'adjust';
+  /** الدرهم المستنتج (في وضع dirham) */
+  aedSdg?: number;
+  /** نسبة تعديل السوق المستنتجة (في وضع adjust) */
+  adjustPercent?: number;
+  /** نسبة فرق السوق عن حسبة المحرك (للعرض: -5.31%) */
+  gapPercent: number;
+}
+
+/** أقصى فرق مقبول بين سعر المستخدم وحسبة المحرك — أكثر منه غالباً كباية في الأصفار */
+export const MARKET_CALIBRATION_MIN_RATIO = 0.5;
+export const MARKET_CALIBRATION_MAX_RATIO = 2;
+
+/**
+ * معايرة بسعر السوق: المستخدم يعرف سعر الجرام الحقيقي في الشارع، واحنا نستنتج منه
+ * الدرهم الفعلي اللي بيتعامل بيه سوق الذهب (مش 3.6725 النظري).
+ *
+ * الحسبة خطّية في الدرهم:
+ *   sell = (أونصة ÷ 31.1034768) × 3.6725 × درهم × (عيار ÷ 24) × (1 + تعديل%)
+ * فالدرهم المستنتج = الدرهم الحالي × (سعر السوق ÷ حسبة المحرك) — بالنسبة نفسها بالظبط.
+ *
+ * ترجع null لو الرقم بعيد عن المعقول (أكثر من ±50%) — غالباً صفر ناقص أو زايد.
+ */
+export function calibrateToMarketPrice(input: MarketCalibrationInput): MarketCalibration | null {
+  const current = Number(input.currentSell);
+  const target = Number(input.targetSell);
+  if (!(current > 0) || !(target > 0)) return null;
+
+  const ratio = target / current;
+  if (ratio < MARKET_CALIBRATION_MIN_RATIO || ratio > MARKET_CALIBRATION_MAX_RATIO) return null;
+
+  const gapPercent = Math.round((ratio - 1) * 10000) / 100;
+  const aed = Number(input.aedSdg);
+
+  // الوضع الطبيعي: التسعير ماشي بالدرهم → نستنتج درهم سوق الذهب
+  if (aed > 50) {
+    const implied = Math.round(aed * ratio);
+    if (implied >= AED_SDG_MIN && implied <= AED_SDG_MAX) return { mode: 'dirham', aedSdg: implied, gapPercent };
+    return null;
+  }
+
+  // ما فيش درهم (التسعير بالدولار) → نستنتج نسبة تعديل السوق المحلي بدلاً منه
+  const currentAdjust = Number(input.localAdjustPercent) || 0;
+  const impliedAdjust = Math.max(-20, Math.min(50, Math.round((currentAdjust + (ratio - 1) * 100) * 10) / 10));
+  return { mode: 'adjust', adjustPercent: impliedAdjust, gapPercent };
+}
+
 export interface GoldComputation {
   /** سعر الجرام لذهب خالص (24) بالجنيه */
   gram24: number;

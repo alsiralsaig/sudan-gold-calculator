@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  RefreshCw,
+import {RefreshCw,
   Globe,
   Landmark,
   Store,
@@ -15,6 +14,7 @@ import {
   SlidersHorizontal,
   Info,
   BadgeCheck,
+  Crosshair,
 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { fmtNum, kCurrency } from '../../core/format';
@@ -79,6 +79,7 @@ export const GoldPriceScreen: React.FC = () => {
     aedManual,
     setAedManual,
     aedAnchor,
+    calibratePriceToMarket,
   } = useGoldStore();
 
   const [status, setStatus] = useState('');
@@ -91,6 +92,7 @@ export const GoldPriceScreen: React.FC = () => {
   const [usdBuyInput, setUsdBuyInput] = useState('');
   const [usdSellInput, setUsdSellInput] = useState('');
   const [ounceInput, setOunceInput] = useState('');
+  const [marketPriceInput, setMarketPriceInput] = useState('');
   const [adjustInput, setAdjustInput] = useState(String(localAdjustPercent ?? 0));
 
   useEffect(() => {
@@ -146,6 +148,18 @@ export const GoldPriceScreen: React.FC = () => {
     setAedManual(null);
     setAedInput('');
     refreshEngine().then((ok) => flash(ok ? 'رجعنا سعر الدرهم من المصادر' : 'تم الحفظ — تعذر الجلب الآن'));
+  };
+
+  /** معايرة بسعر السوق: نستنتج درهم سوق الذهب من سعر الجرام الحقيقي */
+  const applyMarketCalibration = () => {
+    const value = parseFloat(marketPriceInput);
+    if (isNaN(value) || value < 10_000 || value > 5_000_000) {
+      flash('سعر جرام 21 يجب أن يكون بين 10,000 و 5,000,000 جنيه');
+      return;
+    }
+    const res = calibratePriceToMarket(value);
+    flash(res.message);
+    if (res.ok) setMarketPriceInput('');
   };
 
   const computation = engine?.computation || null;
@@ -504,6 +518,38 @@ export const GoldPriceScreen: React.FC = () => {
             </button>
           </div>
         )}
+      </div>
+
+      {/* 🎯 معايرة بسعر السوق — تكتب سعر اليوم ونستنتج درهم سوق الذهب */}
+      <div className="bg-slate-900 border border-amber-500/30 rounded-3xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-black text-white flex items-center gap-2">
+            <Crosshair className="w-4 h-4 text-amber-400" /> 🎯 معايرة بسعر السوق
+          </span>
+          {engine?.aedSdg ? (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-500/20 text-amber-300 border-amber-500/40">
+              درهم سوق الذهب: {Math.round(engine.aedSdg)}
+            </span>
+          ) : null}
+        </div>
+        <p className="text-[10px] text-slate-400 leading-relaxed">
+          اكتب سعر جرام 21 اللي بتبيع به اليوم من السوق — نستنتج منه الدرهم الفعلي اللي بيتعامل بيه
+          سوق الذهب (مش 3.6725 النظري)، ونثبّته معايرة تمشي مع حركة الدولار تلقائياً بعد كده.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={marketPriceInput}
+            onChange={(e) => setMarketPriceInput(enDigits(e.target.value))}
+            className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-white font-mono text-sm focus:outline-none"
+            placeholder={computation?.sell ? `سعر جرام 21 اليوم (المحرك: ${Math.round(computation.sell).toLocaleString('en')})` : 'سعر جرام 21 اليوم (مثال: 1028000)'}
+          />
+          <button onClick={applyMarketCalibration} className="px-4 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl transition-colors">
+            معايرة
+          </button>
+        </div>
+        {status ? <p className="text-[10px] text-amber-300 font-bold">{status}</p> : null}
       </div>
 
       {/* 🟣 السوق المحلي */}
