@@ -629,6 +629,27 @@ export function checkApproval(
   };
 }
 
+/**
+ * هل نعتمد السعر الجديد؟
+ *
+ * بوابة الـ 5% (checkApproval) تحمي من **قراءة مصدر مضروبة** — لكنها ما تمنعش
+ * معايرة المستخدم: هو اللي كتب سعر السوق بإيده، فلو وقفناه على البوابة يتجمّد
+ * «السعر المعتمد» على الرقم القديم ويبان في الشريط رقمين متضاربين
+ * (المعتمد 1,084,930 جنب الموازي 1,026,670).
+ */
+export function approvalDecision(input: {
+  /** نتيجة checkApproval: التغيير أكبر من الحد المسموح */
+  needsConfirmation: boolean;
+  /** السعر جاي من معايرة المستخدم (أو درهم كتبه بإيده) */
+  fromUserCalibration?: boolean;
+  /** اعتماد فوري مطلوب (مثلاً أول معايرة) */
+  approveAnyway?: boolean;
+}): boolean {
+  return (
+    !input.needsConfirmation || Boolean(input.fromUserCalibration) || Boolean(input.approveAnyway)
+  );
+}
+
 /** تحذير عند تعديل سعر العملية يدوياً بعيداً عن المعتمد */
 export function operationPriceWarning(
   operationPrice: number,

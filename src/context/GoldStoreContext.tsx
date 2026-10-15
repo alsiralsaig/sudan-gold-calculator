@@ -9,6 +9,7 @@ import {
   AED_RATIO_MAX,
   AED_RATIO_MIN,
   TRADE_KARAT,
+  approvalDecision,
 } from '../core/pricing';
 import type { AedAnchor, Aggregate, ApprovedPrice, GoldComputation, SourceReading } from '../core/pricing';
 import {
@@ -118,6 +119,11 @@ export interface EngineOverrides {
   usdBuy?: number;
   usdSell?: number;
   ounce?: number;
+  /**
+   * اعتماد السعر الناتج **فوراً** بدون بوابة الـ 5%.
+   * يُستخدم بعد معايرة المستخدم (هو اللي أدخل الرقم بإيده، فما يحتاجش تأكيد).
+   */
+  approveAnyway?: boolean;
 }
 
 interface GoldStoreContextType {
@@ -1218,7 +1224,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   /** سعر الدرهم «من عندي» — يتجاوز المصادر (سوق الذهب بيتسعّر بالدرهم) */
-  const setAedManual = (value: number | null, meta?: { gramPrice?: number }) => {
+  const setAedManual = (
+    value: number | null,
+    meta?: { gramPrice?: number; approveAnyway?: boolean }
+  ) => {
     const clamped = value && Number.isFinite(value) ? Math.min(50_000, Math.max(50, Math.round(value))) : null;
     setAedManualState(clamped);
     aedManualRef.current = clamped;
@@ -1247,7 +1256,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       aedAnchorRef.current = null;
       try { localStorage.removeItem(AED_ANCHOR_KEY); } catch { /* خصوصية */ }
     }
-    refreshEngine();
+    refreshEngine(meta?.approveAnyway ? { approveAnyway: true } : undefined);
   };
 
   /**
@@ -1270,7 +1279,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return { ok: false, message: 'الرقم بعيد عن حسبة المحرك بأكثر من 50% — تأكد من الأصفار' };
     }
     if (cal.mode === 'dirham' && cal.aedSdg) {
-      setAedManual(cal.aedSdg, { gramPrice: Math.round(targetSell) });
+      // المستخدم هو اللي كتب سعر السوق → نعتمده فوراً (بدون بوابة الـ 5%)
+      setAedManual(cal.aedSdg, { gramPrice: Math.round(targetSell), approveAnyway: true });
       return {
         ok: true,
         aedSdg: cal.aedSdg,
@@ -1280,6 +1290,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     const percent = cal.adjustPercent ?? 0;
     setLocalPremium(percent);
+    // نفس المنطق: تعديل نابع من سعر كتبه المستخدم → يُعتمد فوراً
+    refreshEngine({ approveAnyway: true });
     return {
       ok: true,
       adjustPercent: percent,
@@ -1350,6 +1362,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const anchorNow = aedAnchorRef.current;
         if (anchorNow && anchorNow.ratio >= AED_RATIO_MIN && anchorNow.ratio <= AED_RATIO_MAX) params.set('aedRatio', String(anchorNow.ratio));
         else if (aedManualRef.current && aedManualRef.current > 0) params.set('aed', String(aedManualRef.current));
+        /**
+         * بوابة الـ 5% تحمي من **قراءة مصدر مضروبة** — لا من معايرة المستخدم.
+         * لو السعر جاي من معايرته (أو درهم كتبه بإيده) نعتمده مباشرة، وإلا
+         * يتجمّد «المعتمد» على رقم قديم ويبان في الشريط رقمين متضاربين.
+         */
+        const fromUserCalibration =
+          Boolean(anchorNow) || (aedManualRef.current ?? 0) > 0;
         const res = await fetch(`/api/rates/engine?${params.toString()}`, { cache: 'no-store' });
         if (!res.ok) {
           setEngineError('تعذر تشغيل محرك الأسعار الآن');
@@ -1363,7 +1382,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const parallelOk = (data?.aggregates?.parallel?.used?.length ?? 0) > 0;
         if (comp?.ok && parallelOk) {
           const check = checkApproval(approvedRef.current, { buy: comp.buy, sell: comp.sell });
-          if (!check.needsConfirmation) {
+          // معايرة المستخدم: رقمه بإيده → يُعتمد فوراً، ما نوقفوش على بوابة الـ 5%
+          if (
+            approvalDecision({
+              needsConfirmation: check.needsConfirmation,
+              fromUserCalibration,
+              approveAnyway: overrides?.approveAnyway,
+            })
+          ) {
             const auto: ApprovedPrice = {
               buy: comp.buy,
               sell: comp.sell,

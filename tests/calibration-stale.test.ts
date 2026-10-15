@@ -7,6 +7,8 @@ import {
   CALIBRATION_STALE_HOURS,
   aedAnchorRatio,
   AED_PER_USD,
+  approvalDecision,
+  checkApproval,
   type AedAnchor,
 } from '../src/core/pricing';
 
@@ -54,4 +56,21 @@ test('المعايرة تحفظ سعر الجرام اللي اشتُقّت من
   // والنسبة مضبوطة: 2395 ÷ (9300 ÷ 3.6725)
   const computed = 9300 / AED_PER_USD;
   assert.ok(Math.abs(a.ratio - 2395 / computed) < 1e-4);
+});
+
+test('اعتماد السعر: بوابة الـ 5% ما توقفش معايرة المستخدم', () => {
+  // نفس حالة المستخدم: معايرته تنزّل السعر من 1,084,930 لـ 1,026,670 (−5.4%)
+  const check = checkApproval({ buy: 1_084_930, sell: 1_084_930, at: '', source: 'auto' }, { buy: 1_026_670, sell: 1_026_670 });
+  assert.equal(check.needsConfirmation, true, 'التغيير أكبر من 5% فعلًا');
+
+  // بدون معايرة → يوقف ويطلب تأكيد (يحمي من قراءة مصدر مضروبة)
+  assert.equal(approvalDecision({ needsConfirmation: check.needsConfirmation }), false);
+
+  // بمعايرة المستخدم → يُعتمد فوراً، وإلا يتجمّد المعتمد ويتضارب مع الشريط
+  assert.equal(approvalDecision({ needsConfirmation: check.needsConfirmation, fromUserCalibration: true }), true);
+  assert.equal(approvalDecision({ needsConfirmation: check.needsConfirmation, approveAnyway: true }), true);
+});
+
+test('اعتماد السعر: التغيير الصغير يُعتمد في كل الحالات', () => {
+  assert.equal(approvalDecision({ needsConfirmation: false }), true);
 });
