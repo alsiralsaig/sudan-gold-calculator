@@ -1,15 +1,17 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Lock, ShieldAlert, Timer, Delete } from 'lucide-react';
+import { Lock, ShieldAlert, Timer, Delete, HelpCircle, X } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 
 export const LockScreen: React.FC = () => {
-  const { unlockApp, lockout } = useGoldStore();
+  const { unlockApp, lockout, setPinCode } = useGoldStore();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [forgot, setForgot] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const lockedFor = Math.max(0, Math.ceil((lockout.until - now) / 1000));
   const isLockedOut = lockedFor > 0;
@@ -35,6 +37,17 @@ export const LockScreen: React.FC = () => {
     } else {
       setError('');
     }
+  };
+
+  /** تصفير الرمز المنسي: البيانات (مشتريات/بيع/منصرفات/شركاء/فروع) محفوظة منفصلة ولا تُمسّ */
+  const resetForgottenPin = async () => {
+    if (resetting) return;
+    setResetting(true);
+    try {
+      localStorage.removeItem('gold_pin_lockout');
+    } catch (_) {}
+    await setPinCode('');
+    setResetting(false);
   };
 
   const handleDigit = (digit: string) => {
@@ -122,6 +135,42 @@ export const LockScreen: React.FC = () => {
             className="w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-sm rounded-2xl shadow-lg transition-transform active:scale-95"
           >
             فتح التطبيق
+          </button>
+        )}
+
+        {forgot ? (
+          <div className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 p-4 space-y-3 text-center">
+            <p className="text-[11px] leading-relaxed text-slate-300">
+              بياناتك كلها — مشتريات وبيع ومنصرفات وشركاء وفروع — <strong className="text-amber-400">محفوظة وما بتتشال</strong>.
+              التصفير بيلغي رمز الدخول بس، وتدخل عادي، وبعدها تعيّن رمز جديد من
+              الإعدادات ← الأمان.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setForgot(false)}
+                disabled={resetting}
+                className="flex-1 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-xs font-bold hover:bg-slate-800"
+              >
+                <X className="w-4 h-4 inline-block ml-1 -mt-0.5" />
+                تراجع
+              </button>
+              <button
+                onClick={() => void resetForgottenPin()}
+                disabled={resetting}
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-black hover:bg-amber-600 disabled:opacity-50"
+              >
+                {resetting ? 'جارٍ التصفير…' : 'صفّر الرمز وادخُل'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setForgot(true)}
+            disabled={isChecking}
+            className="text-slate-400 hover:text-amber-400 text-[11px] font-bold flex items-center gap-1.5 transition-colors"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            نسيت الرمز؟ استعادة بلا فقدان بيانات
           </button>
         )}
       </div>
