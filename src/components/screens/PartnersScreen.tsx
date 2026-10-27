@@ -26,7 +26,6 @@ export const PartnersScreen: React.FC = () => {
     addPartner,
     updatePartner,
     archivePartner,
-    deletePartner,
     expenses,
   } = useGoldStore();
 
@@ -116,10 +115,9 @@ export const PartnersScreen: React.FC = () => {
     <div className="space-y-6 animate-in fade-in duration-200">
           <div className="mb-4 bg-slate-900 border border-amber-500/20 rounded-2xl p-3 space-y-2">
             <div className="text-[11px] text-slate-400">إجراءات الصفحة على الشركاء الظاهرين فقط</div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button onClick={() => { if (confirm('أرشفة كل الشركاء الظاهرين؟')) visiblePartners.forEach(p => archivePartner(p.id)); }} className="py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-black">أرشفة الكل</button>
               <button onClick={handleBulkPartnerEdit} className="py-2 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[11px] font-black">تعديل الكل</button>
-              <button onClick={() => { if (confirm('حذف نهائي لكل الشركاء الظاهرين؟')) visiblePartners.forEach(p => deletePartner(p.id)); }} className="py-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-black">حذف الكل</button>
             </div>
           </div>
 
@@ -263,7 +261,7 @@ export const PartnersScreen: React.FC = () => {
                   </button>
                   <button
                     onClick={() => {
-                      if (confirm(`هل أنت متأكد من أرشفة الشريك (${p.name})؟`)) {
+                      if (confirm(`أرشفة الشريك (${p.name})؟ يظهر بعدين في الأرشيف.`)) {
                         archivePartner(p.id);
                       }
                     }}
@@ -271,7 +269,6 @@ export const PartnersScreen: React.FC = () => {
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => { if (confirm('حذف نهائي لهذا الشريك؟')) deletePartner(p.id); }} className="p-2 bg-slate-800 text-slate-300 rounded-xl"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
 

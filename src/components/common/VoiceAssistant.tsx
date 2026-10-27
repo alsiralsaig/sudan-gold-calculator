@@ -7,7 +7,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Mic, Send, Keyboard, X, Square } from 'lucide-react';
+import { Mic, Send, X, Square, Sparkles, RotateCcw, Coins, Wallet, Package } from 'lucide-react';
+import { answerGoldQuestion, looksLikeCommand, looksLikeQuestion } from '../../core/goldChat';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import {
   parseCommand,
@@ -56,6 +57,7 @@ type Props = {
 };
 
 type Reply = { kind: 'ok' | 'err' | 'info'; text: string; say?: string };
+type ChatMsg = { id: string; sender: 'user' | 'assistant'; text: string };
 
 /** بيع ناقص معلومات — حوار خطوة بخطوة: العيار ← الكلفة ← سعر البيع */
 type PendingSale = {
@@ -102,8 +104,16 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState('');
   const [reply, setReply] = useState<Reply | null>(null);
-  const [showType, setShowType] = useState(false);
   const [typed, setTyped] = useState('');
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chat, setChat] = useState<ChatMsg[]>([
+    {
+      id: 'hi',
+      sender: 'assistant',
+      text: 'حبابك. اسأل عن سعر الذهب والدولار، حوّل بضاعة بالدولار للجنيه، رأس المال، المخزون، أو سجّل بيع وشراء بالصوت أو الكتابة.',
+    },
+  ]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const stopListenRef = useRef<(() => void) | null>(null);
   const pendingSaleRef = useRef<PendingSale | null>(null);
   /* ── الاستماع المتواصل: المايك مفتوح لحد ما تدوسو تاني ── */
@@ -417,6 +427,20 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
       const clean = text.trim();
       if (!clean) return;
       stopSpeaking();
+      setChat((prev) => [...prev, { id: `u${Date.now()}`, sender: 'user', text: clean }]);
+      if (looksLikeQuestion(clean) && !looksLikeCommand(clean)) {
+        const ans = answerGoldQuestion(clean, {
+          storeName: store.storeName || 'حاسبة الذهب',
+          rates,
+          financials: store.financials,
+          inventory: store.inventory,
+          partnerShares: store.partnerSharesList || [],
+          approved: approvedPrice ? { buy: approvedPrice.buy, sell: approvedPrice.sell } : null,
+        });
+        const r: Reply = { kind: 'info', text: ans, say: ans.split('\n')[0] };
+        deliverRef.current(r);
+        return;
+      }
       /* بيع ناقص معلومات — حوار خطوة بخطوة: العيار ← الكلفة ← سعر البيع */
       const pending = pendingSaleRef.current;
       if (pending) {
@@ -604,7 +628,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
         }
       })();
     },
-    [execCommand, flashHide, tab, peopleCtx, rates.karat21]
+    [execCommand, flashHide, tab, peopleCtx, rates, approvedPrice, store]
   );
 
   /* ═══════════ الاستماع المتواصل: المايك مفتوح لحد ما تدوسو تاني ═══════════ */
@@ -683,6 +707,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
   const deliverReply = useCallback(
     (r: Reply) => {
       setReply(r);
+      setChat((prev) => [...prev, { id: `a${Date.now()}`, sender: 'assistant', text: r.text }]);
       flashHide();
       /* حارس ضوضاء المحل: فشل متتالي كتير = المايك بيلتقط كلام الناس — سكّر براحتنا */
       if (r.kind === 'err') unknownStreakRef.current += 1;
@@ -705,7 +730,7 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
     stopSpeaking();
     setHeard('');
     setReply(null);
-    setShowType(false);
+    setChatOpen(true);
     sessionRef.current = true;
     silentCyclesRef.current = 0;
     unknownStreakRef.current = 0;
@@ -725,112 +750,153 @@ export const VoiceAssistant: React.FC<Props> = ({ onNavigate, onCalc, tab }) => 
   resumeRef.current = resumeSession;
   deliverRef.current = deliverReply;
 
+  useEffect(() => {
+    if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chat, chatOpen]);
+
   const tapMic = useCallback(() => {
     if (listening) {
       stopSession();
       return;
     }
     if (supported) startSession();
-    else setShowType(true);
+    else inputRef.current?.focus();
   }, [listening, supported, startSession, stopSession]);
 
   const submitTyped = () => {
     const t = typed.trim();
     if (!t) return;
     setTyped('');
-    setShowType(false);
     setHeard(t);
     runText(t);
   };
 
+  const chips = [
+    { text: 'كم سعر الذهب؟', icon: Coins },
+    { text: 'حوّل 100 دولار', icon: Wallet },
+    { text: 'المخزون', icon: Package },
+  ];
+
   return (
     <>
-      {/* الفقاعة الصغيرة — الرد/الحالة */}
-      {(listening || heard || reply) && !showType && (
-        <div className="fixed bottom-[160px] left-2 z-50 max-w-[270px]" dir="rtl">
-          <div
-            className={`rounded-2xl px-3 py-2 text-[12px] font-bold leading-snug shadow-lg shadow-black/50 border ${
-              listening
-                ? 'bg-rose-500/90 border-rose-400 text-white'
-                : reply?.kind === 'err'
-                  ? 'bg-slate-900/95 border-rose-500/40 text-rose-200'
-                  : reply?.kind === 'info'
-                    ? 'bg-slate-900/95 border-slate-600 text-slate-200 whitespace-pre-line'
-                    : 'bg-slate-900/95 border-amber-500/40 text-amber-200'
-            }`}
-            onClick={() => { setReply(null); setHeard(''); }}
-          >
-            {reply ? (
-              <>
-                {heard && <span className="block text-slate-500 text-[11px] leading-snug">{heard}</span>}
-                <span>{reply.text}</span>
-                {listening && (
-                  <span className="block text-white/70 text-[10px] leading-snug mt-0.5">🎙️ لسه معاكم — قول أمرك الجاي، ودوس ⏹ للإيقاف</span>
-                )}
-              </>
-            ) : listening ? (
-              <span>{heard ? (heard.length > 70 ? `…${heard.slice(-70)}` : heard) : 'بسمعك... قول أمرك وخلص بـ«تمام»'}</span>
-            ) : (
-              <span>{heard}</span>
-            )}
-          </div>
-        </div>
+      {!chatOpen && (
+        <button
+          type="button"
+          onClick={() => setChatOpen(true)}
+          aria-label="المساعد الذكي"
+          className="fixed bottom-[64px] left-3 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 shadow-lg shadow-amber-900/40 flex items-center justify-center active:scale-95"
+        >
+          <Sparkles className="w-6 h-6" />
+        </button>
       )}
 
-      {/* سطر الكتابة الرفيع */}
-      {showType && (
-        <div className="fixed bottom-[112px] left-2 right-16 z-50" dir="rtl">
-          <div className="flex items-center gap-1.5 bg-slate-900/95 backdrop-blur border border-amber-500/40 rounded-full pl-2 pr-3 py-1.5 shadow-lg shadow-black/50">
+      {chatOpen && (
+        <div className="fixed z-50 inset-x-0 bottom-0 sm:inset-auto sm:bottom-4 sm:left-4 sm:w-[380px] sm:max-w-[calc(100vw-2rem)] h-[min(78vh,640px)] sm:h-[min(72vh,620px)] flex flex-col bg-slate-950 border-t sm:border border-amber-500/40 sm:rounded-3xl shadow-2xl overflow-hidden" dir="rtl">
+          <div className="flex items-center justify-between px-3 py-2.5 bg-gradient-to-l from-amber-500/20 to-slate-900 border-b border-amber-500/20">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-8 h-8 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-black text-white truncate">مساعد الحاسبة</p>
+                <p className="text-[10px] text-amber-200/80">أسئلة + تحويل دولار + تسجيل بالصوت</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setChat([
+                    {
+                      id: 'hi',
+                      sender: 'assistant',
+                      text: 'حبابك. اسأل عن سعر الذهب والدولار، حوّل بضاعة بالدولار للجنيه، رأس المال، المخزون، أو سجّل بيع وشراء.',
+                    },
+                  ])
+                }
+                className="p-1.5 text-slate-400"
+                aria-label="إعادة الحوار"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={() => setChatOpen(false)} className="p-1.5 text-slate-400" aria-label="إغلاق">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+            {chat.map((m) => (
+              <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
+                <div
+                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-[12px] font-bold leading-relaxed whitespace-pre-wrap ${
+                    m.sender === 'user'
+                      ? 'bg-amber-500 text-slate-950 rounded-br-sm'
+                      : 'bg-slate-900 text-slate-100 border border-slate-700 rounded-bl-sm'
+                  }`}
+                >
+                  {m.text}
+                </div>
+              </div>
+            ))}
+            {listening && (
+              <p className="text-[11px] text-rose-300 font-bold">🎙️ بسمعك… {heard || 'قول سؤالك أو الأمر'}</p>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          <div className="px-2 py-1.5 border-t border-slate-800 flex gap-1.5 overflow-x-auto">
+            {chips.map((c) => {
+              const Icon = c.icon;
+              return (
+                <button
+                  key={c.text}
+                  type="button"
+                  onClick={() => runText(c.text)}
+                  className="shrink-0 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-700 text-[11px] font-bold text-slate-200 flex items-center gap-1"
+                >
+                  <Icon className="w-3 h-3 text-amber-400" />
+                  {c.text}
+                </button>
+              );
+            })}
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitTyped();
+            }}
+            className="p-2.5 bg-slate-900 border-t border-slate-800 flex items-center gap-1.5"
+          >
             <input
               ref={inputRef}
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') submitTyped(); }}
-              placeholder="اكتب الأمر..."
-              autoFocus
-              className="flex-1 min-w-0 bg-transparent text-sm text-white font-bold focus:outline-none"
+              placeholder={listening ? 'اتكلم… أو اكتب' : 'اسأل أو حوّل دولار أو سجّل…'}
+              className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
               dir="auto"
             />
-            <button type="button" onClick={() => setShowType(false)} aria-label="إغلاق الكتابة" className="p-1.5 text-slate-500">
-              <X className="w-4 h-4" />
-            </button>
             <button
               type="button"
-              onClick={submitTyped}
-              aria-label="تنفيذ"
-              className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center shrink-0"
+              onClick={tapMic}
+              className={`p-2.5 rounded-xl shrink-0 ${listening ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-800 text-amber-300'}`}
+              aria-label={listening ? 'إيقاف' : 'مايك'}
+            >
+              {listening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+            <button
+              type="submit"
+              disabled={!typed.trim()}
+              className="p-2.5 rounded-xl bg-amber-500 text-slate-950 disabled:opacity-40 shrink-0"
+              aria-label="إرسال"
             >
               <Send className="w-4 h-4" />
             </button>
-          </div>
+          </form>
         </div>
-      )}
-
-      {/* زرار المايك الصغير — زي أيقونة البحث */}
-      <button
-        type="button"
-        onClick={tapMic}
-        aria-label="الأوامر الصوتية"
-        className={`fixed bottom-[64px] left-2 z-50 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-95 ${
-          listening
-            ? 'bg-rose-500 text-white shadow-rose-900/50 animate-pulse'
-            : 'bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 shadow-amber-900/40'
-        }`}
-      >
-        {listening ? <Square className="w-4 h-4" /> : <Mic className="w-5 h-5" />}
-      </button>
-
-      {/* زرار الكتابة الصغير (فوق المايك) */}
-      {!showType && !listening && (
-        <button
-          type="button"
-          onClick={() => { setShowType(true); setTimeout(() => inputRef.current?.focus(), 100); }}
-          aria-label="كتابة أمر"
-          className="fixed bottom-[112px] left-2 z-50 w-10 h-10 rounded-full bg-slate-900/90 border border-slate-700 text-slate-300 shadow-lg flex items-center justify-center"
-        >
-          <Keyboard className="w-5 h-5" />
-        </button>
       )}
     </>
   );
 };
+
