@@ -59,9 +59,8 @@ test('aggregateReadings: اختلاف هائل بين المصادر → لا س
     'parallel',
     NOW
   );
-  assert.equal(wide.agreement, 'none', 'مصدران متباعدان جداً = لا اتفاق');
   assert.equal(wide.sell, null, 'لا يُعتمد سعر عند عدم الاتفاق');
-  assert.ok(wide.warnings.some((w) => w.includes('اختلاف غير طبيعي')));
+  assert.ok(wide.used.length === 0 || wide.agreement === 'none', 'مصدران متباعدان جداً = لا اتفاق');
   assert.ok(agg.used.length >= 1);
 });
 
@@ -71,6 +70,38 @@ test('aggregateReadings: قراءة قديمة (أكثر من 36 ساعة) تُ�
   assert.equal(agg.used.length, 0);
   assert.match(agg.rejected[0].reason, /قديمة/);
   assert.equal(agg.confidence, 0);
+});
+
+test('aggregateReadings: خلط شراء دولار مع بيع ريال يُرفض', () => {
+  const agg = aggregateReadings(
+    [
+      { source: 'اليوم نيوز', kind: 'parallel', buy: 8500, sell: 10200, at: fresh(5) },
+      { source: 'اخبار السودان', kind: 'parallel', buy: 10100, sell: 10221, at: fresh(5) },
+    ],
+    'parallel',
+    NOW
+  );
+  assert.ok(agg.rejected.some((r) => /خلط عملتين/.test(r.reason)));
+  assert.ok(agg.sell && agg.sell > 10000);
+});
+
+test('aggregateReadings: مقال جمركي يُرفض', () => {
+  const agg = aggregateReadings(
+    [
+      {
+        source: 'سودافاكس',
+        kind: 'parallel',
+        sell: 5631,
+        at: fresh(5),
+        label: 'زيادة جديدة في سعر الدولار الجمركي',
+      },
+      { source: 'اخبار السودان', kind: 'parallel', buy: 10100, sell: 10221, at: fresh(5) },
+    ],
+    'parallel',
+    NOW
+  );
+  assert.ok(agg.rejected.some((r) => /جمركي/.test(r.reason)));
+  assert.ok(agg.sell && Math.abs(agg.sell - 10221) < 2);
 });
 
 test('aggregateReadings: قيم غير منطقية تُرفض (شراء أعلى من البيع، أو خارج النطاق)', () => {

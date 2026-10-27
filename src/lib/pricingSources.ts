@@ -20,6 +20,12 @@ export interface SourceBundle {
 
 const nowIso = () => new Date().toISOString();
 
+/** مقالات الدولار الجمركي/البنكي ما تمثلش السوق الموازي — إدخالها يبوّظ السعر. */
+export function isNonParallelUsdArticle(titleOrUrl: string): boolean {
+  const t = normalizeDigits(titleOrUrl || '');
+  return /جمرك|جمركي|الدولار\s*الجمركي|سعر\s*البنك|البنك\s*المركزي|تحويلات\s*البنك|دولار\s*البنوك/.test(t);
+}
+
 function toNum(raw: string | undefined | null): number | null {
   if (!raw) return null;
   const clean = normalizeDigits(String(raw)).replace(/[٬،,\s]/g, '');
@@ -253,7 +259,12 @@ async function fetchSudafaxReading(): Promise<{ reading: SourceReading | null; g
   const feed = await fetchTextRetry('https://sudafax.com/feed/', 12000);
   if (feed) {
     const items = parseRssItems(feed);
-    const priced = items.find((it) => /أسعار|سعر/.test(it.title) && /الدولار|العملات/.test(it.title));
+    const priced = items.find(
+      (it) =>
+        /أسعار|سعر/.test(it.title) &&
+        /الدولار|العملات/.test(it.title) &&
+        !isNonParallelUsdArticle(`${it.title} ${it.link || ''}`)
+    );
     if (priced) {
       const parsed = parseSudafaxFeedItem(priced.description);
       if (parsed.sell || parsed.buy) {
@@ -279,12 +290,15 @@ async function fetchSudafaxReading(): Promise<{ reading: SourceReading | null; g
   const search = await fetchTextRetry('https://sudafax.com/?s=%D8%A7%D9%84%D8%AF%D9%88%D9%84%D8%A7%D8%B1', 12000, 1);
   if (search) {
     const links = Array.from(search.matchAll(/<h2[^>]*>\s*<a[^>]*href="(https:\/\/sudafax\.com\/\d+\/[^"]+)"/g)).map((m) => m[1]);
-    const articleUrls = links.filter((u) => /%D8%AF%D9%88%D9%84%D8%A7%D8%B1|دولار|أسعار|%d8%a3%d8%b3%d8%b9%d8%a7%d8%b1/.test(decodeURIComponent(u)));
+    const articleUrls = links.filter((u) => {
+      const decoded = decodeURIComponent(u);
+      return /%D8%AF%D9%88%D9%84%D8%A7%D8%B1|دولار|أسعار|%d8%a3%d8%b3%d8%b9%d8%a7%d8%b1/.test(decoded) && !isNonParallelUsdArticle(decoded);
+    });
     for (const url of articleUrls.slice(0, 2)) {
       const html = await fetchText(url, 12000);
       if (!html) continue;
       const parsed = parseSudafaxArticle(html);
-      if (parsed.usd.sell) {
+      if (parsed.usd.sell && !isNonParallelUsdArticle(`${parsed.title || ''} ${url}`)) {
         return {
           reading: {
             source: 'سودافاكس',
@@ -660,9 +674,7 @@ export interface PricingSnapshot {
  *   الدرهم الاماراتي 1159.32 2450
  * نستخرج الرقم الثاني (البديل) لكل عملة ونتحقق أنه داخل نطاق معقول.
  *
- * ⚠️ تنبيه مقصود: دولار alsoug (البديل) **مستخدموش** كمصدر في محرك الدولار —
- * قراءاته أبعد من مصادرنا (9,100–9,300) وبتولّد تحذيرات تعارض بلا فايدة.
- * البارسر يستخرجه للمرجعية والاختبارات فقط، وما فيش حاجة بتوصّله بالتسعير.
+ * دولار «البديل» في alsoug هو السوق الموازي الحقيقي — ندخّله في المحرك.
  */
 export function parseAlsougCurrency(text: string): {
   usdParallel: number | null;
@@ -707,7 +719,17 @@ async function fetchAlsougReading(): Promise<{ readings: SourceReading[]; error:
         label: 'سعر الدرهم الإماراتي (البديل)',
       });
     }
-    if (!readings.length) return { readings, error: 'السوق السوداني: ما لقينا الدرهم في جدول العملات' };
+    if (parsed.usdParallel) {
+      readings.push({
+        source: 'السوق السوداني (alsoug)',
+        kind: 'parallel',
+        sell: parsed.usdParallel,
+        at: nowIso(),
+        url: 'https://www.alsoug.com/currency',
+        label: 'سعر الدولار الأمريكي (البديل)',
+      });
+    }
+    if (!readings.length) return { readings, error: 'السوق السوداني: ما لقينا الدرهم/الدولار في جدول العملات' };
     return { readings, error: null };
   } catch {
     return { readings, error: 'السوق السوداني: تعذّر الوصول لصفحة العملات' };
@@ -719,7 +741,7 @@ async function fetchAlsougReading(): Promise<{ readings: SourceReading[]; error:
  * يعتمد على جالب اخبار السودان (يستخرج الدرهم من جدول العملات إن نُشر) — مُخزّن 5 دقائق،
  * ومعاه جدول alsoug (عمود «البديل»). إن لم يُنشر اليوم يعود فارغاً والمحرك يستخدم المحسوب من الدولار.
  */
-async function fetchAedReading(): Promise<{ readings: SourceReading[]; errors: string[] }> {
+async function fetchAedReading(): Promise<{ readings: SourceReading[]; errors: string[]; usdParallel?: SourceReading }> {
   const readings: SourceReading[] = [];
   const errors: string[] = [];
   try {
@@ -735,10 +757,12 @@ async function fetchAedReading(): Promise<{ readings: SourceReading[]; errors: s
 
   // مصدر 2: جدول العملات في alsoug — عمود «البديل» هو السوق الموازي
   const alsoug = await fetchAlsougReading();
-  readings.push(...alsoug.readings);
+  const aedOnly = alsoug.readings.filter((r) => r.kind === 'parallel-aed');
+  const usdParallel = alsoug.readings.find((r) => r.kind === 'parallel');
+  readings.push(...aedOnly);
   if (alsoug.error) errors.push(alsoug.error);
 
-  return { readings, errors };
+  return { readings, errors, usdParallel };
 }
 
 /** جلب كل المصادر بالتوازي — فشل مصدر لا يوقف البقية أبداً */
@@ -792,6 +816,7 @@ export async function fetchPricingSources(): Promise<PricingSnapshot> {
   if (aedBundle.status === 'fulfilled') {
     aedB.readings = aedBundle.value.readings;
     aedB.errors = aedBundle.value.errors;
+    if (aedBundle.value.usdParallel) parallel.readings.push(aedBundle.value.usdParallel);
   }
 
   return {

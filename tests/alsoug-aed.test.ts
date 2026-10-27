@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { parseAlsougCurrency } from '../src/lib/pricingSources';
+import { parseAlsougCurrency, isNonParallelUsdArticle } from '../src/lib/pricingSources';
 import { resolveAedSdg, AED_PER_USD } from '../src/core/pricing';
 
 const strip = (html: string) =>
@@ -68,4 +68,9 @@ test('على HTML حقيقي محفوظ من الموقع (إن وُجد)', () =
   const parsed = parseAlsougCurrency(strip(fs.readFileSync(path, 'utf-8')));
   assert.equal(parsed.aedParallel, 2450);
   assert.equal(parsed.usdParallel, 8990);
+});
+
+test('مقال الدولار الجمركي ما يتعدّاش سوق موازي', () => {
+  assert.equal(isNonParallelUsdArticle('زيادة جديدة في سعر الدولار الجمركي في السودان - سودافاكس'), true);
+  assert.equal(isNonParallelUsdArticle('سعر الدولار في السوق الموازي اليوم'), false);
 });

@@ -89,6 +89,11 @@ function limitOf(kind: ReadingKind) {
   return PLAUSIBLE.usd;
 }
 
+function isNonParallelLabel(reading: SourceReading): boolean {
+  const t = `${reading.label || ''} ${reading.url || ''} ${reading.source || ''}`;
+  return /جمرك|جمركي|الدولار\s*الجمركي|سعر\s*البنك|البنك\s*المركزي/.test(t);
+}
+
 function isValidValue(kind: ReadingKind, value: number): boolean {
   const { min, max } = limitOf(kind);
   return Number.isFinite(value) && value >= min && value <= max;
@@ -124,6 +129,10 @@ export function aggregateReadings(
       rejected.push({ reading, reason: `قراءة قديمة (${Math.round(age / 60)} ساعة)` });
       continue;
     }
+    if (kind === 'parallel' && isNonParallelLabel(reading)) {
+      rejected.push({ reading, reason: 'مقال دولار جمركي/بنكي مش سوق موازي' });
+      continue;
+    }
 
     const values = [reading.buy, reading.sell, reading.price].filter(
       (v): v is number => typeof v === 'number' && Number.isFinite(v)
@@ -144,7 +153,16 @@ export function aggregateReadings(
       rejected.push({ reading, reason: 'شراء أعلى من البيع — بيانات غير منطقية' });
       continue;
     }
-
+    if (
+      kind === 'parallel' &&
+      typeof reading.buy === 'number' &&
+      typeof reading.sell === 'number' &&
+      reading.sell > 0 &&
+      Math.abs(reading.sell - reading.buy) / reading.sell > 0.12
+    ) {
+      rejected.push({ reading, reason: 'فرق شراء/بيع أكبر من 12% — غالباً خلط عملتين' });
+      continue;
+    }
     if (freshestAge === null || age < freshestAge) freshestAge = age;
     accepted.push(reading);
   }
@@ -163,7 +181,7 @@ export function aggregateReadings(
   for (const reading of accepted) {
     const ref = referenceValue(reading);
     const deviation = med > 0 ? Math.abs(ref - med) / med : 0;
-    if (referenceValues.length >= 3 && deviation > 0.06) {
+    if (deviation > 0.15 || (referenceValues.length >= 3 && deviation > 0.06)) {
       rejected.push({
         reading,
         reason: `شاذة (فرق ${(deviation * 100).toFixed(1)}% عن الوسيط)`,
