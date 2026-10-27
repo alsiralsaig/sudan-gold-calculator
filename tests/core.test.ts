@@ -137,6 +137,20 @@ test('computeFinancials: الذمم المدينة والدائنة صحيحة',
   assert.equal(fin.openCreditSales, 1);
 });
 
+test('computeFinancials: المنصرف المأرشف يفضل داخل الإجمالي', () => {
+  const fin = computeFinancials(
+    [],
+    [],
+    [
+      { id: 'e1', date: '2026-01-01', amount: 500_000, category: 'إيجار', target: 'عام', name: '', notes: '', archived: true },
+      { id: 'e2', date: '2026-01-01', amount: 80_000, category: 'مسحوبات', target: 'أحمد', name: '', notes: '', archived: true },
+    ],
+    []
+  );
+  assert.equal(fin.generalExpenses, 500_000);
+  assert.equal(fin.privateExpenses, 80_000);
+});
+
 test('summarizeRange: يجمع حركة الفترة فقط', () => {
   const from = new Date('2026-01-01T00:00:00.000Z');
   const to = new Date('2026-01-31T23:59:59.999Z');

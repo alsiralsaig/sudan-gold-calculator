@@ -109,6 +109,19 @@ test('صافي المستحق = رأس المال + نصيب الربح − ال
   assert.equal(by['والي الدين'].partner.capital + by['والي الدين'].netShare, 2_230_000, 'ما اتأثرش');
 });
 
+test('المنصرف العام المأرشف يفضل مخصوم من رأس المال والمستحق', () => {
+  const archivedGeneral: Expense = { ...general(26_000, ['ناجو', 'تاجو']), archived: true };
+  const out = allocateGeneralExpenses([archivedGeneral], partners);
+  assert.equal(out['ناجو'], 13_000, 'الأرشفة ما ترجع الفلوس لرأس المال');
+  assert.equal(out['تاجو'], 13_000);
+
+  const shares = partnerShares(partners, [archivedGeneral, { ...priv(44_500, 'ناجو'), archived: true }], 0, 13_831_000);
+  const by = Object.fromEntries(shares.map((s) => [s.partner.name, s]));
+  assert.equal(by['ناجو'].generalExpenses, 13_000);
+  assert.equal(by['ناجو'].privateExpenses, 44_500);
+  assert.equal(by['ناجو'].partner.capital + by['ناجو'].netShare, 1_962_500);
+});
+
 test('المنصرفات العامة ما تخصمش مرتين: وعاء الربح يفضل إجمالي الربح', () => {
   // وعاء الربح = إجمالي الربح، والعامة تُخصم على مستوى الشريك بس
   const grossProfit = 1_000_000;

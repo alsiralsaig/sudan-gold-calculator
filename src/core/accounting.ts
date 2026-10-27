@@ -68,6 +68,11 @@ function active<T extends { archived?: boolean }>(rows: T[] | undefined): T[] {
   return (rows || []).filter((r) => !r.archived);
 }
 
+/** المنصرف المأرشف يختفي من القوائم، لكن الفلوس تفضل محسوبة على رأس المال. */
+function includingArchived<T>(rows: T[] | undefined): T[] {
+  return rows || [];
+}
+
 /** المبلغ المتبقي على الزبون في عملية بيع */
 export function salePending(sale: Sale): number {
   if (typeof sale.pendingAmount === 'number') return Math.max(0, sale.pendingAmount);
@@ -162,18 +167,18 @@ export function computeFinancials(
 ): Financials {
   const activeSales = active(sales);
   const activePurchases = active(purchases);
-  const activeExpenses = active(expenses);
+  const allExpenses = includingArchived(expenses);
   const activePartners = active(partners);
 
   const totalSales = activeSales.reduce((sum, s) => sum + (s.sellAmount || 0), 0);
   const totalCost = activeSales.reduce((sum, s) => sum + (s.buyAmount || 0), 0);
   const grossProfit = totalSales - totalCost;
 
-  const generalExpenses = activeExpenses
+  const generalExpenses = allExpenses
     .filter((e) => e.target === 'عام' || !e.target)
     .reduce((sum, e) => sum + (e.amount || 0), 0);
 
-  const privateExpenses = activeExpenses
+  const privateExpenses = allExpenses
     .filter((e) => e.target !== 'عام' && Boolean(e.target))
     .reduce((sum, e) => sum + (e.amount || 0), 0);
 
@@ -203,7 +208,7 @@ export function computeFinancials(
     totalCapital: activePartners.reduce((sum, p) => sum + (p.capital || 0), 0),
     activePurchasesCount: activePurchases.length,
     activeSalesCount: activeSales.length,
-    activeExpensesCount: activeExpenses.length,
+    activeExpensesCount: active(expenses).length,
     archivedCount,
     profitMarginPercent: totalSales > 0 ? (grossProfit / totalSales) * 100 : 0,
     openCreditSales: activeSales.filter((s) => salePending(s) > 0).length,
@@ -270,11 +275,11 @@ export function allocateGeneralExpenses(
   const activePartners = active(partners);
   if (activePartners.length === 0) return out;
 
-  const activeExpenses = active(expenses).filter(
+  const generalExpenses = includingArchived(expenses).filter(
     (e) => e.target === 'عام' || !e.target
   );
 
-  for (const e of activeExpenses) {
+  for (const e of generalExpenses) {
     const amount = e.amount || 0;
     if (amount === 0) continue;
 
@@ -309,12 +314,12 @@ export function partnerShares(
   totalCapital: number
 ): PartnerShare[] {
   const activePartners = active(partners);
-  const activeExpenses = active(expenses);
+  const allExpenses = includingArchived(expenses);
   const generalAllocation = allocateGeneralExpenses(expenses, partners);
 
   return activePartners.map((partner) => {
     const profitShare = (netProfit * (partner.profitPercent || 0)) / 100;
-    const partnerExpenses = activeExpenses.filter((e) => e.target === partner.name);
+    const partnerExpenses = allExpenses.filter((e) => e.target === partner.name);
     const privExp = partnerExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
     const genExp = generalAllocation[partner.name] || 0;
     return {
@@ -359,7 +364,7 @@ export function summarizeRange(
 ): PeriodSummary {
   const inPurchases = active(purchases).filter((p) => inRange(p.date, from, to));
   const inSales = active(sales).filter((s) => inRange(s.date, from, to));
-  const inExpenses = active(expenses).filter((e) => inRange(e.date, from, to));
+  const inExpenses = includingArchived(expenses).filter((e) => inRange(e.date, from, to));
 
   const salesAmount = inSales.reduce((sum, s) => sum + (s.sellAmount || 0), 0);
   const salesCost = inSales.reduce((sum, s) => sum + (s.buyAmount || 0), 0);
