@@ -31,6 +31,7 @@ import { fmtNum } from '../../core/format';
 import { DEFAULT_STORE_NAME, normalizeStoreName } from '../../core/branding';
 import { describeSnapshot, isAccountSwitch } from '../../core/session';
 import { APP_VERSION_LABEL } from '../../core/version';
+import { duplicateAmount, duplicateCount, findDuplicateExpenses } from '../../core/expenseDuplicates';
 import { useBackClose } from '../../lib/backStack';
 
 interface SettingsScreenProps {
@@ -80,9 +81,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     hasLocalRecords,
     restoreSnapshot,
     discardSnapshot,
+    archiveExpense,
   } = useGoldStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // منصرفات مكررة (نفس المبلغ/البيان/الجهة/الفرع خلال 5 دقائق) — تُؤرشف بضغطة
+  const expenseDuplicateGroups = React.useMemo(() => findDuplicateExpenses(allExpenses), [allExpenses]);
 
   // Security / PIN Dialog State
   const [showPinModal, setShowPinModal] = useState(false);
@@ -908,6 +913,61 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
           سجل الحذف: {deletedCount} عنصر. يُحفظ هذا السجل حتى لا تعود السجلات المحذوفة عند المزامنة
           من جهاز آخر.
         </p>
+      </div>
+
+      {/* 4.b SECTION: تنظيف المنصرفات المكررة */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 px-1 text-cyan-400 font-black text-sm border-r-4 border-cyan-500 pr-2">
+          <span>تنظيف المنصرفات المكررة</span>
+        </div>
+        <div className="bg-slate-900 border border-cyan-500/30 rounded-3xl p-4 space-y-3">
+          <p className="text-[11px] text-slate-300 leading-relaxed">
+            نفس المبلغ + نفس البيان + نفس الجهة + نفس الفرع خلال 5 دقائق = نسخة مكررة.
+            نُبقي الأقدم ونؤرشف الباقي (يروح للأرشيف — قابل للاستعادة في أي وقت).
+          </p>
+          {expenseDuplicateGroups.length === 0 ? (
+            <div className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-3">
+              لا توجد منصرفات مكررة — الأرقام نظيفة ✓
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-slate-950 rounded-xl p-2.5 text-center">
+                  <span className="text-[10px] text-slate-400 block">سجلات مكررة</span>
+                  <span className="text-sm font-mono font-black text-cyan-300">{duplicateCount(expenseDuplicateGroups)}</span>
+                </div>
+                <div className="bg-slate-950 rounded-xl p-2.5 text-center">
+                  <span className="text-[10px] text-slate-400 block">مبلغ مكرر (ج.س)</span>
+                  <span className="text-sm font-mono font-black text-rose-300">{fmtNum(duplicateAmount(expenseDuplicateGroups))}</span>
+                </div>
+              </div>
+              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                {expenseDuplicateGroups.slice(0, 20).map((g) => (
+                  <div key={g.key} className="bg-slate-950 rounded-xl p-2.5 text-[11px] flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-white font-bold truncate">{g.keep.name || 'بدون بيان'}</div>
+                      <div className="text-slate-500">
+                        {g.keep.target || 'عام'} • {fmtNum(g.keep.amount)} ج.س × {g.duplicates.length + 1} نسخة
+                      </div>
+                    </div>
+                    <span className="text-rose-300 font-mono shrink-0">−{fmtNum(g.duplicates.reduce((s, e) => s + e.amount, 0))}</span>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  if (!confirm(`أرشفة ${duplicateCount(expenseDuplicateGroups)} سجل مكرر؟ الأصلي يبقى، والمكرر يروح للأرشيف ويمكن استعادته.`)) return;
+                  expenseDuplicateGroups.forEach((g) => g.duplicates.forEach((d) => archiveExpense(d.id)));
+                  setSyncToast('تم أرشفة المنصرفات المكررة — الأرقام اتظبطت');
+                  setTimeout(() => setSyncToast(''), 3000);
+                }}
+                className="w-full py-3 rounded-2xl bg-cyan-500 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/20"
+              >
+                أرشفة المكرر ({duplicateCount(expenseDuplicateGroups)})
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* 5. SECTION: البيانات */}

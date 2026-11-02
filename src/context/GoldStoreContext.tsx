@@ -1120,6 +1120,27 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     );
   };
 
+  /**
+   * منع التكرار المزعج: نفس المبلغ + نفس البيان + نفس الجهة + نفس الفرع
+   * خلال 30 ثانية = نفس العملية (النقرة المزدوجة، أو ضغط «حفظ» مرتين قبل
+   * ما يختفي الفورم). بلا هذا الحاجز كانت العملية الواحدة تتسجّل مرتين
+   * فتتضاعف المنصرفات مع كل استخدام. السجلات المكررة القديمة تُنظَّف من
+   * الإعدادات ← «تنظيف المنصرفات المكررة».
+   */
+  const DUPLICATE_WINDOW_MS = 30_000;
+  const isDuplicateExpense = (prev: Expense[], candidate: Expense): boolean => {
+    const t = new Date(candidate.updatedAt || Date.now()).getTime();
+    return prev.some((x) => {
+      if (x.archived) return false;
+      if ((x.amount || 0) !== (candidate.amount || 0)) return false;
+      if ((x.name || '').trim() !== (candidate.name || '').trim()) return false;
+      if ((x.target || 'عام') !== (candidate.target || 'عام')) return false;
+      if ((x.branchId || '') !== (candidate.branchId || '')) return false;
+      const xt = new Date(x.date || x.updatedAt || 0).getTime();
+      return Math.abs(t - xt) <= DUPLICATE_WINDOW_MS;
+    });
+  };
+
   const addExpense = (e: Omit<Expense, 'id' | 'updatedAt'>) => {
     const newE: Expense = {
       ...e,
@@ -1129,7 +1150,16 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         (activeBranchId === ALL_BRANCHES || activeBranchId === UNASSIGNED_BRANCH ? undefined : activeBranchId),
       updatedAt: new Date().toISOString(),
     };
-    setAllExpenses((prev) => [newE, ...prev]);
+    let added = false;
+    setAllExpenses((prev) => {
+      if (isDuplicateExpense(prev, newE)) return prev;
+      added = true;
+      return [newE, ...prev];
+    });
+    if (!added) {
+      setSyncError('المصروف مسجّل بالفعل بنفس المبلغ والبيان — لم يُضف مرة ثانية');
+      if (typeof window !== 'undefined') setTimeout(() => setSyncError(''), 4000);
+    }
   };
 
   const updateExpense = (e: Expense) => {

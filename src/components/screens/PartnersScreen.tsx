@@ -231,8 +231,10 @@ export const PartnersScreen: React.FC = () => {
            * كان الفلتر هنا بيحسب المصروف المؤرشف (فيفضل مخصوم من الشريك
            * بعد ما يختفي من شاشة المنصرفات = «بعد الأرشفة يرجع يخصم تاني»).
            */
+          // مطابقة بالاسم فقط (target) — شرط e.name === p.name كان بيخصم أي مصروف
+          // بيانُه نفس اسم الشريك (وهو بيان مش جهة) = خصم من غير سبب.
           const partnerExpenses = expenses
-            .filter((e) => !e.archived && (e.target === p.name || e.name === p.name))
+            .filter((e) => !e.archived && e.target === p.name)
             .reduce((sum, e) => sum + e.amount, 0);
           // نصيبه من المنصرفات العامة المحدّد عليها اسمه
           const partnerGeneral = generalByPartner[p.name] || 0;
