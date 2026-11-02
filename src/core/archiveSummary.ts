@@ -90,29 +90,46 @@ export function describeLoan(loan: Loan, ctx: ArchiveContext = {}): ArchiveItemV
   };
 }
 
-/** وصف مصروف مؤرشف: البيان أولاً، ثم نوعه ومن يتحمّله */
+/**
+ * وصف مصروف مؤرشف: **كل تفاصيل سجل المنصرفات** تنتقل معه للأرشيف.
+ * ------------------------------------------------------------------
+ * المطلوب صريح: «إيجار أو عشاء» مش كفاية — لازم يبان:
+ *   • البيان (سبب الصرف كما كُتب في المنصرفات)
+ *   • النوع: عام (على المحل) ولا خاص بشريك + **اسم الشريك**
+ *   • المبلغ والتاريخ والوقت
+ *   • التصنيف، الملاحظات، الفرع، وقت الأرشفة
+ * والسجل المؤرشف **ما يُحسبش ولا يُخصم تاني** — خصمُه حصل مرة واحدة وقت
+ * التسجيل، والأرشفة تُخرجه من كل الإجماليات.
+ */
 export function describeExpense(expense: Expense, ctx: ArchiveContext = {}): ArchiveItemView {
   const general = isGeneralExpense(expense);
-  const fields: ArchiveField[] = [];
+  const partnerName = (expense.target || '').trim();
+  /** الجهة بصيغة صريحة: عام/المحل، أو «خاص: اسم الشريك» */
+  const party = general ? 'عام (على المحل)' : `خاص — ${partnerName || 'شريك غير محدد'}`;
+  const bearer = general ? expenseBearers(expense) : partnerName || 'شريك غير محدد';
 
-  if (general) {
-    fields.push({ label: 'يتحمّله', value: expenseBearers(expense), tone: 'amber' });
-  } else {
-    fields.push({ label: 'على الشريك', value: expense.target, tone: 'cyan' });
-  }
-  if (expense.notes) fields.push({ label: 'ملاحظات', value: expense.notes });
+  const fields: ArchiveField[] = [
+    { label: 'النوع', value: general ? 'منصرف عام' : 'منصرف خاص (مسحوبات شريك)', tone: general ? 'amber' : 'cyan' },
+    { label: general ? 'يتحمّله' : 'على الشريك', value: bearer, tone: general ? 'amber' : 'cyan' },
+    { label: 'المبلغ', value: `${fmtNum(expense.amount)} ج.س`, tone: 'rose' },
+    { label: 'التاريخ', value: formatDateWithTime(expense.date) },
+  ];
+  if (expense.category) fields.push({ label: 'التصنيف', value: expense.category });
+  if (expense.notes) fields.push({ label: 'الملاحظات', value: expense.notes });
   const branch = branchName(expense.branchId, ctx);
-  if (branch) fields.push({ label: 'الفرع', value: branch });
+  fields.push({ label: 'الفرع', value: branch || 'كل الفروع (غير محدد)' });
   if (expense.updatedAt) fields.push({ label: 'أُرشف في', value: formatDateWithTime(expense.updatedAt) });
 
   return {
-    badge: general ? { text: 'عام', tone: 'amber' } : { text: 'خاص', tone: 'cyan' },
+    badge: general
+      ? { text: 'عام', tone: 'amber' }
+      : { text: `خاص: ${partnerName || 'شريك'}`, tone: 'cyan' },
     // البيان هو اللي التاجر بيدوّر عليه — لو فاضي نبيّن السبب صريح بدل سطر أرقام
     title: expense.name?.trim() || 'بدون بيان',
     amount: `${fmtNum(expense.amount)} ج.س`,
-    subtitle: joinSubtitle([expense.category || (general ? 'منصرفات عامة' : 'مسحوبات شريك'), formatDateWithTime(expense.date)]),
+    subtitle: joinSubtitle([party, formatDateWithTime(expense.date)]),
     fields,
-    note: `غير محسوب في الإجماليات — استعادة ترجّعه (${fmtNum(expense.amount)} ج.س) للحساب`,
+    note: `مخصوم مرة واحدة وقت التسجيل — وهو الآن خارج الحساب فلا يُضاف ولا يُخصم تاني. الاستعادة ترجّعه (${fmtNum(expense.amount)} ج.س) للحساب مرة واحدة.`,
   };
 }
 

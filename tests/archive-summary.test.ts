@@ -44,11 +44,12 @@ const privateExpense: Expense = {
 test('المصروف المؤرشف يظهر ببيانه واسمه — مش رقم مجهول', () => {
   const v = describeExpense(privateExpense);
   assert.equal(v.title, 'سحب شخصي', 'البيان هو العنوان');
-  assert.equal(v.badge.text, 'خاص');
+  assert.equal(v.badge.text, 'خاص: السر الصائغ');
   assert.equal(v.amount, '8,685,500 ج.س');
   const onPartner = v.fields.find((f) => f.label === 'على الشريك');
   assert.equal(onPartner?.value, 'السر الصائغ', 'اسم الشريك ظاهر صريح');
-  assert.match(v.subtitle, /مسحوبات شريك/);
+  assert.equal(v.badge.text, 'خاص: السر الصائغ', 'الشارة تحمل اسم الشريك');
+  assert.match(v.subtitle, /خاص — السر الصائغ/, 'سطر النوع صريح: خاص + الاسم');
 });
 
 test('المصروف العام المؤرشف يوضّح من يتحمّله', () => {
@@ -57,8 +58,10 @@ test('المصروف العام المؤرشف يوضّح من يتحمّله', 
   assert.equal(v.badge.text, 'عام');
   const bearer = v.fields.find((f) => f.label === 'يتحمّله');
   assert.equal(bearer?.value, 'السر الصائغ، أحمد تاجو');
+  assert.match(v.subtitle, /عام \(على المحل\)/, 'عام مكتوب صريح في السطر');
+  assert.equal(v.fields.find((f) => f.label === 'النوع')?.value, 'منصرف عام');
   assert.equal(v.fields.find((f) => f.label === 'الفرع')?.value, 'الخرطوم');
-  assert.match(v.note || '', /غير محسوب في الإجماليات/);
+  assert.match(v.note || '', /خارج الحساب/);
 });
 
 test('مصروف عام بلا شركاء محددين = كل الشركاء بنسب الربح', () => {
@@ -160,4 +163,33 @@ test('إجماليات الأرشيف: المبلغ والعدد والوزن', 
   const saleTotals = archiveTotals('sale', [{ id: 's', units: 250, sellAmount: 100 } as Sale]);
   assert.equal(saleTotals.units, 250);
   assert.equal(saleTotals.amount, 100);
+});
+
+test('كل تفاصيل سجل المنصرفات تنتقل للأرشيف: النوع، الجهة، المبلغ، التاريخ، التصنيف، الملاحظات، الفرع', () => {
+  const v = describeExpense(generalExpense, branchCtx);
+  const labels = v.fields.map((f) => f.label);
+  for (const required of ['النوع', 'يتحمّله', 'المبلغ', 'التاريخ', 'التصنيف', 'الملاحظات', 'الفرع', 'أُرشف في']) {
+    assert.ok(labels.includes(required), `حقل ناقص: ${required}`);
+  }
+  assert.equal(v.fields.find((f) => f.label === 'الملاحظات')?.value, 'إيجار شهر أكتوبر');
+  assert.equal(v.fields.find((f) => f.label === 'التصنيف')?.value, 'منصرفات عامة');
+  assert.equal(v.fields.find((f) => f.label === 'المبلغ')?.value, '5,062,000 ج.س');
+});
+
+test('المصروف الخاص يوضّح من دفع بالاسم، والعام يوضّح أنه عام', () => {
+  const privView = describeExpense(privateExpense);
+  assert.match(privView.subtitle, /خاص/);
+  assert.match(privView.subtitle, /السر الصائغ/);
+  assert.equal(privView.fields.find((f) => f.label === 'النوع')?.value, 'منصرف خاص (مسحوبات شريك)');
+
+  const pubView = describeExpense({ ...generalExpense, partnerNames: [] });
+  assert.match(pubView.subtitle, /عام/);
+  assert.equal(pubView.fields.find((f) => f.label === 'يتحمّله')?.value, 'كل الشركاء بنسب الربح');
+});
+
+test('المؤرشف مخصوم مرة واحدة فقط: النص يوضّح أنه خارج الحساب ولا يُخصم تاني', () => {
+  const v = describeExpense(privateExpense);
+  assert.match(v.note || '', /مخصوم مرة واحدة/);
+  assert.match(v.note || '', /خارج الحساب/);
+  assert.match(v.note || '', /لا يُضاف ولا يُخصم/);
 });

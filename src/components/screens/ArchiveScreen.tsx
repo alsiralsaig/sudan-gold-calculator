@@ -259,22 +259,29 @@ export const ArchiveScreen: React.FC = () => {
                   </div>
                 </div>
 
-                {/* كل التفاصيل: النوع، المتحمّل، المدفوع/المتبقي، العيار، الفرع... */}
+                {/*
+                  * كل تفاصيل السجل — سطر لكل بيان (اسم الحقل + قيمته) بدل شرائح
+                  * تختفي فيها التفاصيل: النوع (عام/خاص)، الشريك، المبلغ،
+                  * التاريخ، التصنيف، الملاحظات، الفرع، وقت الأرشفة.
+                  */}
                 {v.fields.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="rounded-2xl bg-slate-950/70 border border-slate-800 divide-y divide-slate-800/70 overflow-hidden">
                     {v.fields.map((f) => (
-                      <span
-                        key={f.label}
-                        className="px-2 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-[10px] leading-tight"
-                      >
-                        <span className="text-slate-500">{f.label}: </span>
-                        <span className={`font-bold ${f.tone ? toneText(f.tone) : 'text-slate-200'}`}>{f.value}</span>
-                      </span>
+                      <div key={f.label} className="flex items-start justify-between gap-3 px-3 py-1.5 text-[11px] leading-snug">
+                        <span className="text-slate-500 shrink-0">{f.label}</span>
+                        <span className={`font-bold text-left break-words ${f.tone ? toneText(f.tone) : 'text-slate-200'}`}>
+                          {f.value}
+                        </span>
+                      </div>
                     ))}
                   </div>
                 )}
 
-                {v.note && <div className="text-[10px] text-slate-500 leading-tight">{v.note}</div>}
+                {v.note && (
+                  <div className="text-[10px] text-slate-500 leading-relaxed bg-slate-950/40 rounded-xl px-2.5 py-1.5">
+                    {v.note}
+                  </div>
+                )}
               </div>
             );
           })
