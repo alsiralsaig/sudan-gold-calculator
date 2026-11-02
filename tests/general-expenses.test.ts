@@ -162,3 +162,33 @@ test('سيناريو التاجر: مصروف خاص وعام يُخصم مرة 
   const restored = [{ ...special, archived: false }, { ...generalExp, archived: false }];
   assert.deepEqual(netFor(restored), before, 'الاستعادة ترجّع نفس الرقم قبل الأرشفة');
 });
+
+test('الرقم اللي يظهر للشريك = المعادلة اللي في تفصيل الحساب (رأس المال + الربح − الخاصة − العامة)', () => {
+  const rows: Expense[] = [
+    { ...priv(300_000, 'ناجو'), date: '2026-10-01T10:00:00.000Z' },
+    { ...priv(120_000, 'ناجو'), date: '2026-10-02T10:00:00.000Z' },
+    general(90_000, ['ناجو', 'تاجو']),
+    { ...priv(500_000, 'ناجو'), archived: true }, // مؤرشف: مستبعد
+    { ...general(400_000, ['ناجو']), archived: true }, // مؤرشف: مستبعد
+  ];
+
+  const netProfit = 1_000_000;
+  const share = partnerShares(partners, rows, netProfit, 13_831_000).find((x) => x.partner.name === 'ناجو')!;
+  const netEntitlement = share.partner.capital + share.profitShare - share.privateExpenses - share.generalExpenses;
+
+  // نفس أرقام تفصيل الحساب في الواجهة
+  assert.equal(share.privateExpenses, 420_000, 'المسحوبات الحية فقط');
+  assert.equal(share.generalExpenses, 45_000, 'نصف المصروف العام الحي فقط');
+  assert.equal(netEntitlement, share.partner.capital + share.profitShare - 420_000 - 45_000);
+});
+
+test('مجموع أنصبة الشركاء من المنصرفات العامة = إجمالي المنصرفات العامة الحية', () => {
+  const rows: Expense[] = [
+    general(90_000, ['ناجو', 'تاجو']),
+    general(60_000, []), // تتوزّع بالنسب
+    { ...general(400_000, []), archived: true },
+  ];
+  const out = allocateGeneralExpenses(rows, partners);
+  const total = Object.values(out).reduce((a, b) => a + b, 0);
+  assert.equal(total, 150_000, 'المؤرشف مستبعد من مجموع التوزيع');
+});

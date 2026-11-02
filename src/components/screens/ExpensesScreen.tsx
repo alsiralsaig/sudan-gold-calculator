@@ -215,6 +215,18 @@ export const ExpensesScreen: React.FC = () => {
   );
 
   // الإجماليات للنتائج الظاهرة
+  /**
+   * المؤرشف: عدده ومجموعه — يظهر في الشريط السفلي عشان التاجر يعرف إن
+   * الأرشفة شغالة، وإن المبلغ خرج من الحساب (مش ضاع).
+   */
+  const archivedTotals = useMemo(() => {
+    const archived = expenses.filter((e) => e.archived);
+    return {
+      count: archived.length,
+      amount: archived.reduce((sum, e) => sum + (e.amount || 0), 0),
+    };
+  }, [expenses]);
+
   const totalAmountSum = summary.total;
   const generalSum = summary.generalTotal;
   const privateSum = summary.privateTotal;
@@ -528,13 +540,16 @@ export const ExpensesScreen: React.FC = () => {
           { label: filterTarget === 'all' ? 'الإجمالي' : 'إجمالي المعروض', value: fmtNum(totalAmountSum), tone: 'rose' },
           { label: 'عامة', value: fmtNum(generalSum), tone: 'amber' },
           { label: 'خاصة', value: fmtNum(privateSum), tone: 'cyan' },
-          { label: 'عدد العمليات', value: String(summary.count), tone: 'slate' },
+          { label: 'العمليات', value: String(summary.count), tone: 'slate' },
         ]}
         columns={4}
         hint={
-          filterTarget !== 'all' || filterPeriod !== 'all' || searchQuery
+          `${filterTarget !== 'all' || filterPeriod !== 'all' || searchQuery
             ? `${selectedLabel} — ${periodLabel} (النتائج الظاهرة فقط)`
-            : 'الإجماليات لكل المصروفات غير المؤرشفة'
+            : 'الإجماليات لكل المصروفات غير المؤرشفة'}` +
+          (archivedTotals.count > 0
+            ? ` • مؤرشف ومستبعد من الحساب: ${archivedTotals.count} عملية بمبلغ ${fmtNum(archivedTotals.amount)} ج.س (في تبويب الأرشيف)`
+            : '')
         }
         actions={[{ label: 'مصروف جديد', onClick: handleOpenAdd, icon: Plus, tone: 'rose' }]}
       />

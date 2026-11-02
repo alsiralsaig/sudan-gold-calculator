@@ -3,14 +3,15 @@ import {
   Users,
   Plus,
   Edit2,
-  Trash2
+  Trash2,
+  Calculator
 } from 'lucide-react';
 import { ArchiveShortcut } from '../common/ArchiveShortcut';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { SmartSearchBar } from '../common/SmartSearchBar';
 import { smartMatch } from '../../core/globalSearch';
 import { StickyActionBar } from '../layout/StickyActionBar';
-import { fmtMoney, fmtNum, kCurrency } from '../../core/format';
+import { fmtMoney, fmtNum, kCurrency, formatInvoiceDate as formatShortDate } from '../../core/format';
 import { allocateGeneralExpenses, profitDisplay } from '../../core/accounting';
 import { Partner } from '../../types';
 import { useBackClose } from '../../lib/backStack';
@@ -37,7 +38,23 @@ export const PartnersScreen: React.FC = () => {
    */
   const generalByPartner = allocateGeneralExpenses(expenses, partners);
 
+  /**
+   * كل منصرف عام **غير مؤرشف** مع نصيب كل شريك منه — نفس منطق
+   * allocateGeneralExpenses لكن مع الاحتفاظ بمصدر كل رقم للعرض.
+   */
+  const generalExpenseSources = React.useMemo(() => {
+    const activePartners = partners.filter((x) => !x.archived);
+    return expenses
+      .filter((e) => !e.archived && (!e.target || e.target === 'عام'))
+      .map((e) => {
+        const share = allocateGeneralExpenses([e], activePartners);
+        return { id: e.id, name: e.name, amount: e.amount, date: e.date, byPartner: share };
+      });
+  }, [expenses, partners]);
+
   const [partnerQuery, setPartnerQuery] = useState('');
+  /** الشريك المفتوح عليه تفصيل الحساب */
+  const [breakdownFor, setBreakdownFor] = useState<string | null>(null);
   const visiblePartners = partners
     .filter((p) => !p.archived)
     .filter((p) =>
@@ -241,6 +258,15 @@ export const PartnersScreen: React.FC = () => {
           // Net entitlement
           const netEntitlement = p.capital + profitShare - partnerExpenses - partnerGeneral;
 
+          // مصادر كل رقم: عشان المستخدم يشوف التفاصيل مش رقم مجهول
+          const privateSources = expenses
+            .filter((e) => !e.archived && e.target === p.name)
+            .sort((a, b) => (a.date < b.date ? 1 : -1));
+          const archivedOnPartner = expenses.filter((e) => e.archived && e.target === p.name).length;
+          const generalSources = generalExpenseSources
+            .map((g) => ({ ...g, share: g.byPartner[p.name] || 0 }))
+            .filter((g) => g.share > 0);
+
           return (
             <div
               key={p.id}
@@ -260,6 +286,15 @@ export const PartnersScreen: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setBreakdownFor(breakdownFor === p.id ? null : p.id)}
+                    className={`p-2 rounded-xl transition-colors ${
+                      breakdownFor === p.id ? 'bg-cyan-500/25 text-cyan-200' : 'bg-slate-800 hover:bg-slate-700 text-cyan-400'
+                    }`}
+                    title="تفصيل الحساب خطوة بخطوة"
+                  >
+                    <Calculator className="w-3.5 h-3.5" />
+                  </button>
                   <button
                     onClick={() => handleOpenEdit(p)}
                     className="p-2 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl transition-colors"
@@ -311,6 +346,82 @@ export const PartnersScreen: React.FC = () => {
                   </span>
                 </div>
               </div>
+
+              {/*
+                * «الأرقام ما حقيقية» — من هنا يشوف التاجر كل قرش:
+                * المعادلة + كل منصرف دخل فيها + المؤرشف المستبعد عدده.
+                */}
+              {breakdownFor === p.id && (
+                <div className="space-y-2.5 bg-slate-950 border border-cyan-500/30 rounded-2xl p-3 text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-cyan-300">تفصيل حساب {p.name}</span>
+                    <button onClick={() => setBreakdownFor(null)} className="text-slate-400 hover:text-white">✕</button>
+                  </div>
+
+                  {/* المعادلة */}
+                  <div className="space-y-1 font-mono">
+                    <div className="flex justify-between text-slate-300">
+                      <span>رأس المال</span><span className="text-amber-300">{fmtNum(p.capital)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-300">
+                      <span>+ نصيب الأرباح ({p.profitPercent}% × {fmtNum(netProfit)})</span>
+                      <span className="text-emerald-300">{fmtNum(profitShare)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-300">
+                      <span>− منصرفات خاصة ({privateSources.length})</span>
+                      <span className="text-cyan-300">{fmtNum(partnerExpenses)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-300">
+                      <span>− حصته من المنصرفات العامة</span>
+                      <span className="text-amber-300">{fmtNum(partnerGeneral)}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-800 pt-1 font-black">
+                      <span className="text-white">= صافي المستحق</span>
+                      <span className={netEntitlement >= 0 ? 'text-emerald-300' : 'text-rose-300'}>{fmtNum(netEntitlement)}</span>
+                    </div>
+                  </div>
+
+                  {/* المصروفات الخاصة الداخلة في الخصم — بالاسم والتاريخ */}
+                  <div className="space-y-1">
+                    <div className="text-cyan-300 font-black">المنصرفات الخاصة المحسوبة:</div>
+                    {privateSources.length === 0 ? (
+                      <div className="text-slate-500">لا توجد منصرفات خاصة غير مؤرشفة على هذا الشريك.</div>
+                    ) : (
+                      privateSources.map((e) => (
+                        <div key={e.id} className="flex justify-between gap-2 text-slate-300">
+                          <span className="truncate">
+                            • {e.name || 'بدون بيان'} <span className="text-slate-500">({formatShortDate(e.date)})</span>
+                          </span>
+                          <span className="font-mono text-cyan-300 shrink-0">{fmtNum(e.amount)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* المصروفات العامة التي يتحمّلها */}
+                  <div className="space-y-1">
+                    <div className="text-amber-300 font-black">المنصرفات العامة المتحمّلها:</div>
+                    {generalSources.length === 0 ? (
+                      <div className="text-slate-500">لا يوجد منصرف عام منسوب لهذا الشريك.</div>
+                    ) : (
+                      generalSources.map((g) => (
+                        <div key={g.id} className="flex justify-between gap-2 text-slate-300">
+                          <span className="truncate">
+                            • {g.name || 'بدون بيان'} <span className="text-slate-500">إجمالي {fmtNum(g.amount)} ← نصيبه {fmtNum(g.share)}</span>
+                          </span>
+                          <span className="font-mono text-amber-300 shrink-0">{fmtNum(g.share)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {archivedOnPartner > 0 && (
+                    <div className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-800 pt-1.5">
+                      مستبعد: {archivedOnPartner} مصروف مؤرشف على هذا الشريك — الأرشيف خارج الحساب، فلا يُخصم ولا يُضاف تاني.
+                    </div>
+                  )}
+                </div>
+              )}
 
               {p.notes && (
                 <p className="text-xs text-slate-400 bg-slate-950/50 p-2.5 rounded-xl border border-slate-800/60">
