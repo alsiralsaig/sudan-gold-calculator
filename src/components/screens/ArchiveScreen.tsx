@@ -164,7 +164,7 @@ export const ArchiveScreen: React.FC = () => {
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-5 text-center">
         <Archive className="w-9 h-9 mx-auto text-amber-400 mb-2" />
         <h2 className="text-lg font-black text-amber-300">الأرشيف</h2>
-        <p className="text-xs text-slate-400 mt-1">كل قسم في تبويب منفصل — المؤرشف لا يُحسب في الإجماليات، والاستعادة ترجّعه للحساب فوراً</p>
+        <p className="text-xs text-slate-400 mt-1">كل قسم في تبويب منفصل — المؤرشف **خارج كل الإجماليات** (منصرفات، أرباح، أنصبة شركاء)، والاستعادة ترجّعه للحساب فوراً</p>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" role="tablist">

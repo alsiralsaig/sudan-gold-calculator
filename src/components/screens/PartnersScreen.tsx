@@ -226,8 +226,13 @@ export const PartnersScreen: React.FC = () => {
           // Partner share of profit
           const profitShare = (netProfit * p.profitPercent) / 100;
           // المنصرفات الخاصة (مسحوبات الشريك باسمه)
+          /*
+           * المؤرشف خارج الحساب — نفس قاعدة core/accounting.ts بالظبط.
+           * كان الفلتر هنا بيحسب المصروف المؤرشف (فيفضل مخصوم من الشريك
+           * بعد ما يختفي من شاشة المنصرفات = «بعد الأرشفة يرجع يخصم تاني»).
+           */
           const partnerExpenses = expenses
-            .filter((e) => e.target === p.name || e.name === p.name)
+            .filter((e) => !e.archived && (e.target === p.name || e.name === p.name))
             .reduce((sum, e) => sum + e.amount, 0);
           // نصيبه من المنصرفات العامة المحدّد عليها اسمه
           const partnerGeneral = generalByPartner[p.name] || 0;
