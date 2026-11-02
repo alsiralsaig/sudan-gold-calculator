@@ -17,7 +17,13 @@ import { useGoldStore } from '../../context/GoldStoreContext';
 import { BarChart, LineChart } from '../charts/Charts';
 import { fmtNum, unitsToGramsDecimal,
   unitsToGhJ, kCurrency } from '../../core/format';
-import { summarizeRange, startOfDay, startOfMonth, endOfDay } from '../../core/accounting';
+import {
+  summarizeRange,
+  startOfDay,
+  startOfMonth,
+  endOfDay,
+  accountingExpenses,
+} from '../../core/accounting';
 import { shortLabel, arabicDate, arabicDayName, addDays } from '../../core/dates';
 import { StickyActionBar } from '../layout/StickyActionBar';
 
@@ -40,7 +46,8 @@ export const AnalyticsScreen: React.FC = () => {
   const rangeSummary = useMemo(() => {
     const activeSales = sales.filter((s) => !s.archived);
     const activePurchases = purchases.filter((p) => !p.archived);
-    const activeExpenses = expenses.filter((e) => !e.archived);
+    // النواة وحدها تقرر نطاق المؤرشف (accountingExpenses) — لا فلتر محلي
+    const activeExpenses = accountingExpenses(expenses);
     const from = startOfDay(addDays(today, -(rangeDays - 1)));
     const to = endOfDay(today);
     return summarizeRange(activePurchases, activeSales, activeExpenses, from, to);
@@ -49,7 +56,8 @@ export const AnalyticsScreen: React.FC = () => {
   const dailySeries = useMemo(() => {
     const activeSales = sales.filter((s) => !s.archived);
     const activePurchases = purchases.filter((p) => !p.archived);
-    const activeExpenses = expenses.filter((e) => !e.archived);
+    // النواة وحدها تقرر نطاق المؤرشف (accountingExpenses) — لا فلتر محلي
+    const activeExpenses = accountingExpenses(expenses);
 
     return Array.from({ length: rangeDays }, (_, idx) => {
       const day = addDays(today, -(rangeDays - 1 - idx));
@@ -77,7 +85,8 @@ export const AnalyticsScreen: React.FC = () => {
   const monthlySeries = useMemo(() => {
     const activeSales = sales.filter((s) => !s.archived);
     const activePurchases = purchases.filter((p) => !p.archived);
-    const activeExpenses = expenses.filter((e) => !e.archived);
+    // النواة وحدها تقرر نطاق المؤرشف (accountingExpenses) — لا فلتر محلي
+    const activeExpenses = accountingExpenses(expenses);
     const now = new Date();
 
     return Array.from({ length: 6 }, (_, idx) => {

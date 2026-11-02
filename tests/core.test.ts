@@ -137,7 +137,7 @@ test('computeFinancials: الذمم المدينة والدائنة صحيحة',
   assert.equal(fin.openCreditSales, 1);
 });
 
-test('computeFinancials: المنصرف المؤرشف يبقى محسوباً (مرة واحدة)', () => {
+test('computeFinancials: المؤرشف خارج الحساب افتراضياً (وضع active)', () => {
   const fin = computeFinancials(
     [],
     [],
@@ -147,8 +147,8 @@ test('computeFinancials: المنصرف المؤرشف يبقى محسوباً (
     ],
     []
   );
-  assert.equal(fin.generalExpenses, 500_000, 'المؤرشف يبقى محسوباً — الفلوس اتصرفت');
-  assert.equal(fin.privateExpenses, 80_000, 'المؤرشف يبقى محسوباً — الفلوس اتصرفت');
+  assert.equal(fin.generalExpenses, 0, 'المؤرشف خارج الحساب في الوضع الافتراضي');
+  assert.equal(fin.privateExpenses, 0, 'المؤرشف خارج الحساب في الوضع الافتراضي');
 });
 
 test('summarizeRange: يجمع حركة الفترة فقط', () => {

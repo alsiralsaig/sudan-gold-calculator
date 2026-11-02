@@ -61,7 +61,7 @@ test('المصروف العام المؤرشف يوضّح من يتحمّله', 
   assert.match(v.subtitle, /عام \(على المحل\)/, 'عام مكتوب صريح في السطر');
   assert.equal(v.fields.find((f) => f.label === 'النوع')?.value, 'منصرف عام');
   assert.equal(v.fields.find((f) => f.label === 'الفرع')?.value, 'الخرطوم');
-  assert.match(v.note || '', /مخصوم مرة واحدة/);
+  assert.match(v.note || '', /حُسب مرة واحدة/);
 });
 
 test('مصروف عام بلا شركاء محددين = كل الشركاء بنسب الربح', () => {
@@ -187,9 +187,9 @@ test('المصروف الخاص يوضّح من دفع بالاسم، والعا
   assert.equal(pubView.fields.find((f) => f.label === 'يتحمّله')?.value, 'كل الشركاء بنسب الربح');
 });
 
-test('المؤرشف مخصوم مرة واحدة فقط: النص يوضّح أن الأرشيف لا يُلغي الصرف ولا يخصمه ثانية', () => {
+test('المؤرشف: حُسب مرة واحدة، وهو الآن خارج الحساب — لا خصم ولا إضافة', () => {
   const v = describeExpense(privateExpense);
-  assert.match(v.note || '', /مخصوم مرة واحدة/);
-  assert.match(v.note || '', /لا يُلغي الصرف/);
-  assert.match(v.note || '', /ولا يخصمه مرة ثانية|مرة ثانية/);
+  assert.match(v.note || '', /حُسب مرة واحدة/);
+  assert.match(v.note || '', /خارج الحساب/);
+  assert.match(v.note || '', /لا خصم ولا إضافة/);
 });

@@ -12,7 +12,7 @@ import { SmartSearchBar } from '../common/SmartSearchBar';
 import { smartMatch } from '../../core/globalSearch';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { fmtMoney, fmtNum, kCurrency, formatInvoiceDate as formatShortDate } from '../../core/format';
-import { allocateGeneralExpenses, profitDisplay } from '../../core/accounting';
+import { accountingExpenses, allocateGeneralExpenses, profitDisplay } from '../../core/accounting';
 import { Partner } from '../../types';
 import { useBackClose } from '../../lib/backStack';
 
@@ -30,13 +30,16 @@ export const PartnersScreen: React.FC = () => {
     expenses,
   } = useGoldStore();
 
+  /** المنصرفات الداخلة في الحساب: الحيّ فقط — الأرشيف خارج الحساب تماماً */
+  const calcExpenses = React.useMemo(() => accountingExpenses(expenses), [expenses]);
+
   // الربح ما ينفعش يظهر بالسالب: السالب = «خسارة» وتظهر موجبة
   const profitView = profitDisplay({ netProfit });
   /**
    * المنصرفات العامة تتوزّع على الشركاء بنفس نظام المنصرف الخاص:
    * كل منصرف عام يتحدد عليه شريك أو أكتر بالاسم، والمبلغ يُخصم من مستحق كل واحد.
    */
-  const generalByPartner = allocateGeneralExpenses(expenses, partners);
+  const generalByPartner = allocateGeneralExpenses(calcExpenses, partners);
 
   /**
    * كل منصرف عام (حيّ أو مؤرشف) مع نصيب كل شريك منه — نفس منطق
@@ -44,13 +47,13 @@ export const PartnersScreen: React.FC = () => {
    */
   const generalExpenseSources = React.useMemo(() => {
     const activePartners = partners.filter((x) => !x.archived);
-    return expenses
+    return calcExpenses
       .filter((e) => !e.target || e.target === 'عام')
       .map((e) => {
         const share = allocateGeneralExpenses([e], activePartners);
         return { id: e.id, name: e.name, amount: e.amount, date: e.date, archived: Boolean(e.archived), byPartner: share };
       });
-  }, [expenses, partners]);
+  }, [calcExpenses, partners]);
 
   const [partnerQuery, setPartnerQuery] = useState('');
   /** الشريك المفتوح عليه تفصيل الحساب */
@@ -250,7 +253,7 @@ export const PartnersScreen: React.FC = () => {
            * والمطابقة بالجهة (target) فقط — شرط e.name === p.name كان يخصم
            * أي مصروف بيانُه نفس اسم الشريك، وهو بيان لا جهة.
            */
-          const partnerExpenses = expenses
+          const partnerExpenses = calcExpenses
             .filter((e) => e.target === p.name)
             .reduce((sum, e) => sum + e.amount, 0);
           // نصيبه من المنصرفات العامة المحدّد عليها اسمه
@@ -259,10 +262,10 @@ export const PartnersScreen: React.FC = () => {
           const netEntitlement = p.capital + profitShare - partnerExpenses - partnerGeneral;
 
           // مصادر كل رقم: عشان المستخدم يشوف التفاصيل مش رقم مجهول
-          const privateSources = expenses
+          const privateSources = calcExpenses
             .filter((e) => e.target === p.name)
             .sort((a, b) => (a.date < b.date ? 1 : -1));
-          const archivedOnPartner = privateSources.filter((e) => e.archived).length;
+          const archivedOnPartner = expenses.filter((e) => e.archived && e.target === p.name).length;
           const generalSources = generalExpenseSources
             .map((g) => ({ ...g, share: g.byPartner[p.name] || 0 }))
             .filter((g) => g.share > 0);
@@ -422,8 +425,8 @@ export const PartnersScreen: React.FC = () => {
                   </div>
 
                   <div className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-800 pt-1.5">
-                    المؤرشف يبقى مخصوماً (الفلوس اتصرفت فعلاً) — منها {archivedOnPartner} مصروف مؤرشف على هذا الشريك.
-                    الممنوع فقط الخصم مرتين، وده اللي البرنامج بيضمنه.
+                    كل مصروف يُحسب مرة واحدة فقط. والمؤرشف خارج الحساب تماماً — {archivedOnPartner} مصروف مؤرشف
+                    على هذا الشريك لا يُخصم ولا يُضاف (تفاصيله في تبويب الأرشيف).
                   </div>
                 </div>
               )}
