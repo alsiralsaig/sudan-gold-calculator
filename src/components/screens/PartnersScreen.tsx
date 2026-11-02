@@ -30,7 +30,10 @@ export const PartnersScreen: React.FC = () => {
     expenses,
   } = useGoldStore();
 
-  /** المنصرفات الداخلة في الحساب: الحيّ فقط — الأرشيف خارج الحساب تماماً */
+  /**
+   * المنصرفات الداخلة في الحساب: الحيّ + المؤرشف — كل سجل مرة واحدة.
+   * الأرشفة لا تُلغي الخصم (الفلوس اتصرفت فعلاً)، ولا تُضاعفه.
+   */
   const calcExpenses = React.useMemo(() => accountingExpenses(expenses), [expenses]);
 
   // الربح ما ينفعش يظهر بالسالب: السالب = «خسارة» وتظهر موجبة
@@ -425,8 +428,8 @@ export const PartnersScreen: React.FC = () => {
                   </div>
 
                   <div className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-800 pt-1.5">
-                    كل مصروف يُحسب مرة واحدة فقط. والمؤرشف خارج الحساب تماماً — {archivedOnPartner} مصروف مؤرشف
-                    على هذا الشريك لا يُخصم ولا يُضاف (تفاصيله في تبويب الأرشيف).
+                    كل مصروف يُحسب مرة واحدة فقط، ومهما اتأرشف يفضل مخصوماً — منها {archivedOnPartner} مصروف
+                    مؤرشف على هذا الشريك، مخصوم ولا يتشال (تفاصيله في تبويب الأرشيف).
                   </div>
                 </div>
               )}

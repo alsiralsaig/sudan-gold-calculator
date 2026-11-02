@@ -191,7 +191,7 @@ export const ArchiveScreen: React.FC = () => {
         <h2 className="text-lg font-black text-amber-300">الأرشيف</h2>
         <p className="text-xs text-slate-400 mt-1">
           كل سجل ينتقل هنا <span className="font-black text-amber-300">بكل تفاصيله</span> (البيان، النوع عام/خاص، اسم الشريك، المبلغ، التاريخ، الملاحظات، الفرع).
-          المنصرف المؤرشف <span className="font-black text-amber-300">يبقى مخصوماً مرة واحدة فقط</span> — الأرشيف لا يُلغي الصرف ولا يخصمه مرة ثانية، والاستعادة لا تضيف خصماً جديداً.
+          المصروف المؤرشف <span className="font-black text-amber-300">يبقى مخصوماً كما هو</span> — الأرشفة لا تُلغي الخصم ولا تُضاعفه، والاستعادة لا تضيف خصماً جديداً.
         </p>
       </div>
 
