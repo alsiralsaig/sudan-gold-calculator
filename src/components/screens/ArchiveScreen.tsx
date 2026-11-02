@@ -190,7 +190,8 @@ export const ArchiveScreen: React.FC = () => {
         <Archive className="w-9 h-9 mx-auto text-amber-400 mb-2" />
         <h2 className="text-lg font-black text-amber-300">الأرشيف</h2>
         <p className="text-xs text-slate-400 mt-1">
-          كل قسم في تبويب منفصل — المؤرشف <span className="font-black text-amber-300">خارج كل الإجماليات</span> (منصرفات، أرباح، أنصبة شركاء)، والاستعادة ترجّعه للحساب فوراً. كل سجل يظهر ببيانه واسمه وتفاصيله كاملة.
+          كل سجل ينتقل هنا <span className="font-black text-amber-300">بكل تفاصيله</span> (البيان، النوع عام/خاص، اسم الشريك، المبلغ، التاريخ، الملاحظات، الفرع).
+          المنصرف المؤرشف <span className="font-black text-amber-300">يبقى مخصوماً مرة واحدة فقط</span> — الأرشيف لا يُلغي الصرف ولا يخصمه مرة ثانية، والاستعادة لا تضيف خصماً جديداً.
         </p>
       </div>
 

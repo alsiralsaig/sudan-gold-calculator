@@ -129,7 +129,7 @@ export function describeExpense(expense: Expense, ctx: ArchiveContext = {}): Arc
     amount: `${fmtNum(expense.amount)} ج.س`,
     subtitle: joinSubtitle([party, formatDateWithTime(expense.date)]),
     fields,
-    note: `مخصوم مرة واحدة وقت التسجيل — وهو الآن خارج الحساب فلا يُضاف ولا يُخصم تاني. الاستعادة ترجّعه (${fmtNum(expense.amount)} ج.س) للحساب مرة واحدة.`,
+    note: `مخصوم مرة واحدة فقط (${fmtNum(expense.amount)} ج.س) — الأرشيف لا يُلغي الصرف ولا يخصمه مرة ثانية. الاستعادة لا تضيف خصماً جديداً.`,
   };
 }
 

@@ -548,7 +548,7 @@ export const ExpensesScreen: React.FC = () => {
             ? `${selectedLabel} — ${periodLabel} (النتائج الظاهرة فقط)`
             : 'الإجماليات لكل المصروفات غير المؤرشفة'}` +
           (archivedTotals.count > 0
-            ? ` • مؤرشف ومستبعد من الحساب: ${archivedTotals.count} عملية بمبلغ ${fmtNum(archivedTotals.amount)} ج.س (في تبويب الأرشيف)`
+            ? ` • مؤرشف ومخصوم مرة واحدة (${archivedTotals.count} عملية بمبلغ ${fmtNum(archivedTotals.amount)} ج.س) — تفاصيلها في تبويب الأرشيف`
             : '')
         }
         actions={[{ label: 'مصروف جديد', onClick: handleOpenAdd, icon: Plus, tone: 'rose' }]}

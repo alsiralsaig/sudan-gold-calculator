@@ -39,16 +39,16 @@ export const PartnersScreen: React.FC = () => {
   const generalByPartner = allocateGeneralExpenses(expenses, partners);
 
   /**
-   * كل منصرف عام **غير مؤرشف** مع نصيب كل شريك منه — نفس منطق
+   * كل منصرف عام (حيّ أو مؤرشف) مع نصيب كل شريك منه — نفس منطق
    * allocateGeneralExpenses لكن مع الاحتفاظ بمصدر كل رقم للعرض.
    */
   const generalExpenseSources = React.useMemo(() => {
     const activePartners = partners.filter((x) => !x.archived);
     return expenses
-      .filter((e) => !e.archived && (!e.target || e.target === 'عام'))
+      .filter((e) => !e.target || e.target === 'عام')
       .map((e) => {
         const share = allocateGeneralExpenses([e], activePartners);
-        return { id: e.id, name: e.name, amount: e.amount, date: e.date, byPartner: share };
+        return { id: e.id, name: e.name, amount: e.amount, date: e.date, archived: Boolean(e.archived), byPartner: share };
       });
   }, [expenses, partners]);
 
@@ -244,14 +244,14 @@ export const PartnersScreen: React.FC = () => {
           const profitShare = (netProfit * p.profitPercent) / 100;
           // المنصرفات الخاصة (مسحوبات الشريك باسمه)
           /*
-           * المؤرشف خارج الحساب — نفس قاعدة core/accounting.ts بالظبط.
-           * كان الفلتر هنا بيحسب المصروف المؤرشف (فيفضل مخصوم من الشريك
-           * بعد ما يختفي من شاشة المنصرفات = «بعد الأرشفة يرجع يخصم تاني»).
+           * قاعدة التاجر: المؤرشف يفضل مخصوماً (الفلوس اتصرفت فعلاً)، والممنوع
+           * فقط أن يُخصم مرتين. لذلك **لا فلتر أرشيف هنا** — نفس قاعدة
+           * core/accounting.ts بالظبط (كل سجل يدخل مرة واحدة).
+           * والمطابقة بالجهة (target) فقط — شرط e.name === p.name كان يخصم
+           * أي مصروف بيانُه نفس اسم الشريك، وهو بيان لا جهة.
            */
-          // مطابقة بالاسم فقط (target) — شرط e.name === p.name كان بيخصم أي مصروف
-          // بيانُه نفس اسم الشريك (وهو بيان مش جهة) = خصم من غير سبب.
           const partnerExpenses = expenses
-            .filter((e) => !e.archived && e.target === p.name)
+            .filter((e) => e.target === p.name)
             .reduce((sum, e) => sum + e.amount, 0);
           // نصيبه من المنصرفات العامة المحدّد عليها اسمه
           const partnerGeneral = generalByPartner[p.name] || 0;
@@ -260,9 +260,9 @@ export const PartnersScreen: React.FC = () => {
 
           // مصادر كل رقم: عشان المستخدم يشوف التفاصيل مش رقم مجهول
           const privateSources = expenses
-            .filter((e) => !e.archived && e.target === p.name)
+            .filter((e) => e.target === p.name)
             .sort((a, b) => (a.date < b.date ? 1 : -1));
-          const archivedOnPartner = expenses.filter((e) => e.archived && e.target === p.name).length;
+          const archivedOnPartner = privateSources.filter((e) => e.archived).length;
           const generalSources = generalExpenseSources
             .map((g) => ({ ...g, share: g.byPartner[p.name] || 0 }))
             .filter((g) => g.share > 0);
@@ -385,12 +385,14 @@ export const PartnersScreen: React.FC = () => {
                   <div className="space-y-1">
                     <div className="text-cyan-300 font-black">المنصرفات الخاصة المحسوبة:</div>
                     {privateSources.length === 0 ? (
-                      <div className="text-slate-500">لا توجد منصرفات خاصة غير مؤرشفة على هذا الشريك.</div>
+                      <div className="text-slate-500">لا توجد منصرفات مسجّلة على هذا الشريك.</div>
                     ) : (
                       privateSources.map((e) => (
                         <div key={e.id} className="flex justify-between gap-2 text-slate-300">
                           <span className="truncate">
-                            • {e.name || 'بدون بيان'} <span className="text-slate-500">({formatShortDate(e.date)})</span>
+                            • {e.name || 'بدون بيان'}{' '}
+                            <span className="text-slate-500">({formatShortDate(e.date)})</span>
+                            {e.archived && <span className="text-[9px] text-slate-500"> [مؤرشف ✓ محسوب]</span>}
                           </span>
                           <span className="font-mono text-cyan-300 shrink-0">{fmtNum(e.amount)}</span>
                         </div>
@@ -407,7 +409,11 @@ export const PartnersScreen: React.FC = () => {
                       generalSources.map((g) => (
                         <div key={g.id} className="flex justify-between gap-2 text-slate-300">
                           <span className="truncate">
-                            • {g.name || 'بدون بيان'} <span className="text-slate-500">إجمالي {fmtNum(g.amount)} ← نصيبه {fmtNum(g.share)}</span>
+                            • {g.name || 'بدون بيان'}{' '}
+                            <span className="text-slate-500">
+                              إجمالي {fmtNum(g.amount)} ← نصيبه {fmtNum(g.share)}
+                            </span>
+                            {g.archived && <span className="text-[9px] text-slate-500"> [مؤرشف ✓ محسوب]</span>}
                           </span>
                           <span className="font-mono text-amber-300 shrink-0">{fmtNum(g.share)}</span>
                         </div>
@@ -415,11 +421,10 @@ export const PartnersScreen: React.FC = () => {
                     )}
                   </div>
 
-                  {archivedOnPartner > 0 && (
-                    <div className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-800 pt-1.5">
-                      مستبعد: {archivedOnPartner} مصروف مؤرشف على هذا الشريك — الأرشيف خارج الحساب، فلا يُخصم ولا يُضاف تاني.
-                    </div>
-                  )}
+                  <div className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-800 pt-1.5">
+                    المؤرشف يبقى مخصوماً (الفلوس اتصرفت فعلاً) — منها {archivedOnPartner} مصروف مؤرشف على هذا الشريك.
+                    الممنوع فقط الخصم مرتين، وده اللي البرنامج بيضمنه.
+                  </div>
                 </div>
               )}
 

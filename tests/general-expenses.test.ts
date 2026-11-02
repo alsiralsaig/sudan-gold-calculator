@@ -109,17 +109,17 @@ test('صافي المستحق = رأس المال + نصيب الربح − ال
   assert.equal(by['والي الدين'].partner.capital + by['والي الدين'].netShare, 2_230_000, 'ما اتأثرش');
 });
 
-test('المنصرف المأرشف يخرج من أنصبة الشركاء (لا يخصم مرتين)', () => {
+test('المنصرف المؤرشف يبقى مخصوماً — مرة واحدة بالظبط (لا صفر ولا مرتين)', () => {
   const archivedGeneral: Expense = { ...general(26_000, ['ناجو', 'تاجو']), archived: true };
   const out = allocateGeneralExpenses([archivedGeneral], partners);
-  assert.equal(out['ناجو'], undefined, 'المأرشف لا يُوزّع على الشركاء');
-  assert.equal(out['تاجو'], undefined);
+  assert.equal(out['ناجو'], 13_000, 'المؤرشف يُوزّع مرة واحدة');
+  assert.equal(out['تاجو'], 13_000);
 
   const shares = partnerShares(partners, [archivedGeneral, { ...priv(44_500, 'ناجو'), archived: true }], 0, 13_831_000);
   const by = Object.fromEntries(shares.map((s) => [s.partner.name, s]));
-  assert.equal(by['ناجو'].generalExpenses, 0);
-  assert.equal(by['ناجو'].privateExpenses, 0, 'المسحوبات المؤرشفة لا تُخصم');
-  assert.equal(by['ناجو'].partner.capital + by['ناجو'].netShare, 2_020_000, 'رأس المال كما هو — لا خصم مكرر');
+  assert.equal(by['ناجو'].generalExpenses, 13_000);
+  assert.equal(by['ناجو'].privateExpenses, 44_500, 'المسحوبات المؤرشفة تبقى مخصومة');
+  assert.equal(by['ناجو'].partner.capital + by['ناجو'].netShare, 2_020_000 - 13_000 - 44_500);
 });
 
 test('المنصرفات العامة ما تخصمش مرتين: وعاء الربح يفضل إجمالي الربح', () => {
@@ -151,12 +151,12 @@ test('سيناريو التاجر: مصروف خاص وعام يُخصم مرة 
   assert.equal(before.fin.privateExpenses, 300_000);
   assert.equal(before.fin.generalExpenses, 120_000);
 
-  // (2) بعد الأرشفة: صفر خصم في كل مكان (كان بيرجع يخصم تاني)
+  // (2) بعد الأرشفة: نفس الرقم — المؤرشف يبقى مخصوماً مرة واحدة (لا صفر ولا مرتين)
   const archived = [{ ...special, archived: true }, { ...generalExp, archived: true }];
   const after = netFor(archived);
-  assert.equal(after.nag, 2_020_000 + 2_500_000, 'المؤرشف لا يُخصم من مستحق الشريك');
-  assert.equal(after.fin.privateExpenses, 0);
-  assert.equal(after.fin.generalExpenses, 0);
+  assert.equal(after.nag, before.nag, 'الأرشفة لا تُلغي الخصم ولا تُضاعفه');
+  assert.equal(after.fin.privateExpenses, before.fin.privateExpenses);
+  assert.equal(after.fin.generalExpenses, before.fin.generalExpenses);
 
   // (3) بعد الاستعادة: يرجع خصم واحد بالظبط (مش اتنين)
   const restored = [{ ...special, archived: false }, { ...generalExp, archived: false }];
@@ -168,8 +168,8 @@ test('الرقم اللي يظهر للشريك = المعادلة اللي في
     { ...priv(300_000, 'ناجو'), date: '2026-10-01T10:00:00.000Z' },
     { ...priv(120_000, 'ناجو'), date: '2026-10-02T10:00:00.000Z' },
     general(90_000, ['ناجو', 'تاجو']),
-    { ...priv(500_000, 'ناجو'), archived: true }, // مؤرشف: مستبعد
-    { ...general(400_000, ['ناجو']), archived: true }, // مؤرشف: مستبعد
+    { ...priv(500_000, 'ناجو'), archived: true }, // مؤرشف: يبقى مخصوماً مرة واحدة
+    { ...general(400_000, ['ناجو']), archived: true }, // مؤرشف: يبقى مخصوماً مرة واحدة
   ];
 
   const netProfit = 1_000_000;
@@ -177,12 +177,12 @@ test('الرقم اللي يظهر للشريك = المعادلة اللي في
   const netEntitlement = share.partner.capital + share.profitShare - share.privateExpenses - share.generalExpenses;
 
   // نفس أرقام تفصيل الحساب في الواجهة
-  assert.equal(share.privateExpenses, 420_000, 'المسحوبات الحية فقط');
-  assert.equal(share.generalExpenses, 45_000, 'نصف المصروف العام الحي فقط');
-  assert.equal(netEntitlement, share.partner.capital + share.profitShare - 420_000 - 45_000);
+  assert.equal(share.privateExpenses, 920_000, 'الحيّ + المؤرشف (كل سجل مرة واحدة)');
+  assert.equal(share.generalExpenses, 445_000, '90,000/2 + 400,000 كاملة');
+  assert.equal(netEntitlement, share.partner.capital + share.profitShare - 920_000 - 445_000);
 });
 
-test('مجموع أنصبة الشركاء من المنصرفات العامة = إجمالي المنصرفات العامة الحية', () => {
+test('مجموع أنصبة الشركاء من المنصرفات العامة = إجمالي المنصرفات العامة (حيّ + مؤرشف)', () => {
   const rows: Expense[] = [
     general(90_000, ['ناجو', 'تاجو']),
     general(60_000, []), // تتوزّع بالنسب
@@ -190,5 +190,5 @@ test('مجموع أنصبة الشركاء من المنصرفات العامة 
   ];
   const out = allocateGeneralExpenses(rows, partners);
   const total = Object.values(out).reduce((a, b) => a + b, 0);
-  assert.equal(total, 150_000, 'المؤرشف مستبعد من مجموع التوزيع');
+  assert.equal(total, 550_000, 'كل سجل يدخل مرة واحدة — بلا استبعاد ولا تكرار');
 });
