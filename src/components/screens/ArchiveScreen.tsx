@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Archive, RotateCcw, Trash2 } from 'lucide-react';
 import { useGoldStore } from '../../context/GoldStoreContext';
 import { Expense, Loan, Partner, Purchase, Sale } from '../../types';
-import { fmtNum, formatDateWithTime, unitsToGhJ } from '../../core/format';
+import { fmtNum, unitsToGhJ } from '../../core/format';
 import { StickyActionBar } from '../layout/StickyActionBar';
 import { SmartSearchBar } from '../common/SmartSearchBar';
 import { sortRecords } from '../../core/recordOrder';
@@ -11,8 +11,32 @@ import { useRecordOrder } from '../../hooks/useRecordOrder';
 import { RecordOrderToggle } from '../common/RecordOrderToggle';
 import { matchLoanQuery, matchPurchaseQuery, matchSaleQuery, matchExpenseQuery, smartMatch } from '../../core/globalSearch';
 import { ARCHIVE_TAB_KEY, ArchiveKind } from '../../core/archiveNav';
+import { archiveSearchText, archiveTotals, describeArchiveItem, type ArchiveTone } from '../../core/archiveSummary';
 
 type AnyItem = Purchase | Sale | Expense | Partner | Loan;
+
+/** خلفية شارات النوع */
+const toneClass = (tone: ArchiveTone): string => {
+  switch (tone) {
+    case 'emerald': return 'bg-emerald-500/15 text-emerald-300';
+    case 'rose': return 'bg-rose-500/15 text-rose-300';
+    case 'cyan': return 'bg-cyan-500/15 text-cyan-300';
+    case 'amber': return 'bg-amber-500/15 text-amber-300';
+    case 'violet': return 'bg-violet-500/15 text-violet-300';
+    default: return 'bg-slate-700/40 text-slate-300';
+  }
+};
+/** لون نص القيمة داخل التفاصيل */
+const toneText = (tone: ArchiveTone): string => {
+  switch (tone) {
+    case 'emerald': return 'text-emerald-300';
+    case 'rose': return 'text-rose-300';
+    case 'cyan': return 'text-cyan-300';
+    case 'amber': return 'text-amber-300';
+    case 'violet': return 'text-violet-300';
+    default: return 'text-slate-200';
+  }
+};
 
 const TABS: { id: ArchiveKind; label: string; active: string }[] = [
   { id: 'purchase', label: 'المشتريات', active: 'bg-blue-500 text-white' },
@@ -58,7 +82,12 @@ export const ArchiveScreen: React.FC = () => {
     recordOrder
   ) as AnyItem[];
 
+  /**
+   * البحث في الأرشيف يغطّي **البيان والاسم والملاحظات والفرع** — قبل كده كان
+   * المصروف يتفلتر بـ matchExpenseQuery وحده، فالاسم/البيان كان يضيع.
+   */
   const matches = (item: AnyItem, q: string): boolean => {
+    if (smartMatch(q, { texts: [archiveSearchText(tab, item, ctx)] })) return true;
     if (tab === 'purchase') return matchPurchaseQuery(item as Purchase, q);
     if (tab === 'sale') return matchSaleQuery(item as Sale, q);
     if (tab === 'expense') return matchExpenseQuery(item as Expense, q);
@@ -107,56 +136,52 @@ export const ArchiveScreen: React.FC = () => {
       shown.forEach((x) => deleteOne(tab, x.id));
   };
 
-  const title = (item: AnyItem) => {
-    if (tab === 'purchase') {
-      const p = item as Purchase;
-      return `${p.seller || 'مورد عام'} — ${fmtNum(p.amount)} ج.س`;
-    }
-    if (tab === 'sale') {
-      const s = item as Sale;
-      return `${s.buyer || 'مشتري عام'} — ${fmtNum(s.sellAmount)} ج.س`;
-    }
-    if (tab === 'expense') {
-      const e = item as Expense;
-      return `${e.name} — ${fmtNum(e.amount)} ج.س`;
-    }
-    if (tab === 'loan') {
-      const loan = item as Loan;
-      return `${loan.direction === 'lent' ? 'لنا على' : 'علينا لـ'} ${loan.person} — ${fmtNum(loan.amount)} ج.س`;
-    }
-    return (item as Partner).name;
-  };
-  const sub = (item: AnyItem) => {
-    const parts: string[] = [];
-    const d = (item as { date?: string }).date;
-    parts.push(d ? formatDateWithTime(d) : 'بيانات شريك');
-    if (tab === 'purchase' || tab === 'sale') parts.push(`الوزن: ${unitsToGhJ((item as Purchase).units)}`);
-    if ((item as { invoiceNo?: string }).invoiceNo) parts.push(`فاتورة ${(item as { invoiceNo?: string }).invoiceNo}`);
-    return parts.join(' • ');
-  };
+  // سياق العرض: أسماء الفروع لتحويل branchId إلى اسم مقروء
+  const ctx = useMemo(
+    () => ({ branches: (store.branches || []).map((b) => ({ id: b.id, name: b.name })) }),
+    [store.branches]
+  );
 
-  // إجماليات التبويب الحالي (لما يظهر في البحث)
-  const totals = useMemo(() => {
-    let amount = 0;
-    let units = 0;
+  // وصف كامل لكل سجل (اسم + نوع + مبلغ + تفاصيل) — المنطق في core/archiveSummary.ts
+  const viewOf = (item: AnyItem) => describeArchiveItem(tab, item, ctx);
+
+  /** إجماليات التبويب الحالي (المعروض بعد البحث) */
+  const totals = useMemo(() => archiveTotals(tab, shown), [shown, tab]);
+
+  /** تفصيل المصروفات: كم عام وكم خاص — عشان الرقم الكبير ما يبقى مجهول */
+  const expenseSplit = useMemo(() => {
+    const split = { general: 0, generalCount: 0, private: 0, privateCount: 0 };
+    if (tab !== 'expense') return split;
     shown.forEach((x) => {
-      if (tab === 'purchase') {
-        amount += (x as Purchase).amount || 0;
-        units += (x as Purchase).units || 0;
-      } else if (tab === 'sale') {
-        amount += (x as Sale).sellAmount || 0;
-        units += (x as Sale).units || 0;
-      } else if (tab === 'expense') amount += (x as Expense).amount || 0;
-      else if (tab === 'loan') amount += (x as Loan).amount || 0;
-      else amount += (x as Partner).capital || 0;
+      const e = x as Expense;
+      const isGeneral = !e.target || e.target === 'عام';
+      if (isGeneral) {
+        split.general += e.amount || 0;
+        split.generalCount += 1;
+      } else {
+        split.private += e.amount || 0;
+        split.privateCount += 1;
+      }
     });
-    return { amount, units };
+    return split;
   }, [shown, tab]);
 
   const stats: { label: string; value: string; tone: 'amber' | 'blue' | 'emerald' | 'rose' }[] = [
     { label: query.trim() ? 'مطابق للبحث' : `مؤرشف ${tabLabel}`, value: String(shown.length), tone: 'amber' },
-    { label: tab === 'partner' ? 'رأس المال' : 'الإجمالي (ج.س)', value: fmtNum(totals.amount), tone: 'blue' },
+    { label: tab === 'partner' ? 'رأس المال (ج.س)' : 'الإجمالي (ج.س)', value: fmtNum(totals.amount), tone: 'blue' },
   ];
+  if (tab === 'expense') {
+    stats.push({
+      label: `عامة (${expenseSplit.generalCount})`,
+      value: fmtNum(expenseSplit.general),
+      tone: 'amber',
+    });
+    stats.push({
+      label: `خاصة (${expenseSplit.privateCount})`,
+      value: fmtNum(expenseSplit.private),
+      tone: 'emerald',
+    });
+  }
   if (tab === 'purchase' || tab === 'sale') stats.push({ label: 'الوزن', value: unitsToGhJ(totals.units), tone: 'emerald' });
 
   return (
@@ -164,7 +189,9 @@ export const ArchiveScreen: React.FC = () => {
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-5 text-center">
         <Archive className="w-9 h-9 mx-auto text-amber-400 mb-2" />
         <h2 className="text-lg font-black text-amber-300">الأرشيف</h2>
-        <p className="text-xs text-slate-400 mt-1">كل قسم في تبويب منفصل — المؤرشف **خارج كل الإجماليات** (منصرفات، أرباح، أنصبة شركاء)، والاستعادة ترجّعه للحساب فوراً</p>
+        <p className="text-xs text-slate-400 mt-1">
+          كل قسم في تبويب منفصل — المؤرشف <span className="font-black text-amber-300">خارج كل الإجماليات</span> (منصرفات، أرباح، أنصبة شركاء)، والاستعادة ترجّعه للحساب فوراً. كل سجل يظهر ببيانه واسمه وتفاصيله كاملة.
+        </p>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" role="tablist">
@@ -208,27 +235,56 @@ export const ArchiveScreen: React.FC = () => {
         ) : shown.length === 0 ? (
           <div className="py-16 text-center text-slate-500 text-sm">لا نتائج مطابقة للبحث</div>
         ) : (
-          shown.map((item) => (
-            <div key={item.id} className="flex items-center gap-3 p-4 border-b border-slate-800 last:border-0">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-white font-bold truncate">{title(item)}</div>
-                <div className="text-[11px] text-slate-400">{sub(item)}</div>
+          shown.map((item) => {
+            const v = viewOf(item);
+            return (
+              <div key={item.id} className="p-4 border-b border-slate-800 last:border-0 space-y-2">
+                {/* العنوان: البيان أو الاسم + شارة النوع + المبلغ */}
+                <div className="flex items-start gap-2">
+                  <span className={`shrink-0 mt-0.5 px-2 py-0.5 rounded-lg text-[10px] font-black ${toneClass(v.badge.tone)}`}>
+                    {v.badge.text}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-white font-black leading-tight break-words">{v.title}</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5 break-words">{v.subtitle}</div>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <span className="text-sm font-black font-mono text-amber-300 whitespace-nowrap">{v.amount}</span>
+                    <button onClick={() => restoreOne(tab, item.id)} className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400" title="استعادة">
+                      <RotateCcw className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => remove(item.id)} className="p-2 rounded-xl bg-rose-500/15 text-rose-400" title="حذف نهائي">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* كل التفاصيل: النوع، المتحمّل، المدفوع/المتبقي، العيار، الفرع... */}
+                {v.fields.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {v.fields.map((f) => (
+                      <span
+                        key={f.label}
+                        className="px-2 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-[10px] leading-tight"
+                      >
+                        <span className="text-slate-500">{f.label}: </span>
+                        <span className={`font-bold ${f.tone ? toneText(f.tone) : 'text-slate-200'}`}>{f.value}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {v.note && <div className="text-[10px] text-slate-500 leading-tight">{v.note}</div>}
               </div>
-              <button onClick={() => restoreOne(tab, item.id)} className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400" title="استعادة">
-                <RotateCcw className="w-4 h-4" />
-              </button>
-              <button onClick={() => remove(item.id)} className="p-2 rounded-xl bg-rose-500/15 text-rose-400" title="حذف نهائي">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
       <StickyActionBar
         stats={stats}
         columns={stats.length}
-        hint="السجلات المؤرشفة مستثناة من الأرباح والمخزون — يمكن استعادتها في أي وقت"
+        hint="المؤرشف خارج الأرباح والمخزون والمنصرفات — الاستعادة ترجّعه للحساب فوراً"
       />
     </div>
   );
