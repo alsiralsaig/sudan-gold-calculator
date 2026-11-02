@@ -181,6 +181,8 @@ export const ExpensesScreen: React.FC = () => {
   const filteredExpenses = useMemo(
     () =>
       sortRecords(expenses, recordOrder)
+        // المقفول (أُرشف ثم حُذف من الأرشيف) لا يظهر — لكنه باقٍ في الحساب
+        .filter((e) => !e.locked)
         .filter((e) => !e.archived)
         .filter((e) => {
           if (filterTarget === 'all') return true;
@@ -220,7 +222,7 @@ export const ExpensesScreen: React.FC = () => {
    * الأرشفة شغالة، وإن المبلغ خرج من الحساب (مش ضاع).
    */
   const archivedTotals = useMemo(() => {
-    const archived = expenses.filter((e) => e.archived);
+    const archived = expenses.filter((e) => e.archived && !e.locked);
     return {
       count: archived.length,
       amount: archived.reduce((sum, e) => sum + (e.amount || 0), 0),

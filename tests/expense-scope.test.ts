@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   accountingExpenses,
+  visibleExpenses,
   computeFinancials,
   partnerShares,
   summarizeRange,
@@ -93,4 +94,40 @@ test('الاستعادة لا تضيف خصماً جديداً', () => {
     computeFinancials([], [], restored, partners).privateExpenses
   );
   assert.equal(accountingExpenses(archived).length, 1, 'المؤرشف داخل الحساب');
+});
+
+test('حذف المصروف من الأرشيف: يختفي من القوائم وخصمه يبقى كما هو', () => {
+  const meal: Expense = {
+    id: 'x', date: '2026-11-02T09:10:00.000Z', amount: 12_000,
+    category: 'منصرفات عامة', target: 'عام', name: 'فطور', notes: '',
+  };
+  const partner: Partner[] = [{ id: 'p', name: 'السر الصائغ', capital: -1_000_000, profitPercent: 100, phone: '', notes: '' }];
+
+  const archivedRow = { ...meal, archived: true };
+  const lockedRow = { ...meal, archived: true, locked: true }; // أُرشف ثم حُذف من الأرشيف
+
+  const beforeDelete = partnerShares(partner, [archivedRow], 0, -1_000_000)[0];
+  const afterDelete = partnerShares(partner, [lockedRow], 0, -1_000_000)[0];
+
+  assert.equal(afterDelete.generalExpenses, beforeDelete.generalExpenses, 'الخصم لا يتغيّر');
+  assert.equal(
+    afterDelete.partner.capital + afterDelete.netShare,
+    beforeDelete.partner.capital + beforeDelete.netShare,
+    'الصافي كما هو (‑1,012,000)'
+  );
+  assert.equal(accountingExpenses([lockedRow]).length, 1, 'المقفول يبقى داخل الحساب');
+  assert.equal(visibleExpenses([lockedRow]).length, 0, 'المقفول لا يظهر في أي قائمة');
+});
+
+test('الحذف قبل الأرشفة: المصروف يُحذف فعلاً ويخرج من الحساب', () => {
+  const meal: Expense = {
+    id: 'y', date: '2026-11-02T09:10:00.000Z', amount: 12_000,
+    category: 'منصرفات عامة', target: 'عام', name: 'فطور', notes: '',
+  };
+  // الحذف الفعلي = السجل يختفي من المصفوفة (لا يوجد نسخة مقفولة)
+  const fin = computeFinancials([], [], [], []);
+  assert.equal(fin.generalExpenses, 0);
+
+  // وقبل الحذف كان محسوباً مرة واحدة
+  assert.equal(computeFinancials([], [], [meal], []).generalExpenses, 12_000);
 });

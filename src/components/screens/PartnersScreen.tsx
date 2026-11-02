@@ -51,7 +51,7 @@ export const PartnersScreen: React.FC = () => {
   const generalExpenseSources = React.useMemo(() => {
     const activePartners = partners.filter((x) => !x.archived);
     return calcExpenses
-      .filter((e) => !e.target || e.target === 'عام')
+      .filter((e) => (!e.target || e.target === 'عام') && !e.locked)
       .map((e) => {
         const share = allocateGeneralExpenses([e], activePartners);
         return { id: e.id, name: e.name, amount: e.amount, date: e.date, archived: Boolean(e.archived), byPartner: share };
@@ -266,9 +266,10 @@ export const PartnersScreen: React.FC = () => {
 
           // مصادر كل رقم: عشان المستخدم يشوف التفاصيل مش رقم مجهول
           const privateSources = calcExpenses
-            .filter((e) => e.target === p.name)
+            .filter((e) => e.target === p.name && !e.locked)
             .sort((a, b) => (a.date < b.date ? 1 : -1));
           const archivedOnPartner = expenses.filter((e) => e.archived && e.target === p.name).length;
+          const lockedOnPartner = expenses.filter((e) => e.locked && e.target === p.name).length;
           const generalSources = generalExpenseSources
             .map((g) => ({ ...g, share: g.byPartner[p.name] || 0 }))
             .filter((g) => g.share > 0);
@@ -429,7 +430,8 @@ export const PartnersScreen: React.FC = () => {
 
                   <div className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-800 pt-1.5">
                     كل مصروف يُحسب مرة واحدة فقط، ومهما اتأرشف يفضل مخصوماً — منها {archivedOnPartner} مصروف
-                    مؤرشف على هذا الشريك، مخصوم ولا يتشال (تفاصيله في تبويب الأرشيف).
+                    مؤرشف على هذا الشريك، مخصوم ولا يتشال.
+                    {lockedOnPartner > 0 && ` ومنها ${lockedOnPartner} حُذف من الأرشيف وخصمه باقٍ.`}
                   </div>
                 </div>
               )}

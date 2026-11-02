@@ -90,8 +90,20 @@ function active<T extends { archived?: boolean }>(rows: T[] | undefined): T[] {
  *
  * المشتريات/المبيعات لها قاعدتها الخاصة (`active`) ولم تُلمس.
  */
-export function accountingExpenses<T extends { archived?: boolean }>(rows: T[] | undefined): T[] {
+export function accountingExpenses<T extends { archived?: boolean; locked?: boolean }>(
+  rows: T[] | undefined
+): T[] {
+  // كل سجل يدخل مرة واحدة — بما فيها المقفول (أُرشف ثم حُذف من الأرشيف)
   return rows || [];
+}
+
+/**
+ * قائمة العرض: كل السجلات **ما عدا المقفول**.
+ * المقفول اختفى من الأرشيف والمنصرفات، لكنه ما زال داخل الحساب عبر
+ * accountingExpenses ⇒ الأرقام لا تتغيّر بالحذف من الأرشيف.
+ */
+export function visibleExpenses<T extends { locked?: boolean }>(rows: T[] | undefined): T[] {
+  return (rows || []).filter((r) => !r.locked);
 }
 
 /** اسم قديم محفوظ للتوافق: نفس القاعدة */

@@ -71,7 +71,8 @@ export const ArchiveScreen: React.FC = () => {
   const archived = {
     purchase: store.purchases.filter((x) => x.archived),
     sale: store.sales.filter((x) => x.archived),
-    expense: store.expenses.filter((x) => x.archived),
+    // المقفول (أُرشف ثم حُذف من الأرشيف) لا يظهر في القوائم — لكن خصمه باقٍ
+    expense: store.expenses.filter((x) => x.archived && !x.locked),
     loan: store.loans.filter((x) => x.archived),
     partner: store.partners.filter((x) => x.archived),
   } as Record<ArchiveKind, AnyItem[]>;
@@ -125,15 +126,23 @@ export const ArchiveScreen: React.FC = () => {
 
   const tabLabel = TABS.find((t) => t.id === tab)?.label || '';
   const remove = (id: string) => {
-    if (confirm('حذف نهائي؟ لا يمكن استعادة هذا السجل بعد ذلك.')) deleteOne(tab, id);
+    // المصروف المؤرشف: حذفه يخفي السجل فقط، والخصم يبقى كما هو (مقفول)
+    const msg =
+      tab === 'expense'
+        ? 'حذف المصروف من الأرشيف؟ سيختفي السجل، لكن خصمه يبقى كما هو — لا يتغيّر أي رقم.'
+        : 'حذف نهائي؟ لا يمكن استعادة هذا السجل بعد ذلك.';
+    if (confirm(msg)) deleteOne(tab, id);
   };
   const restoreAll = () => {
     if (shown.length && confirm(`استعادة ${shown.length} سجل إلى ${tabLabel}؟ ستُحسب ضمن الإجماليات من جديد.`))
       shown.forEach((x) => restoreOne(tab, x.id));
   };
   const deleteAll = () => {
-    if (shown.length && confirm(`حذف ${shown.length} سجل من أرشيف ${tabLabel} نهائياً؟ لا يمكن التراجع.`))
-      shown.forEach((x) => deleteOne(tab, x.id));
+    const msg =
+      tab === 'expense'
+        ? `إخفاء ${shown.length} مصروف من الأرشيف؟ ستختفي السجلات، لكن خصمها يبقى كما هو — لا يتغيّر أي رقم.`
+        : `حذف ${shown.length} سجل من أرشيف ${tabLabel} نهائياً؟ لا يمكن التراجع.`;
+    if (shown.length && confirm(msg)) shown.forEach((x) => deleteOne(tab, x.id));
   };
 
   // سياق العرض: أسماء الفروع لتحويل branchId إلى اسم مقروء

@@ -122,6 +122,11 @@ export interface Expense {
   /** الفرع الذي صُرف فيه المبلغ */
   branchId?: string;
   archived?: boolean;
+  /**
+   * «مقفول»: السجل أُرشف ثم حُذف من الأرشيف.
+   * يختفي من كل القوائم، لكن **خصمه يبقى** — لأن الأرشفة تقفل الخصم نهائياً.
+   */
+  locked?: boolean;
   updatedAt?: string;
 }
 

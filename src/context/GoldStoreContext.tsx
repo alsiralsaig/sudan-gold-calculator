@@ -1168,9 +1168,29 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     );
   };
 
+  /**
+   * حذف مصروف — بقاعدتين:
+   *   • سجل **حيّ** (لسه ما اتأرشفش): يُحذف فعلاً ويخرج من الحساب.
+   *   • سجل **مؤرشف** (خصمه مقفول): يُقفل فقط — يختفي من القوائم والأرشيف،
+   *     ويبقى خصمه قائماً. «أرشفته ثم حذفته من الأرشيف = ما يتغيّر شي».
+   */
   const deleteExpense = (id: string) => {
-    setAllExpenses((prev) => prev.filter((item) => item.id !== id));
-    markDeleted([id]);
+    let preserved = false;
+    setAllExpenses((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        if (item.archived) {
+          preserved = true;
+          return { ...item, locked: true, updatedAt: new Date().toISOString() };
+        }
+        return item;
+      }).filter((item) => !(item.id === id && !item.archived))
+    );
+    if (!preserved) markDeleted([id]);
+    else {
+      setSyncError('السجل مؤرشف ومخصوم بالفعل — اتحذف من الأرشيف، وخصمه باقٍ كما هو');
+      if (typeof window !== 'undefined') setTimeout(() => setSyncError(''), 5000);
+    }
   };
   const archiveExpense = (id: string) =>
     setAllExpenses((prev) =>
