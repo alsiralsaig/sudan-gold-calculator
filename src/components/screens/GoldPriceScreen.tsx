@@ -570,9 +570,9 @@ export const GoldPriceScreen: React.FC = () => {
         stats={[
           { label: 'شراء 21', value: effective ? fmtNum(effective.buy) : '—', tone: 'rose' },
           { label: 'بيع 21', value: effective ? fmtNum(effective.sell) : '—', tone: 'emerald' },
-          { label: 'دولار موازي', value: parallel?.sell ? fmtNum(parallel.sell) : '—', tone: 'amber' },
-      { label: 'درهم', value: engine?.aedSdg ? fmtNum(Math.round(engine.aedSdg)) : '—', tone: 'cyan' },
-          { label: 'الأونصة', value: spot?.sell ? Number(spot.sell).toFixed(0) : '—', tone: 'cyan' },
+          { label: 'دولار موازي (بيع)', value: engine?.inputs?.usdSell ? fmtNum(engine.inputs.usdSell) : '—', tone: 'amber' },
+          { label: 'درهم مشتق', value: engine?.inputs?.usdSell ? fmtNum(Math.round(engine.inputs.usdSell / 3.6725)) : '—', tone: 'cyan' },
+          { label: 'الأونصة', value: engine?.inputs?.ounceUsd ? Number(engine.inputs.ounceUsd).toFixed(0) : '—', tone: 'cyan' },
         ]}
         columns={4}
         hint={
