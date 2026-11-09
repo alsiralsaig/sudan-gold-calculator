@@ -1407,18 +1407,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (overrides?.usdBuy) params.set('usdBuy', String(overrides.usdBuy));
         if (overrides?.usdSell) params.set('usdSell', String(overrides.usdSell));
         if (overrides?.ounce) params.set('ounce', String(overrides.ounce));
-        // المعايرة أولاً: الدرهم = النسبة × (الدولار ÷ 3.6725) في كل جلب — يمشي مع السوق لحظياً.
-        // القيمة اليدوية تبقى احتياط: تُستخدم فقط لو ما فيش معايرة (مثلاً الدولار مش متاح وقت الإدخال).
-        const anchorNow = aedAnchorRef.current;
-        if (anchorNow && anchorNow.ratio >= AED_RATIO_MIN && anchorNow.ratio <= AED_RATIO_MAX) params.set('aedRatio', String(anchorNow.ratio));
-        else if (aedManualRef.current && aedManualRef.current > 0) params.set('aed', String(aedManualRef.current));
-        /**
-         * بوابة الـ 5% تحمي من **قراءة مصدر مضروبة** — لا من معايرة المستخدم.
-         * لو السعر جاي من معايرته (أو درهم كتبه بإيده) نعتمده مباشرة، وإلا
-         * يتجمّد «المعتمد» على رقم قديم ويبان في الشريط رقمين متضاربين.
-         */
-        const fromUserCalibration =
-          Boolean(anchorNow) || (aedManualRef.current ?? 0) > 0;
+        // سعر الدرهم لا يُرسل كمدخل؛ المحرك يشتقه دائماً من الدولار ÷ 3.6725.
+        const fromUserCalibration = false;
         const res = await fetch(`/api/rates/engine?${params.toString()}`, { cache: 'no-store' });
         if (!res.ok) {
           setEngineError('تعذر تشغيل محرك الأسعار الآن');
@@ -1471,7 +1461,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setEngineBusy(false);
       }
     },
-    [localAdjustPercent, applyApproved, aedManual, aedAnchor]
+    [localAdjustPercent, applyApproved]
   );
 
   /* ------------ الجلب التلقائي للمحرك (دوري + عند العودة للتطبيق) ------------ */
