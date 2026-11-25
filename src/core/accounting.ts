@@ -208,8 +208,11 @@ export function computeFinancials(
   const allExpenses = includingArchived(expenses);
   const activePartners = active(partners);
 
-  const totalSales = activeSales.reduce((sum, s) => sum + (s.sellAmount || 0), 0);
-  const totalCost = activeSales.reduce((sum, s) => sum + (s.buyAmount || 0), 0);
+  // أرشفة البيع تخفيه من قوائم العمل والمخزون والذمم، لكنها لا تمحو ربحاً تحقق فعلاً.
+  // نضمّ الحي والمؤرشف لوعاء الأرباح مرة واحدة؛ restore يغيّر الحالة فقط ولا يكرر السجل.
+  const profitSales = sales || [];
+  const totalSales = profitSales.reduce((sum, s) => sum + (s.sellAmount || 0), 0);
+  const totalCost = profitSales.reduce((sum, s) => sum + (s.buyAmount || 0), 0);
   const grossProfit = totalSales - totalCost;
 
   const generalExpenses = allExpenses
